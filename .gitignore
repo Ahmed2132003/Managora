@@ -1,0 +1,53 @@
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== ENV files =====
+.env
+.env.*
+*.env
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+media/
+staticfiles/
+
+# ===== Node / React =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+.vite/
+.eslintcache
+
+# ===== IDEs =====
+.vscode/
+.idea/
+*.iml
+
+# ===== Coverage =====
+coverage/
+htmlcov/
+.coverage
+
+# ===== Docker =====
+*.pid
