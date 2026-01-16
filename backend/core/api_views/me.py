@@ -1,12 +1,20 @@
+from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.serializers.me import MeSerializer
 
+
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        tags=["Auth"],
+        summary="Current user profile",
+        description="Return the authenticated user and their company.",
+        responses={200: MeSerializer},
+    )
     def get(self, request):
         user = request.user
         company = getattr(user, "company", None)
