@@ -92,14 +92,17 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, username, email=None, password=None, **extra_fields):
-        extra_fields.setdefault("is_staff", True)
-        extra_fields.setdefault("is_superuser", True)
+    def create_user(self, username, email=None, password=None, **extra_fields):
+        # مهم: email في AbstractUser غالبًا NOT NULL، فممنوع ندخل None
+        if email is None:
+            email = ""
+        else:
+            email = self.normalize_email(email)
 
-        if extra_fields.get("company") is None:
-            raise ValueError("Superuser must have a company")
-
-        return self.create_user(username, email, password, **extra_fields)
+        user = self.model(username=username, email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
 
 
 class User(AbstractUser):
