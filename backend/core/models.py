@@ -1,6 +1,6 @@
+from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.utils.text import slugify
-from django.contrib.auth.models import AbstractUser
 
 class Company(models.Model):
     name = models.CharField(max_length=255, unique=True)
@@ -15,9 +15,77 @@ class Company(models.Model):
 
     def __str__(self):
         return self.name
-from django.contrib.auth.models import BaseUserManager
+class Permission(models.Model):
+    code = models.CharField(max_length=150, unique=True)
+    name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.code
+
+
+class Role(models.Model):
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="roles",
+    )
+    name = models.CharField(max_length=150)
+    slug = models.SlugField(max_length=150, blank=True)
+    permissions = models.ManyToManyField(
+        "core.Permission",
+        through="core.RolePermission",
+        related_name="roles",
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "name"],
+                name="unique_role_name_per_company",
+            ),
+            models.UniqueConstraint(
+                fields=["company", "slug"],
+                name="unique_role_slug_per_company",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)[:150]
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.company.name} - {self.name}"
+
+
+class RolePermission(models.Model):
+    role = models.ForeignKey(
+        "core.Role",
+        on_delete=models.CASCADE,
+        related_name="role_permissions",
+    )
+    permission = models.ForeignKey(
+        "core.Permission",
+        on_delete=models.CASCADE,
+        related_name="role_permissions",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["role", "permission"],
+                name="unique_permission_per_role",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.role.name} -> {self.permission.code}"
 
 class UserManager(BaseUserManager):
+    use_in_migrations = True
     def create_user(self, username, email=None, password=None, **extra_fields):
         user = self.model(username=username, email=email, **extra_fields)
         user.set_password(password)
@@ -40,8 +108,36 @@ class User(AbstractUser):
         on_delete=models.PROTECT,
         related_name="users",
     )
+    roles = models.ManyToManyField(
+        "core.Role",
+        through="core.UserRole",
+        related_name="users",
+        blank=True,
+    )    
     objects = UserManager()
     def __str__(self):
         return self.username
 
+class UserRole(models.Model):
+    user = models.ForeignKey(
+        "core.User",
+        on_delete=models.CASCADE,
+        related_name="user_roles",
+    )
+    role = models.ForeignKey(
+        "core.Role",
+        on_delete=models.CASCADE,
+        related_name="user_roles",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "role"],
+                name="unique_role_per_user",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} -> {self.role.name}"
