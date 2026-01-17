@@ -51,7 +51,9 @@ class UsersPermissionsApiTests(APITestCase):
         url = reverse("user-list")  # لازم يكون اسم الراوت في router بتاع UsersViewSet
         res = self.client.post(url, {"username": "new", "password": "pass12345"}, format="json")
         self.assertIn(res.status_code, (status.HTTP_201_CREATED, status.HTTP_200_OK))
-
+        created = User.objects.get(username="new")
+        self.assertEqual(created.company, self.c1)
+        
     def test_hr_cannot_create_user_403(self):
         self.auth("hr")
         url = reverse("user-list")
@@ -63,8 +65,23 @@ class UsersPermissionsApiTests(APITestCase):
         url = reverse("user-list")
         res = self.client.get(url)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-
+        
         usernames = [u["username"] for u in res.data]
         self.assertIn("admin", usernames)
         self.assertIn("hr", usernames)
         self.assertNotIn("x", usernames)  # tenant boundary
+
+    def test_assign_roles_to_user(self):
+        self.auth("admin")
+        url = reverse("user-assign-roles", kwargs={"pk": self.hr.id})
+        res = self.client.post(url, {"role_ids": [self.admin_role.id]}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.hr.refresh_from_db()
+        self.assertTrue(self.hr.roles.filter(id=self.admin_role.id).exists())
+
+    def test_assign_roles_rejects_other_company(self):
+        self.auth("admin")
+        other_role = Role.objects.create(company=self.c2, name="Other")
+        url = reverse("user-assign-roles", kwargs={"pk": self.hr.id})
+        res = self.client.post(url, {"role_ids": [other_role.id]}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
