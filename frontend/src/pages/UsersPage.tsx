@@ -18,7 +18,7 @@ import { notifications } from "@mantine/notifications";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { endpoints } from "../shared/api/endpoints";
 import { http } from "../shared/api/http";
-import { useCan } from "../shared/auth/useCan";
+import { useCan } from "../shared/auth/useCan.tsx";
 
 type Role = {
   id: number;
