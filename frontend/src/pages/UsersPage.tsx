@@ -50,24 +50,17 @@ type User = {
 
 const createSchema = z.object({
   username: z.string().min(1, "اسم المستخدم مطلوب"),
-  email: z
-    .string()
-    .email("البريد الإلكتروني غير صحيح")
-    .optional()
-    .or(z.literal("")),
+  email: z.string().email("البريد الإلكتروني غير صحيح").optional().or(z.literal("")),
   password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
   is_active: z.boolean(),
-  role_ids: z.array(z.string()).optional().default([]),
+  // default يجعل الـ input ممكن يبقى undefined → طبيعي
+  role_ids: z.array(z.string()).default([]),
 });
 
 const editSchema = z.object({
   id: z.number().int(),
   username: z.string().min(1, "اسم المستخدم مطلوب"),
-  email: z
-    .string()
-    .email("البريد الإلكتروني غير صحيح")
-    .optional()
-    .or(z.literal("")),
+  email: z.string().email("البريد الإلكتروني غير صحيح").optional().or(z.literal("")),
   password: z
     .string()
     .optional()
@@ -75,11 +68,16 @@ const editSchema = z.object({
       message: "كلمة المرور يجب أن تكون 8 أحرف على الأقل",
     }),
   is_active: z.boolean(),
-  role_ids: z.array(z.string()).optional().default([]),
+  role_ids: z.array(z.string()).default([]),
 });
 
-type CreateFormValues = z.infer<typeof createSchema>;
-type EditFormValues = z.infer<typeof editSchema>;
+/**
+ * ✅ أهم تعديل لحل 2322:
+ * استخدم z.input بدل z.infer للفورم values
+ * لأن resolver بيتعامل مع "input" مش "output".
+ */
+type CreateFormValues = z.input<typeof createSchema>;
+type EditFormValues = z.input<typeof editSchema>;
 
 const defaultCreateValues: CreateFormValues = {
   username: "",
@@ -168,13 +166,13 @@ export function UsersPage() {
       return res.data;
     },
     onSuccess: () => {
-      notifications.show({
-        title: "User created",
-        message: "تم إنشاء المستخدم بنجاح",
-      });
+      notifications.show({ title: "User created", message: "تم إنشاء المستخدم بنجاح" });
       setCreateOpened(false);
       createForm.reset(defaultCreateValues);
       queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (err: unknown) => {
+      notifications.show({ title: "Create failed", message: String(err), color: "red" });
     },
   });
 
@@ -185,7 +183,6 @@ export function UsersPage() {
         email: values.email ?? "",
         is_active: values.is_active,
       };
-
       if (values.password) payload.password = values.password;
 
       await http.patch(`${endpoints.users}${values.id}/`, payload);
@@ -194,13 +191,13 @@ export function UsersPage() {
       });
     },
     onSuccess: () => {
-      notifications.show({
-        title: "User updated",
-        message: "تم تحديث المستخدم",
-      });
+      notifications.show({ title: "User updated", message: "تم تحديث المستخدم" });
       setEditOpened(false);
       editForm.reset(defaultEditValues);
       queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (err: unknown) => {
+      notifications.show({ title: "Update failed", message: String(err), color: "red" });
     },
   });
 
@@ -209,22 +206,18 @@ export function UsersPage() {
       await http.delete(`${endpoints.users}${id}/`);
     },
     onSuccess: () => {
-      notifications.show({
-        title: "User deleted",
-        message: "تم حذف المستخدم",
-      });
+      notifications.show({ title: "User deleted", message: "تم حذف المستخدم" });
       queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (err: unknown) => {
+      notifications.show({ title: "Delete failed", message: String(err), color: "red" });
     },
   });
 
   /* ================= Helpers ================= */
 
   const roleOptions = useMemo(
-    () =>
-      (rolesQuery.data ?? []).map((r) => ({
-        value: String(r.id),
-        label: r.name,
-      })),
+    () => (rolesQuery.data ?? []).map((r) => ({ value: String(r.id), label: r.name })),
     [rolesQuery.data]
   );
 
@@ -254,20 +247,29 @@ export function UsersPage() {
       <Group justify="space-between">
         <Title order={3}>Users</Title>
         {canCreate && (
-          <Button onClick={() => setCreateOpened(true)}>Create user</Button>
+          <Button
+            onClick={() => {
+              createForm.reset(defaultCreateValues);
+              setCreateOpened(true);
+            }}
+          >
+            Create user
+          </Button>
         )}
       </Group>
 
       <Card withBorder>
         <Stack gap="md">
-          <Group grow>
+          <Group grow align="flex-end">
             <TextInput
               label="Search"
+              placeholder="username أو email"
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
             />
             <Select
               label="Role"
+              placeholder="كل الأدوار"
               data={roleOptions}
               value={roleFilter}
               onChange={setRoleFilter}
@@ -275,6 +277,7 @@ export function UsersPage() {
             />
             <Select
               label="Active"
+              placeholder="الكل"
               data={[
                 { value: "true", label: "Active" },
                 { value: "false", label: "Inactive" },
@@ -285,8 +288,14 @@ export function UsersPage() {
             />
           </Group>
 
+          {usersQuery.isLoading && <Text c="dimmed">جارٍ تحميل المستخدمين...</Text>}
+          {usersQuery.isError && <Text c="red">حصل خطأ أثناء تحميل المستخدمين.</Text>}
+          {!usersQuery.isLoading && users.length === 0 && (
+            <Text c="dimmed">لا يوجد مستخدمون حتى الآن.</Text>
+          )}
+
           {users.length > 0 && (
-            <Table striped>
+            <Table striped highlightOnHover>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Username</Table.Th>
@@ -304,32 +313,34 @@ export function UsersPage() {
                     <Table.Td>{u.email || "-"}</Table.Td>
                     <Table.Td>
                       <Group gap="xs">
-                        {u.roles.map((r) => (
-                          <Badge key={r.id}>{r.name}</Badge>
-                        ))}
+                        {u.roles.length === 0 ? (
+                          <Text size="sm" c="dimmed">
+                            -
+                          </Text>
+                        ) : (
+                          u.roles.map((r) => (
+                            <Badge key={r.id} variant="light">
+                              {r.name}
+                            </Badge>
+                          ))
+                        )}
                       </Group>
                     </Table.Td>
                     <Table.Td>
-                      <Badge color={u.is_active ? "green" : "red"}>
+                      <Badge color={u.is_active ? "green" : "red"} variant="light">
                         {u.is_active ? "Active" : "Inactive"}
                       </Badge>
                     </Table.Td>
-                    <Table.Td>
-                      {new Date(u.date_joined).toLocaleDateString("en-GB")}
-                    </Table.Td>
+                    <Table.Td>{new Date(u.date_joined).toLocaleDateString("en-GB")}</Table.Td>
                     <Table.Td>
                       <Group gap="xs">
                         {canEdit && (
-                          <Button size="xs" onClick={() => openEdit(u)}>
+                          <Button size="xs" variant="light" onClick={() => openEdit(u)}>
                             Edit
                           </Button>
                         )}
                         {canDelete && (
-                          <Button
-                            size="xs"
-                            color="red"
-                            onClick={() => handleDelete(u)}
-                          >
+                          <Button size="xs" color="red" variant="light" onClick={() => handleDelete(u)}>
                             Delete
                           </Button>
                         )}
@@ -346,50 +357,66 @@ export function UsersPage() {
       {/* Create Modal */}
       <Modal
         opened={createOpened}
-        onClose={() => setCreateOpened(false)}
         title="Create user"
+        centered
+        onClose={() => {
+          setCreateOpened(false);
+          createForm.reset(defaultCreateValues);
+        }}
       >
         <form
-          onSubmit={createForm.handleSubmit((values: CreateFormValues) =>
-            createMutation.mutate(values)
-          )}
+          onSubmit={createForm.handleSubmit((values: CreateFormValues) => createMutation.mutate(values))}
         >
-          <Stack>
-            <TextInput label="Username" {...createForm.register("username")} />
-            <TextInput label="Email" {...createForm.register("email")} />
-            <PasswordInput label="Password" {...createForm.register("password")} />
+          <Stack gap="md">
+            <TextInput
+              label="Username"
+              {...createForm.register("username")}
+              error={createForm.formState.errors.username?.message}
+              required
+            />
+            <TextInput
+              label="Email"
+              {...createForm.register("email")}
+              error={createForm.formState.errors.email?.message}
+            />
+            <PasswordInput
+              label="Password"
+              {...createForm.register("password")}
+              error={createForm.formState.errors.password?.message}
+              required
+            />
 
             <Controller
               control={createForm.control}
               name="role_ids"
-              render={({
-                field,
-              }: {
-                field: ControllerRenderProps<CreateFormValues, "role_ids">;
-              }) => <MultiSelect label="Roles" data={roleOptions} {...field} />}
+              render={({ field }: { field: ControllerRenderProps<CreateFormValues, "role_ids"> }) => (
+                <MultiSelect
+                  label="Roles"
+                  placeholder="اختر الأدوار"
+                  data={roleOptions}
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                />
+              )}
             />
 
             <Controller
               control={createForm.control}
               name="is_active"
-              render={({
-                field,
-              }: {
-                field: ControllerRenderProps<CreateFormValues, "is_active">;
-              }) => (
+              render={({ field }: { field: ControllerRenderProps<CreateFormValues, "is_active"> }) => (
                 <Switch
                   label="Active"
                   checked={field.value}
-                  onChange={(e) =>
-                    field.onChange(e.currentTarget.checked)
-                  }
+                  onChange={(e) => field.onChange(e.currentTarget.checked)}
                 />
               )}
             />
 
-            <Button type="submit" loading={createMutation.isPending}>
-              Create
-            </Button>
+            <Group justify="flex-end">
+              <Button type="submit" loading={createMutation.isPending}>
+                Create
+              </Button>
+            </Group>
           </Stack>
         </form>
       </Modal>
@@ -397,53 +424,65 @@ export function UsersPage() {
       {/* Edit Modal */}
       <Modal
         opened={editOpened}
-        onClose={() => setEditOpened(false)}
         title="Edit user"
+        centered
+        onClose={() => {
+          setEditOpened(false);
+          editForm.reset(defaultEditValues);
+        }}
       >
         <form
-          onSubmit={editForm.handleSubmit((values: EditFormValues) =>
-            updateMutation.mutate(values)
-          )}
+          onSubmit={editForm.handleSubmit((values: EditFormValues) => updateMutation.mutate(values))}
         >
-          <Stack>
-            <TextInput label="Username" {...editForm.register("username")} />
-            <TextInput label="Email" {...editForm.register("email")} />
+          <Stack gap="md">
+            <TextInput
+              label="Username"
+              {...editForm.register("username")}
+              error={editForm.formState.errors.username?.message}
+              required
+            />
+            <TextInput
+              label="Email"
+              {...editForm.register("email")}
+              error={editForm.formState.errors.email?.message}
+            />
             <PasswordInput
-              label="New password"
+              label="New password (optional)"
               {...editForm.register("password")}
+              error={editForm.formState.errors.password?.message}
             />
 
             <Controller
               control={editForm.control}
               name="role_ids"
-              render={({
-                field,
-              }: {
-                field: ControllerRenderProps<EditFormValues, "role_ids">;
-              }) => <MultiSelect label="Roles" data={roleOptions} {...field} />}
+              render={({ field }: { field: ControllerRenderProps<EditFormValues, "role_ids"> }) => (
+                <MultiSelect
+                  label="Roles"
+                  placeholder="اختر الأدوار"
+                  data={roleOptions}
+                  value={field.value ?? []}
+                  onChange={field.onChange}
+                />
+              )}
             />
 
             <Controller
               control={editForm.control}
               name="is_active"
-              render={({
-                field,
-              }: {
-                field: ControllerRenderProps<EditFormValues, "is_active">;
-              }) => (
+              render={({ field }: { field: ControllerRenderProps<EditFormValues, "is_active"> }) => (
                 <Switch
                   label="Active"
                   checked={field.value}
-                  onChange={(e) =>
-                    field.onChange(e.currentTarget.checked)
-                  }
+                  onChange={(e) => field.onChange(e.currentTarget.checked)}
                 />
               )}
             />
 
-            <Button type="submit" loading={updateMutation.isPending}>
-              Save
-            </Button>
+            <Group justify="flex-end">
+              <Button type="submit" loading={updateMutation.isPending}>
+                Save
+              </Button>
+            </Group>
           </Stack>
         </form>
       </Modal>
