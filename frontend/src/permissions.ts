@@ -3,6 +3,7 @@ export const PERMISSION_CODES = [
   "users.create",
   "users.edit",
   "users.delete",
+  "users.reset_password",  
   "employees.*",
   "employees.view_team",
   "attendance.*",
