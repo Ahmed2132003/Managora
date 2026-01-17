@@ -10,21 +10,24 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
     "@mantine/core": "^8.3.12",
     "@mantine/hooks": "^8.3.12",
     "@mantine/notifications": "^8.3.12",
     "@tanstack/react-query": "^5.90.17",
     "axios": "^1.13.2",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",    
-    "react-router-dom": "^7.12.0"
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.71.1",
+    "react-router-dom": "^7.12.0",
+    "zod": "^4.3.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@tanstack/react-query-devtools": "^5.91.2",
     "@types/node": "^24.10.8",
-    "@types/react": "^18.2.83",
-    "@types/react-dom": "^18.2.18",    
+    "@types/react": "^18.3.27",
+    "@types/react-dom": "^18.2.18",
     "@vitejs/plugin-react": "^5.1.1",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -34,5 +37,4 @@
     "typescript-eslint": "^8.46.4",
     "vite": "^6.0.0"
   }
-  
 }

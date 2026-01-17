@@ -33,8 +33,9 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         "partial_update": "users.edit",
         "destroy": "users.delete",
         "assign_roles": "users.edit",
+        "reset_password": "users.reset_password",
     }
-
+    
     def get_queryset(self):
         queryset = super().get_queryset().filter(company=self.request.user.company)
         role_id = self.request.query_params.get("role")
@@ -113,7 +114,7 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         responses={200: UserSerializer},
     )
     @action(detail=True, methods=["post"], url_path="roles")
-    def assign_roles(self, request, pk=None):
+    def assign_roles(self, request, pk=None):        
         user = self.get_object()
         role_ids = request.data.get("role_ids", [])
         if not isinstance(role_ids, list):
@@ -145,3 +146,31 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
 
         serializer = UserSerializer(user)
         return Response(serializer.data)
+
+    @extend_schema(
+        tags=["Users"],
+        summary="Reset user password",
+        request={"application/json": {"type": "object", "properties": {"new_password": {"type": "string"}}, "required": ["new_password"]}},
+        responses={200: {"type": "object", "properties": {"detail": {"type": "string"}}}},
+    )
+    @action(detail=True, methods=["post"], url_path="reset-password")
+    def reset_password(self, request, pk=None):
+        user = self.get_object()
+        new_password = request.data.get("new_password")
+        if not new_password:
+            return Response(
+                {"detail": "new_password is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+        AuditLog.objects.create(
+            company=request.user.company,
+            actor=request.user,
+            action="users.reset_password",
+            entity="user",
+            entity_id=str(user.id),
+            payload={"reset_by": request.user.id},
+        )
+        return Response({"detail": "Password reset successfully."})

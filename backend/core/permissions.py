@@ -8,6 +8,7 @@ PERMISSION_DEFINITIONS = {
     "users.create": "Create users",
     "users.edit": "Edit users",
     "users.delete": "Delete users",
+    "users.reset_password": "Reset user passwords",    
     "employees.*": "Manage employees",
     "employees.view_team": "View team employees",
     "attendance.*": "Manage attendance",
