@@ -4,4 +4,6 @@ export const endpoints = {
     refresh: "/api/auth/refresh/",
   },
   me: "/api/me/",
+  users: "/api/users/",
+  roles: "/api/roles/",
 };

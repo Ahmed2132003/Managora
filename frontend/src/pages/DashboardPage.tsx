@@ -1,34 +1,11 @@
 import { Card, Stack, Title, Text, Group, Button } from "@mantine/core";
-import { useQuery } from "@tanstack/react-query";
-import { http } from "../shared/api/http";
-import { endpoints } from "../shared/api/endpoints";
 import { clearTokens } from "../shared/auth/tokens";
 import { useNavigate } from "react-router-dom";
-
-type MeResponse = {
-  user: {
-    id: number;
-    username: string;
-    email: string;
-    first_name: string;
-    last_name: string;
-  };
-  company: {
-    id: number;
-    name: string;
-  };
-};
+import { useMe } from "../shared/auth/useMe";
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["me"],
-    queryFn: async () => {
-      const response = await http.get<MeResponse>(endpoints.me);
-      return response.data;
-    },
-  });
-
+  const { data, isLoading, isError } = useMe();
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });

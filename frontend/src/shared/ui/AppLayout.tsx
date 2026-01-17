@@ -1,9 +1,11 @@
 import { Outlet, Link, useNavigate } from "react-router-dom";
 import { AppShell, Group, Title, Button, Container } from "@mantine/core";
 import { clearTokens } from "../auth/tokens";
+import { useCan } from "../auth/useCan";
 
 export function AppLayout() {
   const navigate = useNavigate();
+  const canViewUsers = useCan("users.view");
 
   function handleLogout() {
     clearTokens();
@@ -22,8 +24,12 @@ export function AppLayout() {
             <Button component={Link} to="/dashboard" variant="subtle">
               Dashboard
             </Button>
+            {canViewUsers && (
+              <Button component={Link} to="/users" variant="subtle">
+                Users
+              </Button>
+            )}
           </Group>
-
           <Button onClick={handleLogout} variant="light">
             Logout
           </Button>

@@ -6,7 +6,7 @@ from rest_framework.response import Response
 
 from django.db.models import Q
 
-from core.models import Role, User, UserRole
+from core.models import AuditLog, Role, User, UserRole
 from core.permissions import PermissionByActionMixin
 from core.serializers.users import (
     UserCreateSerializer,
@@ -67,6 +67,18 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         user = serializer.save(company=self.request.user.company)
         user.set_password(password)
         user.save(update_fields=["password"])
+        AuditLog.objects.create(
+            company=self.request.user.company,
+            actor=self.request.user,
+            action="users.create",
+            entity="user",
+            entity_id=str(user.id),
+            payload={
+                "username": user.username,
+                "email": user.email,
+                "is_active": user.is_active,
+            },
+        )
 
     def perform_update(self, serializer):
         password = serializer.validated_data.pop("password", None)
@@ -74,7 +86,26 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         if password:
             user.set_password(password)
             user.save(update_fields=["password"])
+        AuditLog.objects.create(
+            company=self.request.user.company,
+            actor=self.request.user,
+            action="users.update",
+            entity="user",
+            entity_id=str(user.id),
+            payload={"updated_fields": list(serializer.validated_data.keys())},
+        )
 
+    def perform_destroy(self, instance):
+        AuditLog.objects.create(
+            company=self.request.user.company,
+            actor=self.request.user,
+            action="users.delete",
+            entity="user",
+            entity_id=str(instance.id),
+            payload={"username": instance.username},
+        )
+        super().perform_destroy(instance)
+        
     @extend_schema(
         tags=["Users"],
         summary="Assign roles to user",
@@ -102,6 +133,14 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         UserRole.objects.bulk_create(
             [UserRole(user=user, role=role) for role in roles],
             ignore_conflicts=True,
+        )
+        AuditLog.objects.create(
+            company=request.user.company,
+            actor=request.user,
+            action="roles.assign",
+            entity="user",
+            entity_id=str(user.id),
+            payload={"role_ids": [role.id for role in roles]},
         )
 
         serializer = UserSerializer(user)

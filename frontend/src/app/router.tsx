@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppLayout } from "../shared/ui/AppLayout";
 import { LoginPage } from "../pages/LoginPage";
 import { DashboardPage } from "../pages/DashboardPage";
+import { UsersPage } from "../pages/UsersPage";
 import { RequireAuth } from "./RequireAuth";
 
 export const router = createBrowserRouter([
@@ -19,8 +20,9 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: "dashboard", element: <DashboardPage /> },
+      { path: "users", element: <UsersPage /> },
     ],
-  },  
+  },    
   {
     path: "*",
     element: <Navigate to="/login" replace />,
