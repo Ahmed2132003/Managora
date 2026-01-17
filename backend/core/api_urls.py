@@ -3,6 +3,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from core.api_views.auth import LoginView
 from core.api_views.me import MeView
+from core.api_views.roles import RoleListView
 
 urlpatterns = [
     # Auth
@@ -11,4 +12,7 @@ urlpatterns = [
 
     # Me
     path("me/", MeView.as_view(), name="me"),
+
+    # Roles
+    path("roles/", RoleListView.as_view(), name="roles"),
 ]
