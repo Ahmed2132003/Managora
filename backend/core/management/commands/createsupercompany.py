@@ -1,8 +1,8 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 
-from core.models import Company
-
+from core.models import Company, Permission, Role, RolePermission, UserRole
+from core.permissions import PERMISSION_DEFINITIONS, ROLE_PERMISSION_MAP
 
 class Command(BaseCommand):
     help = "Create initial Company (tenant) and an admin superuser linked to it."
@@ -14,14 +14,14 @@ class Command(BaseCommand):
         parser.add_argument("--password", type=str, help="Admin password")
 
     def handle(self, *args, **options):
-        company_name = options.get("company") or "Demo Company"
+        company_name = options.get("company") or "Demo Company"        
         username = options.get("username") or "admin"
         email = options.get("email") or "admin@example.com"
         password = options.get("password") or "admin123"
 
         # 1) Create or reuse company (MVP: single company)
         if Company.objects.exists():
-            company = Company.objects.first()
+            company = Company.objects.first()            
             self.stdout.write(self.style.WARNING(
                 f"Company already exists. Using: {company.name} (id={company.id})"
             ))
@@ -33,7 +33,7 @@ class Command(BaseCommand):
 
         # 2) Create or reuse admin user
         User = get_user_model()
-
+        
         if User.objects.filter(username=username).exists():
             user = User.objects.get(username=username)
             # ensure linked to company
@@ -60,8 +60,48 @@ class Command(BaseCommand):
                 f"Admin user created: {username}"
             ))
 
+        # 3) Seed permissions
+        permission_objects = {}
+        for code, name in PERMISSION_DEFINITIONS.items():
+            permission, _ = Permission.objects.get_or_create(
+                code=code,
+                defaults={"name": name},
+            )
+            if permission.name != name:
+                permission.name = name
+                permission.save(update_fields=["name"])
+            permission_objects[code] = permission
+
+        # 4) Seed roles and attach permissions
+        role_objects = {}
+        for role_name in ROLE_PERMISSION_MAP.keys():
+            role, _ = Role.objects.get_or_create(
+                company=company,
+                name=role_name,
+            )
+            role_objects[role_name] = role
+
+        for role_name, permission_codes in ROLE_PERMISSION_MAP.items():
+            role = role_objects[role_name]
+            RolePermission.objects.filter(role=role).exclude(
+                permission__code__in=permission_codes
+            ).delete()
+            for code in permission_codes:
+                permission = permission_objects.get(code)
+                if permission is None:
+                    continue
+                RolePermission.objects.get_or_create(
+                    role=role,
+                    permission=permission,
+                )
+
+        # 5) Assign Admin role to admin user
+        admin_role = role_objects.get("Admin")
+        if admin_role:
+            UserRole.objects.get_or_create(user=user, role=admin_role)
+
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Seed completed ✅"))
+        self.stdout.write(self.style.SUCCESS("Seed completed ✅"))        
         self.stdout.write("Login with:")
         self.stdout.write(f"  username: {username}")
         self.stdout.write(f"  password: {password}")
