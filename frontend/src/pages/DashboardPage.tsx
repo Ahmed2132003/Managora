@@ -1,7 +1,7 @@
 import { Card, Stack, Title, Text, Group, Button } from "@mantine/core";
 import { clearTokens } from "../shared/auth/tokens";
 import { useNavigate } from "react-router-dom";
-import { useMe } from "../shared/auth/useMe.tsx";
+import { useMe } from "../shared/auth/useMe.ts";
 
 export function DashboardPage() {
   const navigate = useNavigate();
