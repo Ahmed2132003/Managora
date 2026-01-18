@@ -22,12 +22,14 @@ export function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const redirectPath =
+    (location.state as { from?: { pathname?: string } })?.from?.pathname ?? "/dashboard";
 
   useEffect(() => {
     if (hasAccessToken()) {
-      navigate("/dashboard", { replace: true });
+      navigate(redirectPath, { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, redirectPath]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -49,9 +51,7 @@ export function LoginPage() {
         message: "تم تسجيل الدخول بنجاح.",
       });
 
-      const nextPath =
-        (location.state as { from?: { pathname?: string } })?.from?.pathname ?? "/dashboard";
-      navigate(nextPath, { replace: true });
+      navigate(redirectPath, { replace: true });
     } catch (err: unknown) {
       const message = axios.isAxiosError(err)
         ? JSON.stringify(err.response?.data ?? err.message)
