@@ -12,9 +12,9 @@ import {
   Title,
 } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
-import { AccessDenied } from "../../shared/ui/AccessDenied";
-import { isForbiddenError } from "../../shared/api/errors";
-import { useDepartments, useEmployees } from "../../shared/hr/hooks";
+import { AccessDenied } from "../../shared/ui/AccessDenied.tsx";
+import { isForbiddenError } from "../../shared/api/errors.ts";
+import { useDepartments, useEmployees } from "../../shared/hr/hooks.ts";
 
 const statusOptions = [
   { value: "active", label: "Active" },

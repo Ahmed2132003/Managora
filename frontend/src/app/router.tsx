@@ -1,13 +1,13 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
-import { AppLayout } from "../shared/ui/AppLayout";
-import { LoginPage } from "../pages/LoginPage";
-import { DashboardPage } from "../pages/DashboardPage";
+import { AppLayout } from "../shared/ui/AppLayout.tsx";
+import { LoginPage } from "../pages/LoginPage.tsx";
+import { DashboardPage } from "../pages/DashboardPage.tsx";
 import { UsersPage } from "../pages/UsersPage.tsx";
 import { RequireAuth } from "./RequireAuth";
-import { EmployeesPage } from "../pages/hr/EmployeesPage";
-import { EmployeeProfilePage } from "../pages/hr/EmployeeProfilePage";
-import { DepartmentsPage } from "../pages/hr/DepartmentsPage";
-import { JobTitlesPage } from "../pages/hr/JobTitlesPage";
+import { EmployeesPage } from "../pages/hr/EmployeesPage.tsx";
+import { EmployeeProfilePage } from "../pages/hr/EmployeeProfilePage.tsx";
+import { DepartmentsPage } from "../pages/hr/DepartmentsPage.tsx";
+import { JobTitlesPage } from "../pages/hr/JobTitlesPage.tsx";
 
 export const router = createBrowserRouter([
   {

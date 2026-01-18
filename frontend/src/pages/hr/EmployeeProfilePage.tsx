@@ -18,8 +18,8 @@ import { notifications } from "@mantine/notifications";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
 import { z } from "zod";
-import { env } from "../../shared/config/env";
-import { isForbiddenError } from "../../shared/api/errors";
+import { env } from "../../shared/config/env.ts";
+import { isForbiddenError } from "../../shared/api/errors.ts";
 import {
   useCreateEmployee,
   useDepartments,
@@ -31,9 +31,9 @@ import {
   useUploadEmployeeDocument,
   useDeleteEmployeeDocument,
   type EmployeeStatus,
-} from "../../shared/hr/hooks";
-import { AccessDenied } from "../../shared/ui/AccessDenied";
-import { endpoints } from "../../shared/api/endpoints";
+} from "../../shared/hr/hooks.ts";
+import { AccessDenied } from "../../shared/ui/AccessDenied.tsx";
+import { endpoints } from "../../shared/api/endpoints.ts";
 
 const employeeSchema = z.object({
   employee_code: z.string().min(1, "الكود مطلوب"),
@@ -210,12 +210,16 @@ export function EmployeeProfilePage() {
 
   async function handleDocumentSubmit(values: DocumentFormValues) {
     if (!employeeId) return;
+    if (!values.file) {
+      documentForm.setError("file", { message: "الملف مطلوب" });
+      return;
+    }
     try {
       await uploadDocumentMutation.mutateAsync({
         employeeId,
         doc_type: values.doc_type,
         title: values.title,
-        file: values.file,
+        file: values.file,        
       });
       notifications.show({
         title: "Document uploaded",

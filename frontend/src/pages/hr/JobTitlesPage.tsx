@@ -14,17 +14,17 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
-import { isForbiddenError } from "../../shared/api/errors";
+import { isForbiddenError } from "../../shared/api/errors.ts";
 import {
   useCreateJobTitle,
   useDeleteJobTitle,
   useJobTitles,
   useUpdateJobTitle,
   type JobTitle,
-} from "../../shared/hr/hooks";
-import { AccessDenied } from "../../shared/ui/AccessDenied";
+} from "../../shared/hr/hooks.ts";
+import { AccessDenied } from "../../shared/ui/AccessDenied.tsx";
 
 const jobTitleSchema = z.object({
   name: z.string().min(1, "المسمى مطلوب"),
@@ -51,6 +51,7 @@ export function JobTitlesPage() {
     resolver: zodResolver(jobTitleSchema),
     defaultValues,
   });
+  const isActiveValue = useWatch({ control: form.control, name: "is_active" });
 
   useEffect(() => {
     if (editing) {
@@ -187,8 +188,8 @@ export function JobTitlesPage() {
             />
             <Switch
               label="Active"
-              checked={form.watch("is_active")}
-              onChange={(event) => form.setValue("is_active", event.currentTarget.checked)}
+              checked={Boolean(isActiveValue)}
+              onChange={(event) => form.setValue("is_active", event.currentTarget.checked)}              
             />
             <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
               Save
