@@ -6,8 +6,8 @@ from rest_framework.generics import DestroyAPIView, ListCreateAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from core.permissions import PermissionByActionMixin
-from hr.models import Department, Employee, JobTitle
+from core.permissions import HasAnyPermission, PermissionByActionMixin
+from hr.models import Department, Employee, EmployeeDocument, JobTitle
 from hr.serializers import (
     DepartmentSerializer,
     EmployeeCreateUpdateSerializer,
