@@ -24,6 +24,7 @@ INSTALLED_APPS = [
 
     # Local
     "core.apps.CoreConfig",
+    "hr.apps.HrConfig",
 ]
 
 MIDDLEWARE = [
