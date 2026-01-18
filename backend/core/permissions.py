@@ -18,6 +18,18 @@ PERMISSION_DEFINITIONS = {
     "expenses.*": "Manage expenses",
     "invoices.*": "Manage invoices",
     "approvals.*": "Manage approvals",
+    "hr.departments.view": "View departments",
+    "hr.departments.create": "Create departments",
+    "hr.departments.edit": "Edit departments",
+    "hr.departments.delete": "Delete departments",
+    "hr.job_titles.view": "View job titles",
+    "hr.job_titles.create": "Create job titles",
+    "hr.job_titles.edit": "Edit job titles",
+    "hr.job_titles.delete": "Delete job titles",
+    "hr.employees.view": "View employees",
+    "hr.employees.create": "Create employees",
+    "hr.employees.edit": "Edit employees",
+    "hr.employees.delete": "Delete employees",
 }
 
 ROLE_PERMISSION_MAP = {
@@ -27,7 +39,10 @@ ROLE_PERMISSION_MAP = {
         "attendance.*",
         "leaves.*",
         "users.view",
-    ],
+        "hr.departments.*",
+        "hr.job_titles.*",
+        "hr.employees.*",
+    ],    
     "Accountant": [
         "accounting.*",
         "expenses.*",
@@ -37,8 +52,10 @@ ROLE_PERMISSION_MAP = {
         "approvals.*",
         "attendance.view_team",
         "employees.view_team",
+        "hr.employees.view",
     ],
-}
+}    
+
 
 
 def _permission_code_matches(granted_code, required_code):
