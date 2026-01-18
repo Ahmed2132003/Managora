@@ -106,7 +106,10 @@ class HrApiTests(APITestCase):
             url, {"name": "Ops", "is_active": True}, format="json"
         )
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
-
+        self.assertEqual(res.data["name"], "Ops")
+        created = Department.objects.get(id=res.data["id"])
+        self.assertEqual(created.company, self.c1)
+        
         res = self.client.get(url)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertTrue(any(dep["name"] == "Ops" for dep in res.data))
@@ -116,6 +119,15 @@ class HrApiTests(APITestCase):
         res = self.client.patch(detail_url, {"name": "Ops2"}, format="json")
         self.assertEqual(res.status_code, status.HTTP_200_OK)
 
+    def test_departments_are_tenant_scoped(self):
+        self.auth("hr")
+        url = reverse("department-list")
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        names = [dep["name"] for dep in res.data]
+        self.assertIn(self.department.name, names)
+        self.assertNotIn(self.other_department.name, names)
+        
     def test_manager_can_only_view_employees(self):
         self.auth("manager")
         list_url = reverse("employee-list")
@@ -213,6 +225,16 @@ class HrApiTests(APITestCase):
         )
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_employee_update_rejects_cross_company_department(self):
+        self.auth("hr")
+        url = reverse("employee-detail", kwargs={"pk": self.employee.id})
+        res = self.client.patch(
+            url,
+            {"department": self.other_department.id},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_employees_list_is_tenant_scoped(self):
         self.auth("hr")
         url = reverse("employee-list")
@@ -221,3 +243,15 @@ class HrApiTests(APITestCase):
         ids = [emp["id"] for emp in res.data]
         self.assertIn(self.employee.id, ids)
         self.assertNotIn(self.other_employee.id, ids)
+
+    def test_soft_deleted_employee_not_in_list(self):
+        self.auth("hr")
+        delete_url = reverse("employee-detail", kwargs={"pk": self.employee.id})
+        res = self.client.delete(delete_url)
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+
+        list_url = reverse("employee-list")
+        res = self.client.get(list_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        ids = [emp["id"] for emp in res.data]
+        self.assertNotIn(self.employee.id, ids)

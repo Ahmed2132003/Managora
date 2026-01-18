@@ -129,9 +129,24 @@ class EmployeeDocumentApiTests(APITestCase):
         )
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_upload_rejected_for_cross_company_employee(self):
+        self.auth("hr")
+        url = reverse(
+            "employee-documents", kwargs={"employee_id": self.other_employee.id}
+        )
+        upload = SimpleUploadedFile(
+            "contract.pdf", b"contract-content", content_type="application/pdf"
+        )
+        res = self.client.post(
+            url,
+            {"doc_type": "contract", "file": upload},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_download_requires_company_access(self):
         document = EmployeeDocument.objects.create(
-            company=self.c1,
+            company=self.c1,            
             employee=self.employee,
             doc_type=EmployeeDocument.DocumentType.ID,
             file=SimpleUploadedFile(
