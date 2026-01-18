@@ -8,8 +8,13 @@ export function hasPermission(permissions: string[], permission: string) {
   if (permissions.includes(permission)) {
     return true;
   }
-  const [prefix] = permission.split(".");
-  return permissions.includes(`${prefix}.*`);
+  return permissions.some((granted) => {
+    if (!granted.endsWith(".*")) {
+      return false;
+    }
+    const prefix = granted.slice(0, -2);
+    return permission.startsWith(`${prefix}.`);
+  });
 }
 
 export function useCan(permission: string) {
