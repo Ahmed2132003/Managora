@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from hr.models import Department, Employee, JobTitle
+from hr.models import Department, Employee, EmployeeDocument, JobTitle
 
 User = get_user_model()
 
@@ -159,3 +159,50 @@ class EmployeeCreateUpdateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         validated_data.pop("company", None)
         return super().update(instance, validated_data)
+
+
+class EmployeeDocumentSerializer(serializers.ModelSerializer):
+    uploaded_by = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = EmployeeDocument
+        fields = (
+            "id",
+            "employee",
+            "doc_type",
+            "title",
+            "file",
+            "uploaded_by",
+            "created_at",
+        )
+
+
+class EmployeeDocumentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmployeeDocument
+        fields = ("id", "doc_type", "title", "file")
+        read_only_fields = ("id",)
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        employee = self.context.get("employee")
+        if not request or not employee:
+            return attrs
+
+        if employee.company_id != request.user.company_id:
+            raise serializers.ValidationError(
+                {"employee": "Employee must belong to the same company."}
+            )
+        if employee.is_deleted:
+            raise serializers.ValidationError(
+                {"employee": "Cannot upload documents for deleted employee."}
+            )
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        employee = self.context.get("employee")
+        validated_data["company"] = employee.company
+        validated_data["employee"] = employee
+        validated_data["uploaded_by"] = request.user if request else None
+        return super().create(validated_data)

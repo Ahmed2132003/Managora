@@ -30,6 +30,10 @@ PERMISSION_DEFINITIONS = {
     "hr.employees.create": "Create employees",
     "hr.employees.edit": "Edit employees",
     "hr.employees.delete": "Delete employees",
+    "hr.documents.*": "Manage documents",
+    "hr.documents.view": "View employee documents",
+    "hr.documents.create": "Create employee documents",
+    "hr.documents.delete": "Delete employee documents",
 }
 
 ROLE_PERMISSION_MAP = {
@@ -42,7 +46,9 @@ ROLE_PERMISSION_MAP = {
         "hr.departments.*",
         "hr.job_titles.*",
         "hr.employees.*",
-    ],    
+        "hr.documents.*",
+    ],     
+    
     "Accountant": [
         "accounting.*",
         "expenses.*",
@@ -98,9 +104,21 @@ class HasPermission(BasePermission):
         return user_has_permission(request.user, self.permission_code)
 
 
+class HasAnyPermission(BasePermission):
+    message = "You do not have permission to perform this action."
+
+    def __init__(self, permission_codes):
+        self.permission_codes = permission_codes
+
+    def has_permission(self, request, view):
+        return any(
+            user_has_permission(request.user, code) for code in self.permission_codes
+        )
+
+
 class PermissionByActionMixin:
     permission_map = {}
-
+    
     def get_permissions(self):
         permissions = [permission() for permission in self.permission_classes]
         permission_code = self.permission_map.get(getattr(self, "action", None))

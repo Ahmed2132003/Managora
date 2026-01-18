@@ -44,6 +44,7 @@ services:
       - "8001:8000"
     volumes:
       - ../backend:/app
+      - backend_media:/app/media      
     working_dir: /app
     depends_on:
       db:
@@ -73,3 +74,4 @@ services:
 
 volumes:
   pgdata:
+  backend_media:

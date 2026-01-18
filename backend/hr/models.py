@@ -152,3 +152,35 @@ class Employee(BaseModel):
 
     def __str__(self):
         return f"{self.company.name} - {self.full_name}"
+
+
+def employee_document_upload_to(instance, filename):
+    return (
+        f"companies/{instance.company_id}/employees/{instance.employee_id}/documents/{filename}"
+    )
+
+
+class EmployeeDocument(BaseModel):
+    class DocumentType(models.TextChoices):
+        CONTRACT = "contract", "Contract"
+        ID = "id", "ID"
+        OTHER = "other", "Other"
+
+    employee = models.ForeignKey(
+        "hr.Employee",
+        on_delete=models.CASCADE,
+        related_name="documents",
+    )
+    doc_type = models.CharField(max_length=20, choices=DocumentType.choices)
+    title = models.CharField(max_length=255, blank=True)
+    file = models.FileField(upload_to=employee_document_upload_to)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="uploaded_employee_documents",
+    )
+
+    def __str__(self):
+        return f"{self.company.name} - {self.employee.full_name} - {self.doc_type}"

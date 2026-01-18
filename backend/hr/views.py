@@ -1,6 +1,10 @@
+from django.http import FileResponse, Http404
+from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import filters, viewsets
+from rest_framework.generics import DestroyAPIView, ListCreateAPIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 
 from core.permissions import PermissionByActionMixin
 from hr.models import Department, Employee, JobTitle
@@ -9,6 +13,8 @@ from hr.serializers import (
     EmployeeCreateUpdateSerializer,
     EmployeeDetailSerializer,
     EmployeeSerializer,
+    EmployeeDocumentCreateSerializer,
+    EmployeeDocumentSerializer,
     JobTitleSerializer,
 )
 
@@ -108,3 +114,84 @@ class EmployeeViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         if self.action == "retrieve":
             return EmployeeDetailSerializer
         return EmployeeSerializer
+
+
+@extend_schema(
+    tags=["Employee Documents"],
+    summary="List or create employee documents",
+)
+class EmployeeDocumentListCreateView(ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_employee(self):
+        employee = get_object_or_404(Employee.all_objects, pk=self.kwargs["employee_id"])
+        if employee.company_id != self.request.user.company_id:
+            raise Http404
+        return employee
+
+    def get_queryset(self):
+        employee = self.get_employee()
+        return EmployeeDocument.objects.filter(
+            company=self.request.user.company, employee=employee
+        ).order_by("id")
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return EmployeeDocumentCreateSerializer
+        return EmployeeDocumentSerializer
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        if self.request.method == "POST":
+            permissions.append(
+                HasAnyPermission(["hr.employees.edit", "hr.documents.create"])
+            )
+        else:
+            permissions.append(
+                HasAnyPermission(["hr.employees.view", "hr.documents.view"])
+            )
+        return permissions
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["employee"] = self.get_employee()
+        return context
+
+
+@extend_schema(
+    tags=["Employee Documents"],
+    summary="Download employee document",
+)
+class EmployeeDocumentDownloadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["hr.employees.view", "hr.documents.view"]))
+        return permissions
+
+    def get(self, request, pk=None):
+        document = get_object_or_404(EmployeeDocument.all_objects, pk=pk)
+        if document.company_id != request.user.company_id:
+            raise Http404
+        if document.is_deleted:
+            raise Http404
+        return FileResponse(document.file.open("rb"), as_attachment=True)
+
+
+@extend_schema(
+    tags=["Employee Documents"],
+    summary="Delete employee document",
+)
+class EmployeeDocumentDeleteView(DestroyAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(
+            HasAnyPermission(["hr.employees.edit", "hr.documents.delete"])
+        )
+        return permissions
+
+    def get_queryset(self):
+        return EmployeeDocument.objects.filter(company=self.request.user.company)
