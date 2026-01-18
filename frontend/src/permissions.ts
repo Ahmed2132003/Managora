@@ -13,6 +13,22 @@ export const PERMISSION_CODES = [
   "expenses.*",
   "invoices.*",
   "approvals.*",
+  "hr.departments.view",
+  "hr.departments.create",
+  "hr.departments.edit",
+  "hr.departments.delete",
+  "hr.job_titles.view",
+  "hr.job_titles.create",
+  "hr.job_titles.edit",
+  "hr.job_titles.delete",
+  "hr.employees.view",
+  "hr.employees.create",
+  "hr.employees.edit",
+  "hr.employees.delete",
+  "hr.documents.*",
+  "hr.documents.view",
+  "hr.documents.create",
+  "hr.documents.delete",
 ] as const;
 
 export const ROLE_PERMISSIONS = {

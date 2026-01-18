@@ -6,6 +6,9 @@ import { useCan } from "../auth/useCan";
 export function AppLayout() {
   const navigate = useNavigate();
   const canViewUsers = useCan("users.view");
+  const canViewEmployees = useCan("hr.employees.view");
+  const canViewDepartments = useCan("hr.departments.view");
+  const canViewJobTitles = useCan("hr.job_titles.view");
 
   function handleLogout() {
     clearTokens();
@@ -29,11 +32,27 @@ export function AppLayout() {
                 Users
               </Button>
             )}
-          </Group>
+            {canViewEmployees && (
+              <Button component={Link} to="/hr/employees" variant="subtle">
+                Employees
+              </Button>
+            )}
+            {canViewDepartments && (
+              <Button component={Link} to="/hr/departments" variant="subtle">
+                Departments
+              </Button>
+            )}
+            {canViewJobTitles && (
+              <Button component={Link} to="/hr/job-titles" variant="subtle">
+                Job Titles
+              </Button>
+            )}
+          </Group>          
           <Button onClick={handleLogout} variant="light">
             Logout
           </Button>
         </Group>
+        
       </AppShell.Header>
       <AppShell.Main>
         <Container size="lg">
