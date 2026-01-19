@@ -184,3 +184,77 @@ class EmployeeDocument(BaseModel):
 
     def __str__(self):
         return f"{self.company.name} - {self.employee.full_name} - {self.doc_type}"
+
+
+class WorkSite(BaseModel):
+    name = models.CharField(max_length=255)
+    lat = models.DecimalField(max_digits=9, decimal_places=6)
+    lng = models.DecimalField(max_digits=9, decimal_places=6)
+    radius_meters = models.PositiveIntegerField()
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.company.name} - {self.name}"
+
+
+class Shift(BaseModel):
+    name = models.CharField(max_length=255)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    grace_minutes = models.PositiveIntegerField()
+    early_leave_grace_minutes = models.PositiveIntegerField(null=True, blank=True)
+    min_work_minutes = models.PositiveIntegerField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.company.name} - {self.name}"
+
+
+class AttendanceRecord(BaseModel):
+    class Method(models.TextChoices):
+        GPS = "gps", "GPS"
+        QR = "qr", "QR"
+        MANUAL = "manual", "Manual"
+
+    class Status(models.TextChoices):
+        PRESENT = "present", "Present"
+        LATE = "late", "Late"
+        ABSENT = "absent", "Absent"
+        EARLY_LEAVE = "early_leave", "Early Leave"
+        INCOMPLETE = "incomplete", "Incomplete"
+
+    employee = models.ForeignKey(
+        "hr.Employee",
+        on_delete=models.CASCADE,
+        related_name="attendance_records",
+    )
+    date = models.DateField()
+    check_in_time = models.DateTimeField(null=True, blank=True)
+    check_out_time = models.DateTimeField(null=True, blank=True)
+    check_in_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    check_in_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    check_out_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    check_out_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    method = models.CharField(max_length=10, choices=Method.choices)
+    status = models.CharField(max_length=20, choices=Status.choices)
+    late_minutes = models.PositiveIntegerField(default=0)
+    early_leave_minutes = models.PositiveIntegerField(default=0)
+    notes = models.TextField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "employee", "date"],
+                name="unique_attendance_record_per_day",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["company", "date"], name="attendance_comp_date_idx"),
+            models.Index(
+                fields=["company", "employee", "date"],
+                name="attendance_comp_emp_date_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.company.name} - {self.employee.full_name} - {self.date}"

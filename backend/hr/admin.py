@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from hr.models import Department, Employee, EmployeeDocument, JobTitle
+from hr.models import (
+    AttendanceRecord,
+    Department,
+    Employee,
+    EmployeeDocument,
+    JobTitle,
+    Shift,
+    WorkSite,
+)
 
 
 @admin.register(Department)
@@ -45,3 +53,57 @@ class EmployeeDocumentAdmin(admin.ModelAdmin):
     search_fields = ("title", "employee__full_name")
     ordering = ("-created_at",)
     autocomplete_fields = ("employee", "uploaded_by")
+
+
+@admin.register(WorkSite)
+class WorkSiteAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "company",
+        "lat",
+        "lng",
+        "radius_meters",
+        "is_active",
+    )
+    list_filter = ("company", "is_active")
+    search_fields = ("name", "company__name")
+    ordering = ("company", "name")
+
+
+@admin.register(Shift)
+class ShiftAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "company",
+        "start_time",
+        "end_time",
+        "grace_minutes",
+        "early_leave_grace_minutes",
+        "min_work_minutes",
+        "is_active",
+    )
+    list_filter = ("company", "is_active")
+    search_fields = ("name", "company__name")
+    ordering = ("company", "name")
+
+
+@admin.register(AttendanceRecord)
+class AttendanceRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "company",
+        "employee",
+        "date",
+        "check_in_time",
+        "check_out_time",
+        "method",
+        "status",
+        "late_minutes",
+        "early_leave_minutes",
+    )
+    list_filter = ("company", "status", "method")
+    search_fields = ("employee__full_name", "employee__employee_code")
+    ordering = ("-date", "employee")
+    autocomplete_fields = ("employee",)
