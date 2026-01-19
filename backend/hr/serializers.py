@@ -1,7 +1,15 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from hr.models import Department, Employee, EmployeeDocument, JobTitle
+from hr.models import (
+    AttendanceRecord,
+    Department,
+    Employee,
+    EmployeeDocument,
+    JobTitle,
+    Shift,
+    WorkSite,
+)
 
 User = get_user_model()
 
@@ -206,3 +214,83 @@ class EmployeeDocumentCreateSerializer(serializers.ModelSerializer):
         validated_data["employee"] = employee
         validated_data["uploaded_by"] = request.user if request else None
         return super().create(validated_data)
+
+
+class AttendanceEmployeeSerializer(serializers.ModelSerializer):
+    department = DepartmentMiniSerializer(read_only=True)
+
+    class Meta:
+        model = Employee
+        fields = ("id", "employee_code", "full_name", "department")
+
+
+class AttendanceRecordSerializer(serializers.ModelSerializer):
+    employee = AttendanceEmployeeSerializer(read_only=True)
+
+    class Meta:
+        model = AttendanceRecord
+        fields = (
+            "id",
+            "employee",
+            "date",
+            "check_in_time",
+            "check_out_time",
+            "check_in_lat",
+            "check_in_lng",
+            "check_out_lat",
+            "check_out_lng",
+            "method",
+            "status",
+            "late_minutes",
+            "early_leave_minutes",
+            "notes",
+        )
+
+
+class AttendanceActionSerializer(serializers.Serializer):
+    employee_id = serializers.PrimaryKeyRelatedField(
+        source="employee", queryset=Employee.objects.none()
+    )
+    worksite_id = serializers.PrimaryKeyRelatedField(
+        source="worksite", queryset=WorkSite.objects.none(), required=False, allow_null=True
+    )
+    shift_id = serializers.PrimaryKeyRelatedField(
+        source="shift", queryset=Shift.objects.none(), required=False, allow_null=True
+    )
+    method = serializers.ChoiceField(choices=AttendanceRecord.Method.choices)
+    lat = serializers.DecimalField(
+        max_digits=9, decimal_places=6, required=False, allow_null=True
+    )
+    lng = serializers.DecimalField(
+        max_digits=9, decimal_places=6, required=False, allow_null=True
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            company = request.user.company
+            self.fields["employee_id"].queryset = Employee.objects.filter(company=company)
+            self.fields["worksite_id"].queryset = WorkSite.objects.filter(company=company)
+            self.fields["shift_id"].queryset = Shift.objects.filter(company=company)
+
+    def validate(self, attrs):
+        method = attrs.get("method")
+        shift = attrs.get("shift")
+        worksite = attrs.get("worksite")
+        lat = attrs.get("lat")
+        lng = attrs.get("lng")
+
+        if not shift:
+            raise serializers.ValidationError({"shift_id": "shift_id is required."})
+
+        if (lat is None) ^ (lng is None):
+            raise serializers.ValidationError({"location": "Both lat and lng are required."})
+
+        if method == AttendanceRecord.Method.GPS:
+            if not worksite:
+                raise serializers.ValidationError({"worksite_id": "worksite_id is required for GPS."})
+            if lat is None or lng is None:
+                raise serializers.ValidationError({"location": "lat/lng is required for GPS."})
+
+        return attrs

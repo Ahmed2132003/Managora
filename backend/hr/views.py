@@ -1,13 +1,22 @@
+from datetime import timedelta
+
+from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.utils.dateparse import parse_date
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import filters, viewsets
-from rest_framework.generics import DestroyAPIView, ListCreateAPIView
+from rest_framework import filters, status, viewsets
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.generics import DestroyAPIView, ListAPIView, ListCreateAPIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.permissions import HasAnyPermission, PermissionByActionMixin
-from hr.models import Department, Employee, EmployeeDocument, JobTitle
+from core.permissions import HasAnyPermission, PermissionByActionMixin, user_has_permission
+from hr.models import AttendanceRecord, Department, Employee, EmployeeDocument, JobTitle
+from hr.serializers import AttendanceActionSerializer, AttendanceRecordSerializer
+from hr.services.attendance import check_in, check_out
 from hr.serializers import (
     DepartmentSerializer,
     EmployeeCreateUpdateSerializer,
@@ -195,3 +204,169 @@ class EmployeeDocumentDeleteView(DestroyAPIView):
 
     def get_queryset(self):
         return EmployeeDocument.objects.filter(company=self.request.user.company)
+
+
+def _parse_date_param(value, label):
+    if not value:
+        return None
+    parsed = parse_date(value)
+    if not parsed:
+        raise ValidationError({label: "Invalid date format. Use YYYY-MM-DD."})
+    return parsed
+
+
+class AttendanceCheckInView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Attendance"],
+        summary="Employee check-in",
+        request=AttendanceActionSerializer,
+        responses={201: AttendanceRecordSerializer},
+    )
+    def post(self, request):
+        serializer = AttendanceActionSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        employee = self._resolve_employee(request, serializer.validated_data)
+        record = check_in(request.user, employee.id, serializer.validated_data)
+        return Response(
+            AttendanceRecordSerializer(record).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def _resolve_employee(self, request, validated_data):
+        employee = validated_data["employee"]
+        linked_employee = getattr(request.user, "employee_profile", None)
+        if linked_employee:
+            if employee.id != linked_employee.id:
+                raise PermissionDenied("You can only check in for yourself.")
+            return employee
+        if not user_has_permission(request.user, "attendance.*"):
+            raise PermissionDenied("You do not have permission to check in for others.")
+        if validated_data["method"] != AttendanceRecord.Method.MANUAL:
+            raise PermissionDenied(
+                "Only manual check-in is allowed when acting on behalf of others."
+            )
+        return employee
+
+
+class AttendanceCheckOutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Attendance"],
+        summary="Employee check-out",
+        request=AttendanceActionSerializer,
+        responses={200: AttendanceRecordSerializer},
+    )
+    def post(self, request):
+        serializer = AttendanceActionSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        employee = self._resolve_employee(request, serializer.validated_data)
+        record = check_out(request.user, employee.id, serializer.validated_data)
+        return Response(AttendanceRecordSerializer(record).data)
+
+    def _resolve_employee(self, request, validated_data):
+        employee = validated_data["employee"]
+        linked_employee = getattr(request.user, "employee_profile", None)
+        if linked_employee:
+            if employee.id != linked_employee.id:
+                raise PermissionDenied("You can only check out for yourself.")
+            return employee
+        if not user_has_permission(request.user, "attendance.*"):
+            raise PermissionDenied("You do not have permission to check out for others.")
+        if validated_data["method"] != AttendanceRecord.Method.MANUAL:
+            raise PermissionDenied(
+                "Only manual check-out is allowed when acting on behalf of others."
+            )
+        return employee
+
+
+class AttendanceMyView(ListAPIView):
+    serializer_class = AttendanceRecordSerializer
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Attendance"],
+        summary="List my attendance records",
+        responses={200: AttendanceRecordSerializer(many=True)},
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        employee = getattr(self.request.user, "employee_profile", None)
+        if not employee:
+            raise PermissionDenied("Employee profile is required.")
+
+        date_from = _parse_date_param(
+            self.request.query_params.get("date_from"), "date_from"
+        )
+        date_to = _parse_date_param(
+            self.request.query_params.get("date_to"), "date_to"
+        )
+
+        if not date_from and not date_to:
+            date_to = timezone.localdate()
+            date_from = date_to - timedelta(days=30)
+
+        queryset = AttendanceRecord.objects.filter(
+            company=self.request.user.company,
+            employee=employee,
+        )
+        if date_from:
+            queryset = queryset.filter(date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(date__lte=date_to)
+        return queryset.order_by("-date", "-check_in_time")
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Attendance"], summary="List attendance records"),
+)
+class AttendanceRecordViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = AttendanceRecordSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["attendance.*"]))
+        return permissions
+
+    def get_queryset(self):
+        queryset = AttendanceRecord.objects.select_related(
+            "employee", "employee__department"
+        ).filter(company=self.request.user.company)
+
+        date_from = _parse_date_param(
+            self.request.query_params.get("date_from"), "date_from"
+        )
+        date_to = _parse_date_param(
+            self.request.query_params.get("date_to"), "date_to"
+        )
+        employee_id = self.request.query_params.get("employee_id")
+        department_id = self.request.query_params.get("department_id")
+        status_filter = self.request.query_params.get("status")
+        search = self.request.query_params.get("search")
+
+        if date_from:
+            queryset = queryset.filter(date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(date__lte=date_to)
+        if employee_id:
+            queryset = queryset.filter(employee_id=employee_id)
+        if department_id:
+            queryset = queryset.filter(employee__department_id=department_id)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        if search:
+            queryset = queryset.filter(
+                Q(employee__full_name__icontains=search)
+                | Q(employee__employee_code__icontains=search)
+            )
+
+        return queryset.order_by("-date", "-check_in_time")
