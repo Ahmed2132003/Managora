@@ -56,7 +56,7 @@ export function PoliciesPage() {
     "late_over_minutes"
   );
   const [threshold, setThreshold] = useState<number | undefined>(5);
-  const [periodDays, setPeriodDays] = useState<number | undefined>(30);
+  const [periodDays, setPeriodDays] = useState<number | null>(30);  
   const [actionType, setActionType] = useState<PolicyRule["action_type"]>("warning");
   const [actionValue, setActionValue] = useState<number | undefined>(undefined);  
   const [isActive, setIsActive] = useState(true);
@@ -172,10 +172,10 @@ export function PoliciesPage() {
               <NumberInput
                 label="Y (عدد الأيام)"
                 min={1}
-                value={periodDays}
+                value={periodDays ?? undefined}
                 onChange={(value) =>
-                  setPeriodDays(typeof value === "number" ? value : undefined)
-                }
+                setPeriodDays(typeof value === "number" ? value : null)
+              }                
               />
             )}            
           </Group>
