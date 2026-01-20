@@ -19,10 +19,12 @@ from hr.models import (
     Department,
     Employee,
     EmployeeDocument,
+    HRAction,
     JobTitle,
     LeaveBalance,
     LeaveRequest,
     LeaveType,
+    PolicyRule,
 )
 from hr.services.attendance import check_in, check_out, generate_qr_token
 from hr.serializers import (
@@ -37,11 +39,13 @@ from hr.serializers import (
     EmployeeDocumentCreateSerializer,
     EmployeeDocumentSerializer,
     JobTitleSerializer,
+    HRActionSerializer,
     LeaveBalanceSerializer,
     LeaveDecisionSerializer,
     LeaveRequestCreateSerializer,
     LeaveRequestSerializer,
     LeaveTypeSerializer,
+    PolicyRuleSerializer,
 )
 from hr.services.leaves import approve_leave, reject_leave
 
@@ -439,6 +443,58 @@ class AttendanceRecordViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         return queryset.order_by("-date", "-check_in_time")
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Policies"], summary="List policy rules"),
+    retrieve=extend_schema(tags=["Policies"], summary="Retrieve policy rule"),
+    create=extend_schema(tags=["Policies"], summary="Create policy rule"),
+    partial_update=extend_schema(tags=["Policies"], summary="Update policy rule"),
+    destroy=extend_schema(tags=["Policies"], summary="Delete policy rule"),
+)
+class PolicyRuleViewSet(viewsets.ModelViewSet):
+    serializer_class = PolicyRuleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["attendance.*"]))
+        return permissions
+
+    def get_queryset(self):
+        return PolicyRule.objects.filter(company=self.request.user.company).order_by(
+            "-created_at"
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(company=self.request.user.company)
+
+    def perform_update(self, serializer):
+        serializer.save(company=self.request.user.company)
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Policies"], summary="List HR actions"),
+    retrieve=extend_schema(tags=["Policies"], summary="Retrieve HR action"),
+)
+class HRActionViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = HRActionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["attendance.*"]))
+        return permissions
+
+    def get_queryset(self):
+        queryset = HRAction.objects.select_related("employee", "rule").filter(
+            company=self.request.user.company
+        )
+        employee_id = self.request.query_params.get("employee_id")
+        if employee_id:
+            queryset = queryset.filter(employee_id=employee_id)
+        return queryset.order_by("-created_at")
+
 
 
 @extend_schema_view(

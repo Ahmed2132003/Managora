@@ -377,3 +377,207 @@ export function useDeleteEmployeeDocument() {
     },
   });
 }
+
+export type LeaveType = {
+  id: number;
+  name: string;
+  code: string;
+  requires_approval: boolean;
+  paid: boolean;
+  max_per_request_days: number | null;
+  allow_negative_balance: boolean;
+  is_active: boolean;
+};
+
+export type LeaveBalance = {
+  id: number;
+  leave_type: LeaveType;
+  year: number;
+  allocated_days: string;
+  used_days: string;
+  carryover_days: string;
+  remaining_days: string;
+};
+
+export type LeaveRequest = {
+  id: number;
+  leave_type: LeaveType;
+  start_date: string;
+  end_date: string;
+  days: string;
+  reason: string | null;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  requested_at: string;
+  decided_at: string | null;
+  reject_reason: string | null;
+  employee?: AttendanceEmployee;
+};
+
+export type LeaveRequestCreatePayload = {
+  leave_type_id: number;
+  start_date: string;
+  end_date: string;
+  reason?: string;
+};
+
+export type PolicyRule = {
+  id: number;
+  name: string;
+  rule_type:
+    | "late_over_minutes"
+    | "late_count_over_period"
+    | "absent_count_over_period";
+  threshold: number;
+  period_days: number | null;
+  action_type: "warning" | "deduction";
+  action_value: string | null;
+  is_active: boolean;
+};
+
+export type HRAction = {
+  id: number;
+  employee: AttendanceEmployee;
+  rule: { id: number; name: string; rule_type: PolicyRule["rule_type"] };
+  action_type: "warning" | "deduction";
+  value: string;
+  reason: string;
+  period_start: string | null;
+  period_end: string | null;
+  attendance_record: number | null;
+  created_at: string;
+};
+
+export function useLeaveTypesQuery() {
+  return useQuery({
+    queryKey: ["leaves", "types"],
+    queryFn: async () => {
+      const response = await http.get<LeaveType[]>(endpoints.hr.leaveTypes);
+      return response.data;
+    },
+  });
+}
+
+export function useMyLeaveBalancesQuery(params?: { year?: number }) {
+  return useQuery({
+    queryKey: ["leaves", "balances", "my", params],
+    queryFn: async () => {
+      const response = await http.get<LeaveBalance[]>(endpoints.hr.leaveBalanceMy, {
+        params: {
+          year: params?.year,
+        },
+      });
+      return response.data;
+    },
+  });
+}
+
+export function useMyLeaveRequestsQuery(params?: {
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  leaveType?: number;
+}) {
+  return useQuery({
+    queryKey: ["leaves", "requests", "my", params],
+    queryFn: async () => {
+      const response = await http.get<LeaveRequest[]>(endpoints.hr.leaveRequestsMy, {
+        params: {
+          status: params?.status,
+          date_from: params?.dateFrom,
+          date_to: params?.dateTo,
+          leave_type: params?.leaveType,
+        },
+      });
+      return response.data;
+    },
+  });
+}
+
+export function useCreateLeaveRequestMutation() {
+  return useMutation({
+    mutationFn: async (payload: LeaveRequestCreatePayload) => {
+      const response = await http.post<LeaveRequest>(
+        endpoints.hr.leaveRequests,
+        payload
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useLeaveApprovalsInboxQuery(params?: {
+  status?: string;
+  employee?: string;
+}) {
+  return useQuery({
+    queryKey: ["leaves", "approvals", "inbox", params],
+    queryFn: async () => {
+      const response = await http.get<LeaveRequest[]>(
+        endpoints.hr.leaveApprovalsInbox,
+        {
+          params: {
+            status: params?.status,
+            employee: params?.employee,
+          },
+        }
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useApproveLeaveRequestMutation() {
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const response = await http.post<LeaveRequest>(
+        endpoints.hr.leaveRequestApprove(id)
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useRejectLeaveRequestMutation() {
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: number; reason?: string }) => {
+      const response = await http.post<LeaveRequest>(
+        endpoints.hr.leaveRequestReject(id),
+        { reason }
+      );
+      return response.data;
+    },
+  });
+}
+
+export function usePolicyRulesQuery() {
+  return useQuery({
+    queryKey: ["policies", "rules"],
+    queryFn: async () => {
+      const response = await http.get<PolicyRule[]>(endpoints.hr.policies);
+      return response.data;
+    },
+  });
+}
+
+export function useCreatePolicyRuleMutation() {
+  return useMutation({
+    mutationFn: async (payload: Omit<PolicyRule, "id">) => {
+      const response = await http.post<PolicyRule>(endpoints.hr.policies, payload);
+      return response.data;
+    },
+  });
+}
+
+export function useHrActionsQuery(params?: { employeeId?: number }) {
+  return useQuery({
+    queryKey: ["policies", "actions", params],
+    queryFn: async () => {
+      const response = await http.get<HRAction[]>(endpoints.hr.hrActions, {
+        params: {
+          employee_id: params?.employeeId,
+        },
+      });
+      return response.data;
+    },
+  });
+}

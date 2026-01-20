@@ -17,11 +17,13 @@ from hr.views import (
     LeaveRequestCreateView,
     LeaveRequestMyListView,
     LeaveTypeViewSet,
+    HRActionViewSet,
     EmployeeDocumentDeleteView,
     EmployeeDocumentDownloadView,
     EmployeeDocumentListCreateView,
     EmployeeViewSet,          
     JobTitleViewSet,
+    PolicyRuleViewSet,
 )
 
 router = DefaultRouter()
@@ -33,6 +35,8 @@ router.register("leaves/balances", LeaveBalanceViewSet, basename="leave-balance"
 router.register(
     "attendance/records", AttendanceRecordViewSet, basename="attendance-record"
 )
+router.register("policies", PolicyRuleViewSet, basename="policy-rule")
+router.register("actions", HRActionViewSet, basename="hr-action")
 
 urlpatterns = [
     path("", include(router.urls)),

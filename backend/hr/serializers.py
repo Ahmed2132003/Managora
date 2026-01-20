@@ -6,10 +6,12 @@ from hr.models import (
     Department,
     Employee,
     EmployeeDocument,
+    HRAction,
     JobTitle,
     LeaveBalance,
     LeaveRequest,
     LeaveType,
+    PolicyRule,
     Shift,
     WorkSite,
 )
@@ -458,3 +460,44 @@ class LeaveRequestCreateSerializer(serializers.ModelSerializer):
 
 class LeaveDecisionSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+
+class PolicyRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PolicyRule
+        fields = (
+            "id",
+            "name",
+            "rule_type",
+            "threshold",
+            "period_days",
+            "action_type",
+            "action_value",
+            "is_active",
+        )
+
+
+class PolicyRuleSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PolicyRule
+        fields = ("id", "name", "rule_type")
+
+
+class HRActionSerializer(serializers.ModelSerializer):
+    employee = LeaveEmployeeSerializer(read_only=True)
+    rule = PolicyRuleSummarySerializer(read_only=True)
+
+    class Meta:
+        model = HRAction
+        fields = (
+            "id",
+            "employee",
+            "rule",
+            "action_type",
+            "value",
+            "reason",
+            "period_start",
+            "period_end",
+            "attendance_record",
+            "created_at",
+        )

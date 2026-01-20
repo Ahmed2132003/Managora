@@ -10,7 +10,12 @@ import { DepartmentsPage } from "../pages/hr/DepartmentsPage.tsx";
 import { JobTitlesPage } from "../pages/hr/JobTitlesPage.tsx";
 import { SelfAttendancePage } from "../pages/attendance/SelfAttendancePage.tsx";
 import { HRAttendancePage } from "../pages/hr/HRAttendancePage";
-
+import { LeaveBalancePage } from "../pages/leaves/LeaveBalancePage";
+import { LeaveMyRequestsPage } from "../pages/leaves/LeaveMyRequestsPage";
+import { LeaveRequestPage } from "../pages/leaves/LeaveRequestPage";
+import { LeaveInboxPage } from "../pages/hr/LeaveInboxPage";
+import { PoliciesPage } from "../pages/hr/PoliciesPage";
+import { HRActionsPage } from "../pages/hr/HRActionsPage";
 export const router = createBrowserRouter([
   {
     path: "/login",
@@ -28,13 +33,19 @@ export const router = createBrowserRouter([
       { path: "dashboard", element: <DashboardPage /> },
       { path: "users", element: <UsersPage /> },
       { path: "attendance/self", element: <SelfAttendancePage /> },
+      { path: "leaves/balance", element: <LeaveBalancePage /> },
+      { path: "leaves/request", element: <LeaveRequestPage /> },
+      { path: "leaves/my", element: <LeaveMyRequestsPage /> },
       { path: "hr/employees", element: <EmployeesPage /> },
       { path: "hr/employees/:id", element: <EmployeeProfilePage /> },
       { path: "hr/departments", element: <DepartmentsPage /> },
       { path: "hr/job-titles", element: <JobTitlesPage /> },
       { path: "hr/attendance", element: <HRAttendancePage /> },
+      { path: "hr/leaves/inbox", element: <LeaveInboxPage /> },
+      { path: "hr/policies", element: <PoliciesPage /> },
+      { path: "hr/actions", element: <HRActionsPage /> },
     ],
-  },                 
+  },                                    
   {
     path: "*",
     element: <Navigate to="/login" replace />,

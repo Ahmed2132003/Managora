@@ -10,6 +10,7 @@ export function AppLayout() {
   const canViewDepartments = useCan("hr.departments.view");
   const canViewJobTitles = useCan("hr.job_titles.view");
   const canViewAttendance = useCan("attendance.*");
+  const canViewApprovals = useCan("approvals.*") || useCan("leaves.*");
 
   function handleLogout() {
     clearTokens();
@@ -36,6 +37,15 @@ export function AppLayout() {
             <Button component={Link} to="/attendance/self" variant="subtle">
               My Attendance
             </Button>
+            <Button component={Link} to="/leaves/balance" variant="subtle">
+              Leave Balance
+            </Button>
+            <Button component={Link} to="/leaves/request" variant="subtle">
+              Request Leave
+            </Button>
+            <Button component={Link} to="/leaves/my" variant="subtle">
+              My Requests
+            </Button>
             {canViewEmployees && (
               <Button component={Link} to="/hr/employees" variant="subtle">
                 Employees
@@ -46,11 +56,26 @@ export function AppLayout() {
                 HR Attendance
               </Button>
             )}
+            {canViewApprovals && (
+              <Button component={Link} to="/hr/leaves/inbox" variant="subtle">
+                Leave Inbox
+              </Button>
+            )}
+            {canViewAttendance && (
+              <Button component={Link} to="/hr/policies" variant="subtle">
+                Policies
+              </Button>
+            )}
+            {canViewAttendance && (
+              <Button component={Link} to="/hr/actions" variant="subtle">
+                HR Actions
+              </Button>
+            )}
             {canViewDepartments && (
               <Button component={Link} to="/hr/departments" variant="subtle">
                 Departments
               </Button>
-            )}            
+            )}                                  
             {canViewJobTitles && (
               <Button component={Link} to="/hr/job-titles" variant="subtle">
                 Job Titles
