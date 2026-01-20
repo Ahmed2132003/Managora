@@ -6,9 +6,11 @@ import {
   Button,
   Card,
   Group,
+  Select,
   NumberInput,
   Stack,
   Text,
+  TextInput,
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -23,10 +25,21 @@ import {
 import { useMe } from "../../shared/auth/useMe";
 
 const statusColors: Record<string, string> = {
-  "No record": "gray",
-  "Checked-in": "blue",
-  Completed: "green",
+  "no-record": "gray",
+  "checked-in": "blue",
+  completed: "green",
+  present: "green",
+  late: "orange",
+  early_leave: "yellow",
+  absent: "red",
+  incomplete: "blue",
 };
+
+const methodOptions = [
+  { value: "gps", label: "GPS" },
+  { value: "qr", label: "QR" },
+  { value: "manual", label: "Manual" },
+];
 
 function getTodayValue() {
   const now = new Date();
@@ -102,6 +115,8 @@ export function SelfAttendancePage() {
   const [employeeId, setEmployeeId] = useState<number | undefined>(undefined);
   const [shiftId, setShiftId] = useState<number | undefined>(undefined);
   const [worksiteId, setWorksiteId] = useState<number | undefined>(undefined);
+  const [method, setMethod] = useState<AttendanceActionPayload["method"]>("gps");
+  const [qrToken, setQrToken] = useState("");
 
   const meQuery = useMe();
   const myAttendanceQuery = useMyAttendanceQuery({
@@ -118,9 +133,9 @@ export function SelfAttendancePage() {
 
   const statusLabel = todayRecord
     ? todayRecord.check_out_time
-      ? "Completed"
-      : "Checked-in"
-    : "No record";
+      ? "completed"
+      : todayRecord.status || "checked-in"
+    : "no-record";
 
   const hasOpenCheckIn = Boolean(
     todayRecord?.check_in_time && !todayRecord?.check_out_time
@@ -133,16 +148,16 @@ export function SelfAttendancePage() {
     resolvedEmployeeId === meQuery.data?.employee?.id;
 
   async function handleAction(action: "check-in" | "check-out") {
-    if (!resolvedEmployeeId || !shiftId) {
+    if (!resolvedEmployeeId) {
       notifications.show({
         title: "Missing info",
-        message: "من فضلك أدخل رقم الموظف والوردية قبل المتابعة.",
+        message: "من فضلك أدخل رقم الموظف قبل المتابعة.",
         color: "red",
       });
       return;
     }
 
-    let method: AttendanceActionPayload["method"] = "manual";
+    let resolvedMethod: AttendanceActionPayload["method"] = method;
     let location: { lat: number; lng: number } | null = null;
 
     if (!isSelfCheckIn) {
@@ -152,36 +167,62 @@ export function SelfAttendancePage() {
           "تسجيل الحضور لشخص آخر يجب أن يكون يدويًا. سيتم تجاهل بيانات الموقع.",
         color: "yellow",
       });
+      resolvedMethod = "manual";
     } else {
-      location = await readGeolocation();
+      if (method === "gps") {
+        location = await readGeolocation();
 
-      if (!location) {
-        notifications.show({
-          title: "اسمح بالموقع",
-          message: "لم نتمكن من قراءة الموقع، سيتم تسجيل الحضور بالطريقة اليدوية.",
-          color: "yellow",
-        });
-      } else if (!worksiteId) {
-        notifications.show({
-          title: "Worksite مطلوب",
-          message:
-            "أدخل معرف الموقع لتفعيل تسجيل الحضور بالموقع. سيتم استخدام الطريقة اليدوية.",
-          color: "yellow",
-        });
-      } else {
-        method = "gps";
+        if (!location) {
+          notifications.show({
+            title: "اسمح بالموقع",
+            message:
+              "لم نتمكن من قراءة الموقع، سيتم تسجيل الحضور بالطريقة اليدوية.",
+            color: "yellow",
+          });
+          resolvedMethod = "manual";
+        } else if (!worksiteId) {
+          notifications.show({
+            title: "Worksite مطلوب",
+            message:
+              "أدخل معرف الموقع لتفعيل تسجيل الحضور بالموقع. سيتم استخدام الطريقة اليدوية.",
+            color: "yellow",
+          });
+          resolvedMethod = "manual";
+        }
       }
+    }
+
+    if (resolvedMethod === "qr" && !qrToken.trim()) {
+      notifications.show({
+        title: "QR token مطلوب",
+        message: "من فضلك أدخل كود الـ QR قبل المتابعة.",
+        color: "red",
+      });
+      return;
+    }
+
+    if (resolvedMethod !== "qr" && !shiftId) {
+      notifications.show({
+        title: "Missing info",
+        message: "من فضلك أدخل الوردية قبل المتابعة.",
+        color: "red",
+      });
+      return;
     }
     const payload: AttendanceActionPayload = {
       employee_id: resolvedEmployeeId,
-      shift_id: shiftId,
-      method,
+      shift_id: resolvedMethod === "qr" ? undefined : shiftId,
+      method: resolvedMethod,
     };
 
-    if (method === "gps") {
+    if (resolvedMethod === "gps") {
       payload.worksite_id = worksiteId;
       payload.lat = location ? normalizeCoordinate(location.lat) : undefined;
       payload.lng = location ? normalizeCoordinate(location.lng) : undefined;
+    }
+
+    if (resolvedMethod === "qr") {
+      payload.qr_token = qrToken.trim();
     }
 
     try {
@@ -218,7 +259,7 @@ export function SelfAttendancePage() {
           <Group justify="space-between">
             <Text c="dimmed">Status today</Text>
             <Badge color={statusColors[statusLabel] ?? "gray"}>
-              {statusLabel}
+              {statusLabel.replace("_", " ")}
             </Badge>
           </Group>
           <Group justify="space-between">
@@ -228,6 +269,14 @@ export function SelfAttendancePage() {
           <Group justify="space-between">
             <Text>Check-out</Text>
             <Text>{getTimeLabel(todayRecord?.check_out_time ?? null)}</Text>
+          </Group>
+          <Group justify="space-between">
+            <Text>Late minutes</Text>
+            <Text>{todayRecord?.late_minutes ?? "-"}</Text>
+          </Group>
+          <Group justify="space-between">
+            <Text>Early leave minutes</Text>
+            <Text>{todayRecord?.early_leave_minutes ?? "-"}</Text>
           </Group>
         </Stack>
       </Card>
@@ -246,15 +295,24 @@ export function SelfAttendancePage() {
               min={1}
               hideControls
             />
+            <Select
+              label="Method"
+              data={methodOptions}
+              value={method}
+              onChange={(value) =>
+                setMethod((value as AttendanceActionPayload["method"]) ?? "gps")
+              }
+            />
             <NumberInput
               label="Shift ID"
-              placeholder="مثال: 3"
+              placeholder={method === "qr" ? "يتم أخذها من QR" : "مثال: 3"}
               value={shiftId}
               onChange={(value) =>
                 setShiftId(typeof value === "number" ? value : undefined)
               }
               min={1}
               hideControls
+              disabled={method === "qr"}
             />
             <NumberInput
               label="Worksite ID (اختياري)"
@@ -267,10 +325,18 @@ export function SelfAttendancePage() {
               hideControls
             />
           </Group>
+          {method === "qr" && (
+            <TextInput
+              label="QR Token"
+              placeholder="الصق كود الـ QR هنا"
+              value={qrToken}
+              onChange={(event) => setQrToken(event.currentTarget.value)}
+            />
+          )}
 
           <Group gap="md">
             <Button
-              onClick={() => handleAction("check-in")}
+              onClick={() => handleAction("check-in")}              
               loading={checkInMutation.isPending}
               disabled={Boolean(todayRecord?.check_in_time)}
             >

@@ -20,5 +20,6 @@ export const endpoints = {
     attendanceCheckIn: "/api/attendance/check-in/",
     attendanceCheckOut: "/api/attendance/check-out/",
     attendanceMy: "/api/attendance/my/",
+    attendanceQrGenerate: "/api/attendance/qr/generate/",
   },
 };  

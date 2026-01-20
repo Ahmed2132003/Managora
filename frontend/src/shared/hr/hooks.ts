@@ -28,11 +28,19 @@ export type AttendanceRecord = {
 
 export type AttendanceActionPayload = {
   employee_id: number;
-  shift_id: number;
+  shift_id?: number;
   worksite_id?: number | null;
   method: "gps" | "qr" | "manual";
   lat?: number | null;
   lng?: number | null;
+  qr_token?: string;
+};
+
+export type AttendanceQrToken = {
+  token: string;
+  expires_at: string;
+  worksite_id: number;
+  shift_id: number;
 };
 
 export type AttendanceFilters = {
@@ -179,6 +187,22 @@ export function useAttendanceRecordsQuery(filters: AttendanceFilters) {
             search: filters.search ?? undefined,
           },
         }
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useAttendanceQrGenerateMutation() {
+  return useMutation({
+    mutationFn: async (payload: {
+      worksite_id: number;
+      shift_id: number;
+      expires_in_minutes?: number;
+    }) => {
+      const response = await http.post<AttendanceQrToken>(
+        endpoints.hr.attendanceQrGenerate,
+        payload
       );
       return response.data;
     },
