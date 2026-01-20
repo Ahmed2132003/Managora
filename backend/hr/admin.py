@@ -6,6 +6,9 @@ from hr.models import (
     Employee,
     EmployeeDocument,
     JobTitle,
+    LeaveBalance,
+    LeaveRequest,
+    LeaveType,
     Shift,
     WorkSite,
 )
@@ -107,3 +110,60 @@ class AttendanceRecordAdmin(admin.ModelAdmin):
     search_fields = ("employee__full_name", "employee__employee_code")
     ordering = ("-date", "employee")
     autocomplete_fields = ("employee",)
+
+
+@admin.register(LeaveType)
+class LeaveTypeAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "code",
+        "company",
+        "requires_approval",
+        "paid",
+        "max_per_request_days",
+        "allow_negative_balance",
+        "is_active",
+    )
+    list_filter = ("company", "is_active", "requires_approval", "paid")
+    search_fields = ("name", "code", "company__name")
+    ordering = ("company", "name")
+
+
+@admin.register(LeaveBalance)
+class LeaveBalanceAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "company",
+        "employee",
+        "leave_type",
+        "year",
+        "allocated_days",
+        "used_days",
+        "carryover_days",
+    )
+    list_filter = ("company", "year", "leave_type")
+    search_fields = ("employee__full_name", "leave_type__name")
+    ordering = ("company", "employee", "year")
+    autocomplete_fields = ("employee", "leave_type")
+
+
+@admin.register(LeaveRequest)
+class LeaveRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "company",
+        "employee",
+        "leave_type",
+        "start_date",
+        "end_date",
+        "days",
+        "status",
+        "requested_at",
+        "decided_at",
+        "decided_by",
+    )
+    list_filter = ("company", "status", "leave_type")
+    search_fields = ("employee__full_name", "leave_type__name")
+    ordering = ("-requested_at",)
+    autocomplete_fields = ("employee", "leave_type", "decided_by")

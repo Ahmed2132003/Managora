@@ -4,7 +4,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from core.models import Company
-from hr.models import Department, JobTitle, Employee
+from hr.models import Department, JobTitle, Employee , LeaveBalance, LeaveRequest, LeaveType
 
 
 class HRModelsFoundationTests(TestCase):
@@ -174,7 +174,7 @@ class HRModelsFoundationTests(TestCase):
         Employee.all_objects.create(
             company=self.company_a,
             employee_code="B-001",
-            full_name="Bulk 1",
+            full_name="Bulk 1",            
             hire_date=datetime.date(2025, 1, 1),
         )
         Employee.all_objects.create(
@@ -198,6 +198,97 @@ class HRModelsFoundationTests(TestCase):
         self.assertTrue(e.is_deleted)
         self.assertIsNotNone(e.deleted_at)
 
+    # -----------------------
+    # Leave models
+    # -----------------------
+    def test_leave_type_unique_per_company(self):
+        LeaveType.all_objects.create(
+            company=self.company_a,
+            name="Annual",
+            code="ANNUAL",
+        )
+
+        self.assertIntegrityError(
+            lambda: LeaveType.all_objects.create(
+                company=self.company_a,
+                name="Annual",
+                code="ANNUAL",
+            )
+        )
+
+        LeaveType.all_objects.create(
+            company=self.company_b,
+            name="Annual",
+            code="ANNUAL",
+        )
+
+    def test_leave_balance_unique_and_remaining(self):
+        employee = Employee.all_objects.create(
+            company=self.company_a,
+            employee_code="LB-001",
+            full_name="Leave Balance Emp",
+            hire_date=datetime.date(2025, 1, 1),
+        )
+        leave_type = LeaveType.all_objects.create(
+            company=self.company_a,
+            name="Annual",
+            code="ANNUAL",
+        )
+
+        balance = LeaveBalance.all_objects.create(
+            company=self.company_a,
+            employee=employee,
+            leave_type=leave_type,
+            year=2026,
+            allocated_days=10,
+            used_days=4,
+            carryover_days=2,
+        )
+        self.assertEqual(balance.remaining_days, 8)
+
+        self.assertIntegrityError(
+            lambda: LeaveBalance.all_objects.create(
+                company=self.company_a,
+                employee=employee,
+                leave_type=leave_type,
+                year=2026,
+                allocated_days=5,
+                used_days=0,
+            )
+        )
+
+    def test_leave_request_days_calculation_and_dates(self):
+        employee = Employee.all_objects.create(
+            company=self.company_a,
+            employee_code="LR-001",
+            full_name="Leave Request Emp",
+            hire_date=datetime.date(2025, 1, 1),
+        )
+        leave_type = LeaveType.all_objects.create(
+            company=self.company_a,
+            name="Casual",
+            code="CASUAL",
+        )
+
+        leave_request = LeaveRequest.all_objects.create(
+            company=self.company_a,
+            employee=employee,
+            leave_type=leave_type,
+            start_date=datetime.date(2025, 5, 1),
+            end_date=datetime.date(2025, 5, 3),
+        )
+        self.assertEqual(leave_request.days, 3)
+
+        self.assertIntegrityError(
+            lambda: LeaveRequest.all_objects.create(
+                company=self.company_a,
+                employee=employee,
+                leave_type=leave_type,
+                start_date=datetime.date(2025, 6, 5),
+                end_date=datetime.date(2025, 6, 1),
+            )
+        )
+        
     def test_hard_delete_removes_row(self):
         emp = Employee.all_objects.create(
             company=self.company_a,
