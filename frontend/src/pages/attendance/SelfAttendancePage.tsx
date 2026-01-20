@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import axios from "axios";
+
 import {
   Badge,
   Button,
@@ -18,6 +20,7 @@ import {
   useCheckOutMutation,
   useMyAttendanceQuery,
 } from "../../shared/hr/hooks";
+import { useMe } from "../../shared/auth/useMe";
 
 const statusColors: Record<string, string> = {
   "No record": "gray",
@@ -63,10 +66,12 @@ export function SelfAttendancePage() {
   const [shiftId, setShiftId] = useState<number | undefined>(undefined);
   const [worksiteId, setWorksiteId] = useState<number | undefined>(undefined);
 
+  const meQuery = useMe();
   const myAttendanceQuery = useMyAttendanceQuery({
     dateFrom: todayValue,
     dateTo: todayValue,
   });
+
   const checkInMutation = useCheckInMutation();
   const checkOutMutation = useCheckOutMutation();
 
@@ -80,12 +85,48 @@ export function SelfAttendancePage() {
       : "Checked-in"
     : "No record";
 
-  const hasOpenCheckIn = Boolean(todayRecord?.check_in_time && !todayRecord?.check_out_time);
+  const hasOpenCheckIn = Boolean(
+    todayRecord?.check_in_time && !todayRecord?.check_out_time
+  );
 
-  const resolvedEmployeeId = employeeId ?? todayRecord?.employee?.id;
+  const resolvedEmployeeId =
+    employeeId ?? meQuery.data?.employee?.id ?? todayRecord?.employee?.id;
+
+function formatApiError(error: unknown) {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data;
+
+    if (typeof data === "string") return data;
+
+    if (data && typeof data === "object") {
+      const obj = data as Record<string, unknown>;
+
+      // DRF-style: {"detail": "..."}
+      if (typeof obj.detail === "string") {
+        return obj.detail;
+      }
+
+      // DRF field errors: {"field":["msg1","msg2"], ...}
+      return Object.entries(obj)
+        .map(([key, value]) => {
+          if (Array.isArray(value)) {
+            const parts = value.map((v) => String(v));
+            return `${key}: ${parts.join(", ")}`;
+          }
+          return `${key}: ${String(value)}`;
+        })
+        .join(" | ");
+    }
+
+    const status = error.response?.status;
+    return status ? `HTTP ${status}` : error.message;
+  }
+
+  return String(error);
+}
 
   async function handleAction(action: "check-in" | "check-out") {
-    if (!resolvedEmployeeId || !shiftId) {        
+    if (!resolvedEmployeeId || !shiftId) {
       notifications.show({
         title: "Missing info",
         message: "من فضلك أدخل رقم الموظف والوردية قبل المتابعة.",
@@ -98,6 +139,7 @@ export function SelfAttendancePage() {
     let location: { lat: number; lng: number } | null = null;
 
     location = await readGeolocation();
+
     if (!location) {
       notifications.show({
         title: "اسمح بالموقع",
@@ -107,7 +149,8 @@ export function SelfAttendancePage() {
     } else if (!worksiteId) {
       notifications.show({
         title: "Worksite مطلوب",
-        message: "أدخل معرف الموقع لتفعيل تسجيل الحضور بالموقع. سيتم استخدام الطريقة اليدوية.",
+        message:
+          "أدخل معرف الموقع لتفعيل تسجيل الحضور بالموقع. سيتم استخدام الطريقة اليدوية.",
         color: "yellow",
       });
     } else {
@@ -115,13 +158,13 @@ export function SelfAttendancePage() {
     }
 
     const payload: AttendanceActionPayload = {
-      employee_id: resolvedEmployeeId,      
+      employee_id: resolvedEmployeeId,
       shift_id: shiftId,
       method,
     };
 
     if (method === "gps") {
-      payload.worksite_id = worksiteId;      
+      payload.worksite_id = worksiteId;
       payload.lat = location?.lat ?? undefined;
       payload.lng = location?.lng ?? undefined;
     }
@@ -129,16 +172,23 @@ export function SelfAttendancePage() {
     try {
       if (action === "check-in") {
         await checkInMutation.mutateAsync(payload);
-        notifications.show({ title: "Checked in", message: "تم تسجيل الحضور بنجاح" });
+        notifications.show({
+          title: "Checked in",
+          message: "تم تسجيل الحضور بنجاح",
+        });
       } else {
         await checkOutMutation.mutateAsync(payload);
-        notifications.show({ title: "Checked out", message: "تم تسجيل الانصراف بنجاح" });
+        notifications.show({
+          title: "Checked out",
+          message: "تم تسجيل الانصراف بنجاح",
+        });
       }
+
       await queryClient.invalidateQueries({ queryKey: ["attendance", "my"] });
     } catch (error) {
       notifications.show({
         title: "عملية غير مكتملة",
-        message: String(error),
+        message: formatApiError(error), // ✅ هنا الإصلاح
         color: "red",
       });
     }
@@ -152,7 +202,9 @@ export function SelfAttendancePage() {
         <Stack gap="md">
           <Group justify="space-between">
             <Text c="dimmed">Status today</Text>
-            <Badge color={statusColors[statusLabel] ?? "gray"}>{statusLabel}</Badge>
+            <Badge color={statusColors[statusLabel] ?? "gray"}>
+              {statusLabel}
+            </Badge>
           </Group>
           <Group justify="space-between">
             <Text>Check-in</Text>
@@ -173,7 +225,9 @@ export function SelfAttendancePage() {
               label="Employee ID"
               placeholder="مثال: 12"
               value={resolvedEmployeeId}
-              onChange={(value) => setEmployeeId(typeof value === "number" ? value : undefined)}              
+              onChange={(value) =>
+                setEmployeeId(typeof value === "number" ? value : undefined)
+              }
               min={1}
               hideControls
             />
@@ -181,7 +235,9 @@ export function SelfAttendancePage() {
               label="Shift ID"
               placeholder="مثال: 3"
               value={shiftId}
-              onChange={(value) => setShiftId(typeof value === "number" ? value : undefined)}              
+              onChange={(value) =>
+                setShiftId(typeof value === "number" ? value : undefined)
+              }
               min={1}
               hideControls
             />
@@ -189,11 +245,14 @@ export function SelfAttendancePage() {
               label="Worksite ID (اختياري)"
               placeholder="مطلوب لطريقة GPS"
               value={worksiteId}
-              onChange={(value) => setWorksiteId(typeof value === "number" ? value : undefined)}              
+              onChange={(value) =>
+                setWorksiteId(typeof value === "number" ? value : undefined)
+              }
               min={1}
               hideControls
             />
           </Group>
+
           <Group gap="md">
             <Button
               onClick={() => handleAction("check-in")}
@@ -202,6 +261,7 @@ export function SelfAttendancePage() {
             >
               Check-in
             </Button>
+
             <Button
               variant="light"
               onClick={() => handleAction("check-out")}

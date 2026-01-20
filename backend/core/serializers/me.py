@@ -26,3 +26,14 @@ class MeSerializer(serializers.Serializer):
     company = CompanyMiniSerializer()
     roles = RoleMiniSerializer(many=True)
     permissions = serializers.ListField(child=serializers.CharField())
+    employee = serializers.SerializerMethodField()
+
+    def get_employee(self, obj):
+        employee = obj.get("employee")
+        if not employee:
+            return None
+        return {
+            "id": employee.id,
+            "employee_code": employee.employee_code,
+            "full_name": employee.full_name,
+        }

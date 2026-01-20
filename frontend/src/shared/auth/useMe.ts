@@ -20,6 +20,11 @@ export type MeResponse = {
     slug: string;
   }>;
   permissions: string[];
+  employee?: {
+    id: number;
+    employee_code: string;
+    full_name: string;
+  } | null;
 };
 
 export function useMe() {

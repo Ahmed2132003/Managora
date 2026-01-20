@@ -31,12 +31,14 @@ class MeView(APIView):
             .distinct()
             .order_by("code")
         )
+        employee = getattr(user, "employee_profile", None)
 
         data = {
             "user": user,
             "company": company,
             "roles": roles,
             "permissions": list(permissions),
+            "employee": employee,
         }
         serializer = MeSerializer(data)
         return Response(serializer.data)
