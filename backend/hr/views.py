@@ -8,30 +8,42 @@ from django.utils.dateparse import parse_date
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import filters, status, viewsets
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.generics import DestroyAPIView, ListAPIView, ListCreateAPIView
+from rest_framework.generics import CreateAPIView, DestroyAPIView, ListAPIView, ListCreateAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.permissions import HasAnyPermission, PermissionByActionMixin, user_has_permission
-from hr.models import AttendanceRecord, Department, Employee, EmployeeDocument, JobTitle
-from hr.serializers import (
-    AttendanceActionSerializer,
-    AttendanceQrGenerateSerializer,
-    AttendanceQrTokenSerializer,
-    AttendanceRecordSerializer,
+from hr.models import (
+    AttendanceRecord,
+    Department,
+    Employee,
+    EmployeeDocument,
+    JobTitle,
+    LeaveBalance,
+    LeaveRequest,
+    LeaveType,
 )
 from hr.services.attendance import check_in, check_out, generate_qr_token
 from hr.serializers import (
     DepartmentSerializer,
+    AttendanceActionSerializer,
+    AttendanceQrGenerateSerializer,
+    AttendanceQrTokenSerializer,
+    AttendanceRecordSerializer,    
     EmployeeCreateUpdateSerializer,
     EmployeeDetailSerializer,
     EmployeeSerializer,
     EmployeeDocumentCreateSerializer,
     EmployeeDocumentSerializer,
     JobTitleSerializer,
+    LeaveBalanceSerializer,
+    LeaveDecisionSerializer,
+    LeaveRequestCreateSerializer,
+    LeaveRequestSerializer,
+    LeaveTypeSerializer,
 )
-
+from hr.services.leaves import approve_leave, reject_leave
 
 @extend_schema_view(
     list=extend_schema(tags=["Departments"], summary="List departments"),
@@ -218,6 +230,23 @@ def _parse_date_param(value, label):
     if not parsed:
         raise ValidationError({label: "Invalid date format. Use YYYY-MM-DD."})
     return parsed
+
+def _get_user_employee(user):
+    employee = getattr(user, "employee_profile", None)
+    if not employee or employee.is_deleted or employee.company_id != user.company_id:
+        raise PermissionDenied("Employee profile is required.")
+    return employee
+
+
+def _user_can_approve(user, leave_request):
+    if user_has_permission(user, "leaves.*"):
+        return True
+    if user_has_permission(user, "approvals.*"):
+        manager_employee = getattr(user, "employee_profile", None)
+        if not manager_employee or manager_employee.is_deleted:
+            return False
+        return leave_request.employee.manager_id == manager_employee.id
+    return False
 
 
 class AttendanceCheckInView(APIView):
@@ -410,3 +439,248 @@ class AttendanceRecordViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         return queryset.order_by("-date", "-check_in_time")
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Leaves"], summary="List leave types"),
+    retrieve=extend_schema(tags=["Leaves"], summary="Retrieve leave type"),
+    create=extend_schema(tags=["Leaves"], summary="Create leave type"),
+    partial_update=extend_schema(tags=["Leaves"], summary="Update leave type"),
+    destroy=extend_schema(tags=["Leaves"], summary="Delete leave type"),
+)
+class LeaveTypeViewSet(viewsets.ModelViewSet):
+    serializer_class = LeaveTypeSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        if self.action in {"create", "partial_update", "destroy"}:
+            permissions.append(HasAnyPermission(["leaves.*"]))
+        return permissions
+
+    def get_queryset(self):
+        queryset = LeaveType.objects.filter(company=self.request.user.company)
+        if not user_has_permission(self.request.user, "leaves.*"):
+            queryset = queryset.filter(is_active=True)
+        return queryset.order_by("name")
+
+    def perform_create(self, serializer):
+        serializer.save(company=self.request.user.company)
+
+    def perform_update(self, serializer):
+        serializer.save(company=self.request.user.company)
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Leaves"], summary="List leave balances"),
+    create=extend_schema(tags=["Leaves"], summary="Create leave balance"),
+    partial_update=extend_schema(tags=["Leaves"], summary="Update leave balance"),
+)
+class LeaveBalanceViewSet(viewsets.ModelViewSet):
+    serializer_class = LeaveBalanceSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["leaves.*"]))
+        return permissions
+
+    def get_queryset(self):
+        return (
+            LeaveBalance.objects.select_related("employee", "leave_type")
+            .filter(company=self.request.user.company)
+            .order_by("-year", "employee__id")
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(company=self.request.user.company)
+
+
+@extend_schema(
+    tags=["Leaves"],
+    summary="List my leave balances",
+)
+class LeaveBalanceMyView(ListAPIView):
+    serializer_class = LeaveBalanceSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        employee = _get_user_employee(self.request.user)
+        queryset = LeaveBalance.objects.select_related("leave_type").filter(
+            company=self.request.user.company, employee=employee
+        )
+        year = self.request.query_params.get("year")
+        if year:
+            queryset = queryset.filter(year=year)
+        return queryset.order_by("-year", "leave_type__name")
+
+
+@extend_schema(
+    tags=["Leaves"],
+    summary="Create leave request",
+    request=LeaveRequestCreateSerializer,
+    responses={201: LeaveRequestSerializer},
+)
+class LeaveRequestCreateView(CreateAPIView):
+    serializer_class = LeaveRequestCreateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["employee"] = _get_user_employee(self.request.user)
+        return context
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        leave_request = serializer.save()
+        return Response(
+            LeaveRequestSerializer(leave_request).data, status=status.HTTP_201_CREATED
+        )
+
+
+@extend_schema(
+    tags=["Leaves"],
+    summary="List my leave requests",
+)
+class LeaveRequestMyListView(ListAPIView):
+    serializer_class = LeaveRequestSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        employee = _get_user_employee(self.request.user)
+        queryset = LeaveRequest.objects.select_related("employee", "leave_type").filter(
+            company=self.request.user.company, employee=employee
+        )
+
+        status_filter = self.request.query_params.get("status")
+        if status_filter:
+            status_value = status_filter.lower()
+            if status_value not in LeaveRequest.Status.values:
+                raise ValidationError({"status": "Invalid status value."})
+            queryset = queryset.filter(status=status_value)
+
+        date_from = _parse_date_param(
+            self.request.query_params.get("date_from"), "date_from"
+        )
+        date_to = _parse_date_param(
+            self.request.query_params.get("date_to"), "date_to"
+        )
+        leave_type_id = self.request.query_params.get("leave_type")
+
+        if date_from:
+            queryset = queryset.filter(start_date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(end_date__lte=date_to)
+        if leave_type_id:
+            queryset = queryset.filter(leave_type_id=leave_type_id)
+
+        return queryset.order_by("-requested_at")
+
+
+@extend_schema(
+    tags=["Leaves"],
+    summary="Cancel leave request",
+    responses={200: LeaveRequestSerializer},
+)
+class LeaveRequestCancelView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, id=None):
+        employee = _get_user_employee(request.user)
+        leave_request = get_object_or_404(
+            LeaveRequest, id=id, company=request.user.company, employee=employee
+        )
+        if leave_request.status != LeaveRequest.Status.PENDING:
+            raise ValidationError("Only pending requests can be cancelled.")
+
+        leave_request.status = LeaveRequest.Status.CANCELLED
+        leave_request.decided_by = request.user
+        leave_request.decided_at = timezone.now()
+        leave_request.save(update_fields=["status", "decided_by", "decided_at"])
+        return Response(LeaveRequestSerializer(leave_request).data)
+
+
+@extend_schema(
+    tags=["Leaves"],
+    summary="Approvals inbox",
+)
+class LeaveApprovalsInboxView(ListAPIView):
+    serializer_class = LeaveRequestSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = LeaveRequest.objects.select_related("employee", "leave_type").filter(
+            company=user.company
+        )
+
+        if user_has_permission(user, "leaves.*"):
+            pass
+        elif user_has_permission(user, "approvals.*"):
+            manager_employee = getattr(user, "employee_profile", None)
+            if not manager_employee or manager_employee.is_deleted:
+                raise PermissionDenied("Manager profile is required.")
+            queryset = queryset.filter(employee__manager=manager_employee)
+        else:
+            raise PermissionDenied("You do not have permission to view approvals.")
+
+        status_filter = self.request.query_params.get("status") or LeaveRequest.Status.PENDING
+        if status_filter:
+            status_value = status_filter.lower()
+            if status_value not in LeaveRequest.Status.values:
+                raise ValidationError({"status": "Invalid status value."})
+            queryset = queryset.filter(status=status_value)
+
+        employee_search = self.request.query_params.get("employee")
+        if employee_search:
+            queryset = queryset.filter(
+                Q(employee__full_name__icontains=employee_search)
+                | Q(employee__employee_code__icontains=employee_search)
+            )
+
+        return queryset.order_by("-requested_at")
+
+
+@extend_schema(
+    tags=["Leaves"],
+    summary="Approve leave request",
+    responses={200: LeaveRequestSerializer},
+)
+class LeaveApproveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, id=None):
+        leave_request = get_object_or_404(
+            LeaveRequest, id=id, company=request.user.company
+        )
+        if not _user_can_approve(request.user, leave_request):
+            raise PermissionDenied("You do not have permission to approve this request.")
+
+        leave_request = approve_leave(request.user, leave_request.id)
+        return Response(LeaveRequestSerializer(leave_request).data)
+
+
+@extend_schema(
+    tags=["Leaves"],
+    summary="Reject leave request",
+    request=LeaveDecisionSerializer,
+    responses={200: LeaveRequestSerializer},
+)
+class LeaveRejectView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, id=None):
+        leave_request = get_object_or_404(
+            LeaveRequest, id=id, company=request.user.company
+        )
+        if not _user_can_approve(request.user, leave_request):
+            raise PermissionDenied("You do not have permission to reject this request.")
+
+        serializer = LeaveDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        leave_request = reject_leave(
+            request.user, leave_request.id, serializer.validated_data.get("reason")
+        )
+        return Response(LeaveRequestSerializer(leave_request).data)

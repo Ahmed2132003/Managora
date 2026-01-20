@@ -8,6 +8,15 @@ from hr.views import (
     AttendanceRecordViewSet,
     AttendanceQrGenerateView,
     DepartmentViewSet,
+    LeaveApprovalsInboxView,
+    LeaveApproveView,
+    LeaveBalanceMyView,
+    LeaveBalanceViewSet,
+    LeaveRejectView,
+    LeaveRequestCancelView,
+    LeaveRequestCreateView,
+    LeaveRequestMyListView,
+    LeaveTypeViewSet,
     EmployeeDocumentDeleteView,
     EmployeeDocumentDownloadView,
     EmployeeDocumentListCreateView,
@@ -19,6 +28,8 @@ router = DefaultRouter()
 router.register("departments", DepartmentViewSet, basename="department")
 router.register("job-titles", JobTitleViewSet, basename="job-title")
 router.register("employees", EmployeeViewSet, basename="employee")
+router.register("leaves/types", LeaveTypeViewSet, basename="leave-type")
+router.register("leaves/balances", LeaveBalanceViewSet, basename="leave-balance")
 router.register(
     "attendance/records", AttendanceRecordViewSet, basename="attendance-record"
 )
@@ -26,9 +37,44 @@ router.register(
 urlpatterns = [
     path("", include(router.urls)),
     path(
+        "leaves/balances/my/",
+        LeaveBalanceMyView.as_view(),
+        name="leave-balance-my",
+    ),
+    path(
+        "leaves/requests/my/",
+        LeaveRequestMyListView.as_view(),
+        name="leave-request-my",
+    ),
+    path(
+        "leaves/requests/",
+        LeaveRequestCreateView.as_view(),
+        name="leave-request-create",
+    ),
+    path(
+        "leaves/requests/<int:id>/cancel/",
+        LeaveRequestCancelView.as_view(),
+        name="leave-request-cancel",
+    ),
+    path(
+        "leaves/approvals/inbox/",
+        LeaveApprovalsInboxView.as_view(),
+        name="leave-approvals-inbox",
+    ),
+    path(
+        "leaves/requests/<int:id>/approve/",
+        LeaveApproveView.as_view(),
+        name="leave-request-approve",
+    ),
+    path(
+        "leaves/requests/<int:id>/reject/",
+        LeaveRejectView.as_view(),
+        name="leave-request-reject",
+    ),
+    path(
         "employees/<int:employee_id>/documents/",
         EmployeeDocumentListCreateView.as_view(),
-        name="employee-documents",
+        name="employee-documents",        
     ),
     path(
         "documents/<int:pk>/download/",

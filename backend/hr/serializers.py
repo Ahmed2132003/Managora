@@ -7,6 +7,9 @@ from hr.models import (
     Employee,
     EmployeeDocument,
     JobTitle,
+    LeaveBalance,
+    LeaveRequest,
+    LeaveType,
     Shift,
     WorkSite,
 )
@@ -328,3 +331,130 @@ class AttendanceQrTokenSerializer(serializers.Serializer):
     expires_at = serializers.DateTimeField()
     worksite_id = serializers.IntegerField()
     shift_id = serializers.IntegerField()
+
+
+class LeaveTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LeaveType
+        fields = (
+            "id",
+            "name",
+            "code",
+            "requires_approval",
+            "paid",
+            "max_per_request_days",
+            "allow_negative_balance",
+            "is_active",
+        )
+
+
+class LeaveBalanceSerializer(serializers.ModelSerializer):
+    remaining_days = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LeaveBalance
+        fields = (
+            "id",
+            "employee",
+            "leave_type",
+            "year",
+            "allocated_days",
+            "used_days",
+            "carryover_days",
+            "remaining_days",
+        )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            company = request.user.company
+            self.fields["employee"].queryset = Employee.objects.filter(company=company)
+            self.fields["leave_type"].queryset = LeaveType.objects.filter(company=company)
+
+    def get_remaining_days(self, obj):
+        return obj.remaining_days
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        company = request.user.company if request else None
+
+        employee = attrs.get("employee") or getattr(self.instance, "employee", None)
+        if employee and company and employee.company_id != company.id:
+            raise serializers.ValidationError(
+                {"employee": "Employee must belong to the same company."}
+            )
+
+        leave_type = attrs.get("leave_type") or getattr(self.instance, "leave_type", None)
+        if leave_type and company and leave_type.company_id != company.id:
+            raise serializers.ValidationError(
+                {"leave_type": "Leave type must belong to the same company."}
+            )
+
+        return attrs
+
+
+class LeaveEmployeeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = ("id", "employee_code", "full_name")
+
+
+class LeaveRequestSerializer(serializers.ModelSerializer):
+    employee = LeaveEmployeeSerializer(read_only=True)
+    leave_type = LeaveTypeSerializer(read_only=True)
+    decided_by = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = LeaveRequest
+        fields = (
+            "id",
+            "employee",
+            "leave_type",
+            "start_date",
+            "end_date",
+            "days",
+            "reason",
+            "status",
+            "requested_at",
+            "decided_at",
+            "decided_by",
+            "reject_reason",
+        )
+
+
+class LeaveRequestCreateSerializer(serializers.ModelSerializer):
+    leave_type_id = serializers.PrimaryKeyRelatedField(
+        source="leave_type", queryset=LeaveType.objects.none()
+    )
+
+    class Meta:
+        model = LeaveRequest
+        fields = ("id", "leave_type_id", "start_date", "end_date", "reason")
+        read_only_fields = ("id",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            company = request.user.company
+            self.fields["leave_type_id"].queryset = LeaveType.objects.filter(
+                company=company, is_active=True
+            )
+
+    def validate(self, attrs):
+        employee = self.context.get("employee")
+        if not employee:
+            raise serializers.ValidationError("Employee profile is required.")
+        attrs["employee"] = employee
+        return attrs
+
+    def create(self, validated_data):
+        from hr.services.leaves import request_leave
+
+        user = self.context["request"].user
+        return request_leave(user, validated_data)
+
+
+class LeaveDecisionSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True, allow_null=True)
