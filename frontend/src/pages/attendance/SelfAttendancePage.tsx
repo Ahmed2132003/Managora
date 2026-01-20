@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Badge,
   Button,
@@ -59,9 +59,9 @@ async function readGeolocation() {
 export function SelfAttendancePage() {
   const queryClient = useQueryClient();
   const todayValue = useMemo(() => getTodayValue(), []);
-  const [employeeId, setEmployeeId] = useState<number | null>(null);
-  const [shiftId, setShiftId] = useState<number | null>(null);
-  const [worksiteId, setWorksiteId] = useState<number | null>(null);
+  const [employeeId, setEmployeeId] = useState<number | undefined>(undefined);
+  const [shiftId, setShiftId] = useState<number | undefined>(undefined);
+  const [worksiteId, setWorksiteId] = useState<number | undefined>(undefined);
 
   const myAttendanceQuery = useMyAttendanceQuery({
     dateFrom: todayValue,
@@ -82,14 +82,10 @@ export function SelfAttendancePage() {
 
   const hasOpenCheckIn = Boolean(todayRecord?.check_in_time && !todayRecord?.check_out_time);
 
-  useEffect(() => {
-    if (!employeeId && todayRecord?.employee?.id) {
-      setEmployeeId(todayRecord.employee.id);
-    }
-  }, [employeeId, todayRecord]);
+  const resolvedEmployeeId = employeeId ?? todayRecord?.employee?.id;
 
   async function handleAction(action: "check-in" | "check-out") {
-    if (!employeeId || !shiftId) {
+    if (!resolvedEmployeeId || !shiftId) {        
       notifications.show({
         title: "Missing info",
         message: "من فضلك أدخل رقم الموظف والوردية قبل المتابعة.",
@@ -119,13 +115,13 @@ export function SelfAttendancePage() {
     }
 
     const payload: AttendanceActionPayload = {
-      employee_id: employeeId,
+      employee_id: resolvedEmployeeId,      
       shift_id: shiftId,
       method,
     };
 
     if (method === "gps") {
-      payload.worksite_id = worksiteId ?? undefined;
+      payload.worksite_id = worksiteId;      
       payload.lat = location?.lat ?? undefined;
       payload.lng = location?.lng ?? undefined;
     }
@@ -176,8 +172,8 @@ export function SelfAttendancePage() {
             <NumberInput
               label="Employee ID"
               placeholder="مثال: 12"
-              value={employeeId}
-              onChange={(value) => setEmployeeId(typeof value === "number" ? value : null)}
+              value={resolvedEmployeeId}
+              onChange={(value) => setEmployeeId(typeof value === "number" ? value : undefined)}              
               min={1}
               hideControls
             />
@@ -185,7 +181,7 @@ export function SelfAttendancePage() {
               label="Shift ID"
               placeholder="مثال: 3"
               value={shiftId}
-              onChange={(value) => setShiftId(typeof value === "number" ? value : null)}
+              onChange={(value) => setShiftId(typeof value === "number" ? value : undefined)}              
               min={1}
               hideControls
             />
@@ -193,7 +189,7 @@ export function SelfAttendancePage() {
               label="Worksite ID (اختياري)"
               placeholder="مطلوب لطريقة GPS"
               value={worksiteId}
-              onChange={(value) => setWorksiteId(typeof value === "number" ? value : null)}
+              onChange={(value) => setWorksiteId(typeof value === "number" ? value : undefined)}              
               min={1}
               hideControls
             />

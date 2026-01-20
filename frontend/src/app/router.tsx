@@ -9,7 +9,7 @@ import { EmployeeProfilePage } from "../pages/hr/EmployeeProfilePage.tsx";
 import { DepartmentsPage } from "../pages/hr/DepartmentsPage.tsx";
 import { JobTitlesPage } from "../pages/hr/JobTitlesPage.tsx";
 import { SelfAttendancePage } from "../pages/attendance/SelfAttendancePage.tsx";
-import { HRAttendancePage } from "../pages/hr/HRAttendancePage.tsx";
+import { HRAttendancePage } from "../pages/hr/HRAttendancePage";
 
 export const router = createBrowserRouter([
   {
