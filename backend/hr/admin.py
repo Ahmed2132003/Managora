@@ -5,10 +5,12 @@ from hr.models import (
     Department,
     Employee,
     EmployeeDocument,
+    HRAction,
     JobTitle,
     LeaveBalance,
     LeaveRequest,
     LeaveType,
+    PolicyRule,
     Shift,
     WorkSite,
 )
@@ -110,6 +112,44 @@ class AttendanceRecordAdmin(admin.ModelAdmin):
     search_fields = ("employee__full_name", "employee__employee_code")
     ordering = ("-date", "employee")
     autocomplete_fields = ("employee",)
+
+
+@admin.register(PolicyRule)
+class PolicyRuleAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "company",
+        "rule_type",
+        "threshold",
+        "period_days",
+        "action_type",
+        "action_value",
+        "is_active",
+    )
+    list_filter = ("company", "rule_type", "action_type", "is_active")
+    search_fields = ("name", "company__name")
+    ordering = ("company", "name")
+
+
+@admin.register(HRAction)
+class HRActionAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "company",
+        "employee",
+        "rule",
+        "attendance_record",
+        "action_type",
+        "value",
+        "period_start",
+        "period_end",
+        "created_at",
+    )
+    list_filter = ("company", "action_type", "rule")
+    search_fields = ("employee__full_name", "employee__employee_code", "rule__name")
+    ordering = ("-created_at",)
+    autocomplete_fields = ("employee", "rule", "attendance_record")
 
 
 @admin.register(LeaveType)

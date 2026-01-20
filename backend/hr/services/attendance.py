@@ -11,6 +11,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from hr.models import AttendanceRecord, Employee, Shift, WorkSite
+from hr.services.policies import evaluate_attendance_record
 
 
 QR_TOKEN_SALT = "attendance.qr"
@@ -194,7 +195,7 @@ def check_in(user, employee_id: int, payload: dict[str, Any]) -> AttendanceRecor
     )
 
     if existing_record is None:
-        return AttendanceRecord.objects.create(
+        record = AttendanceRecord.objects.create(
             company=user.company,
             employee=employee,
             date=record_date,
@@ -205,9 +206,11 @@ def check_in(user, employee_id: int, payload: dict[str, Any]) -> AttendanceRecor
             status=status,
             late_minutes=late_minutes,
         )
+        evaluate_attendance_record(record)
+        return record
 
     existing_record.check_in_time = now
-    existing_record.check_in_lat = location.lat if location else None
+    existing_record.check_in_lat = location.lat if location else None    
     existing_record.check_in_lng = location.lng if location else None
     existing_record.method = method
     existing_record.status = status
@@ -223,6 +226,7 @@ def check_in(user, employee_id: int, payload: dict[str, Any]) -> AttendanceRecor
             "updated_at",
         ]
     )
+    evaluate_attendance_record(existing_record)
     return existing_record
 
 
