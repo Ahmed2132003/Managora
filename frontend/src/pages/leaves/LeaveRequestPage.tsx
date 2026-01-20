@@ -16,7 +16,7 @@ import {
   useCreateLeaveRequestMutation,
   useLeaveTypesQuery,
 } from "../../shared/hr/hooks";
-import { calculateLeaveDays } from "../../shared/leaves/utils";
+import { calculateLeaveDays } from "../../shared/leaves/utils.ts";
 
 function formatApiError(error: unknown) {
   if (error instanceof Error) {

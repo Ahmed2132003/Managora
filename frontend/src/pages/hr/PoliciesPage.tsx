@@ -18,10 +18,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { isForbiddenError } from "../../shared/api/errors";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import {
-  PolicyRule,
   useCreatePolicyRuleMutation,
   usePolicyRulesQuery,
 } from "../../shared/hr/hooks";
+import type { PolicyRule } from "../../shared/hr/hooks";
 
 type TemplateOption = {
   value: PolicyRule["rule_type"];
@@ -55,10 +55,10 @@ export function PoliciesPage() {
   const [template, setTemplate] = useState<PolicyRule["rule_type"] | null>(
     "late_over_minutes"
   );
-  const [threshold, setThreshold] = useState<number | null>(5);
-  const [periodDays, setPeriodDays] = useState<number | null>(30);
+  const [threshold, setThreshold] = useState<number | undefined>(5);
+  const [periodDays, setPeriodDays] = useState<number | undefined>(30);
   const [actionType, setActionType] = useState<PolicyRule["action_type"]>("warning");
-  const [actionValue, setActionValue] = useState<number | null>(null);
+  const [actionValue, setActionValue] = useState<number | undefined>(undefined);  
   const [isActive, setIsActive] = useState(true);
   const [ruleName, setRuleName] = useState("");
 
@@ -82,7 +82,7 @@ export function PoliciesPage() {
   }, [template, threshold, periodDays]);
 
   async function handleSave() {
-    if (!template || !threshold) {
+    if (!template || threshold == null) {        
       notifications.show({
         title: "بيانات ناقصة",
         message: "اختر القالب وحدد القيم المطلوبة.",
@@ -118,7 +118,7 @@ export function PoliciesPage() {
       setThreshold(5);
       setPeriodDays(30);
       setActionType("warning");
-      setActionValue(null);
+      setActionValue(undefined);      
       setIsActive(true);
       await queryClient.invalidateQueries({ queryKey: ["policies", "rules"] });
     } catch (error) {
@@ -164,16 +164,20 @@ export function PoliciesPage() {
               label={activeTemplate?.requiresPeriod ? "N (عدد المرات)" : "X (الدقائق)"}
               min={1}
               value={threshold}
-              onChange={setThreshold}
+              onChange={(value) =>
+                setThreshold(typeof value === "number" ? value : undefined)
+              }
             />
             {activeTemplate?.requiresPeriod && (
               <NumberInput
                 label="Y (عدد الأيام)"
                 min={1}
                 value={periodDays}
-                onChange={setPeriodDays}
+                onChange={(value) =>
+                  setPeriodDays(typeof value === "number" ? value : undefined)
+                }
               />
-            )}
+            )}            
           </Group>
 
           <Group grow>
@@ -192,9 +196,11 @@ export function PoliciesPage() {
               label="قيمة الإجراء"
               min={0}
               value={actionValue}
-              onChange={setActionValue}
+              onChange={(value) =>
+                setActionValue(typeof value === "number" ? value : undefined)
+              }
               disabled={actionType !== "deduction"}
-            />
+            />            
           </Group>
 
           <Switch

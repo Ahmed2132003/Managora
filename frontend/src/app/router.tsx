@@ -11,11 +11,11 @@ import { JobTitlesPage } from "../pages/hr/JobTitlesPage.tsx";
 import { SelfAttendancePage } from "../pages/attendance/SelfAttendancePage.tsx";
 import { HRAttendancePage } from "../pages/hr/HRAttendancePage";
 import { LeaveBalancePage } from "../pages/leaves/LeaveBalancePage";
-import { LeaveMyRequestsPage } from "../pages/leaves/LeaveMyRequestsPage";
-import { LeaveRequestPage } from "../pages/leaves/LeaveRequestPage";
-import { LeaveInboxPage } from "../pages/hr/LeaveInboxPage";
-import { PoliciesPage } from "../pages/hr/PoliciesPage";
-import { HRActionsPage } from "../pages/hr/HRActionsPage";
+import { LeaveMyRequestsPage } from "../pages/leaves/LeaveMyRequestsPage.tsx";
+import { LeaveRequestPage } from "../pages/leaves/LeaveRequestPage.tsx";
+import { LeaveInboxPage } from "../pages/hr/LeaveInboxPage.tsx";
+import { PoliciesPage } from "../pages/hr/PoliciesPage.tsx";
+import { HRActionsPage } from "../pages/hr/HRActionsPage.tsx";
 export const router = createBrowserRouter([
   {
     path: "/login",

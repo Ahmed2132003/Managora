@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateLeaveDays } from "./utils";
+import { calculateLeaveDays } from "./utils.ts";
 
 describe("calculateLeaveDays", () => {
   it("returns inclusive day counts", () => {

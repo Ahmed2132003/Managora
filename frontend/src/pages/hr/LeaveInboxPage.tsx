@@ -16,11 +16,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { isForbiddenError } from "../../shared/api/errors";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import {
-  LeaveRequest,
   useApproveLeaveRequestMutation,
   useLeaveApprovalsInboxQuery,
   useRejectLeaveRequestMutation,
 } from "../../shared/hr/hooks";
+import type { LeaveRequest } from "../../shared/hr/hooks";
 
 const statusColors: Record<string, string> = {
   pending: "yellow",
