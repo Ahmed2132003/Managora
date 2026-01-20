@@ -41,11 +41,15 @@ function getTimeLabel(value: string | null) {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function normalizeCoordinate(value: number) {
+  return Number(value.toFixed(6));
+}
+
 async function readGeolocation() {
   if (!navigator.geolocation) {
     return null;
   }
-  return new Promise<{ lat: number; lng: number } | null>((resolve) => {
+  return new Promise<{ lat: number; lng: number } | null>((resolve) => {    
     navigator.geolocation.getCurrentPosition(
       (position) => {
         resolve({
@@ -58,39 +62,6 @@ async function readGeolocation() {
     );
   });
 }
-
-export function SelfAttendancePage() {
-  const queryClient = useQueryClient();
-  const todayValue = useMemo(() => getTodayValue(), []);
-  const [employeeId, setEmployeeId] = useState<number | undefined>(undefined);
-  const [shiftId, setShiftId] = useState<number | undefined>(undefined);
-  const [worksiteId, setWorksiteId] = useState<number | undefined>(undefined);
-
-  const meQuery = useMe();
-  const myAttendanceQuery = useMyAttendanceQuery({
-    dateFrom: todayValue,
-    dateTo: todayValue,
-  });
-
-  const checkInMutation = useCheckInMutation();
-  const checkOutMutation = useCheckOutMutation();
-
-  const todayRecord = useMemo<AttendanceRecord | undefined>(() => {
-    return myAttendanceQuery.data?.find((record) => record.date === todayValue);
-  }, [myAttendanceQuery.data, todayValue]);
-
-  const statusLabel = todayRecord
-    ? todayRecord.check_out_time
-      ? "Completed"
-      : "Checked-in"
-    : "No record";
-
-  const hasOpenCheckIn = Boolean(
-    todayRecord?.check_in_time && !todayRecord?.check_out_time
-  );
-
-  const resolvedEmployeeId =
-    employeeId ?? meQuery.data?.employee?.id ?? todayRecord?.employee?.id;
 
 function formatApiError(error: unknown) {
   if (axios.isAxiosError(error)) {
@@ -125,6 +96,42 @@ function formatApiError(error: unknown) {
   return String(error);
 }
 
+export function SelfAttendancePage() {
+  const queryClient = useQueryClient();
+  const todayValue = useMemo(() => getTodayValue(), []);
+  const [employeeId, setEmployeeId] = useState<number | undefined>(undefined);
+  const [shiftId, setShiftId] = useState<number | undefined>(undefined);
+  const [worksiteId, setWorksiteId] = useState<number | undefined>(undefined);
+
+  const meQuery = useMe();
+  const myAttendanceQuery = useMyAttendanceQuery({
+    dateFrom: todayValue,
+    dateTo: todayValue,
+  });
+
+  const checkInMutation = useCheckInMutation();
+  const checkOutMutation = useCheckOutMutation();
+
+  const todayRecord = useMemo<AttendanceRecord | undefined>(() => {
+    return myAttendanceQuery.data?.find((record) => record.date === todayValue);
+  }, [myAttendanceQuery.data, todayValue]);
+
+  const statusLabel = todayRecord
+    ? todayRecord.check_out_time
+      ? "Completed"
+      : "Checked-in"
+    : "No record";
+
+  const hasOpenCheckIn = Boolean(
+    todayRecord?.check_in_time && !todayRecord?.check_out_time
+  );
+
+  const resolvedEmployeeId =
+    employeeId ?? meQuery.data?.employee?.id ?? todayRecord?.employee?.id;
+  const isSelfCheckIn =
+    Boolean(meQuery.data?.employee?.id) &&
+    resolvedEmployeeId === meQuery.data?.employee?.id;
+
   async function handleAction(action: "check-in" | "check-out") {
     if (!resolvedEmployeeId || !shiftId) {
       notifications.show({
@@ -138,25 +145,33 @@ function formatApiError(error: unknown) {
     let method: AttendanceActionPayload["method"] = "manual";
     let location: { lat: number; lng: number } | null = null;
 
-    location = await readGeolocation();
-
-    if (!location) {
+    if (!isSelfCheckIn) {
       notifications.show({
-        title: "اسمح بالموقع",
-        message: "لم نتمكن من قراءة الموقع، سيتم تسجيل الحضور بالطريقة اليدوية.",
-        color: "yellow",
-      });
-    } else if (!worksiteId) {
-      notifications.show({
-        title: "Worksite مطلوب",
+        title: "طريقة تسجيل الحضور",
         message:
-          "أدخل معرف الموقع لتفعيل تسجيل الحضور بالموقع. سيتم استخدام الطريقة اليدوية.",
+          "تسجيل الحضور لشخص آخر يجب أن يكون يدويًا. سيتم تجاهل بيانات الموقع.",
         color: "yellow",
       });
     } else {
-      method = "gps";
-    }
+      location = await readGeolocation();
 
+      if (!location) {
+        notifications.show({
+          title: "اسمح بالموقع",
+          message: "لم نتمكن من قراءة الموقع، سيتم تسجيل الحضور بالطريقة اليدوية.",
+          color: "yellow",
+        });
+      } else if (!worksiteId) {
+        notifications.show({
+          title: "Worksite مطلوب",
+          message:
+            "أدخل معرف الموقع لتفعيل تسجيل الحضور بالموقع. سيتم استخدام الطريقة اليدوية.",
+          color: "yellow",
+        });
+      } else {
+        method = "gps";
+      }
+    }
     const payload: AttendanceActionPayload = {
       employee_id: resolvedEmployeeId,
       shift_id: shiftId,
@@ -165,8 +180,8 @@ function formatApiError(error: unknown) {
 
     if (method === "gps") {
       payload.worksite_id = worksiteId;
-      payload.lat = location?.lat ?? undefined;
-      payload.lng = location?.lng ?? undefined;
+      payload.lat = location ? normalizeCoordinate(location.lat) : undefined;
+      payload.lng = location ? normalizeCoordinate(location.lng) : undefined;
     }
 
     try {
