@@ -138,8 +138,8 @@ export function HRAttendancePage() {
   return (    
     <Stack gap="lg">
       <Title order={3}>Attendance</Title>
-      <Card withBorder radius="md" p="md">␊
-        <Group align="flex-end" gap="md">␊            
+      <Card withBorder radius="md" p="md">
+        <Group align="flex-end" gap="md">        
           <TextInput
             label="From"
             type="date"
