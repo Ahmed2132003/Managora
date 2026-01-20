@@ -8,6 +8,8 @@ import { EmployeesPage } from "../pages/hr/EmployeesPage.tsx";
 import { EmployeeProfilePage } from "../pages/hr/EmployeeProfilePage.tsx";
 import { DepartmentsPage } from "../pages/hr/DepartmentsPage.tsx";
 import { JobTitlesPage } from "../pages/hr/JobTitlesPage.tsx";
+import { SelfAttendancePage } from "../pages/attendance/SelfAttendancePage.tsx";
+import { HRAttendancePage } from "../pages/hr/HRAttendancePage.tsx";
 
 export const router = createBrowserRouter([
   {
@@ -25,12 +27,14 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: "dashboard", element: <DashboardPage /> },
       { path: "users", element: <UsersPage /> },
+      { path: "attendance/self", element: <SelfAttendancePage /> },
       { path: "hr/employees", element: <EmployeesPage /> },
       { path: "hr/employees/:id", element: <EmployeeProfilePage /> },
       { path: "hr/departments", element: <DepartmentsPage /> },
       { path: "hr/job-titles", element: <JobTitlesPage /> },
+      { path: "hr/attendance", element: <HRAttendancePage /> },
     ],
-  },         
+  },                 
   {
     path: "*",
     element: <Navigate to="/login" replace />,

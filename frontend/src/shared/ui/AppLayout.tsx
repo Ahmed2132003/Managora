@@ -9,6 +9,7 @@ export function AppLayout() {
   const canViewEmployees = useCan("hr.employees.view");
   const canViewDepartments = useCan("hr.departments.view");
   const canViewJobTitles = useCan("hr.job_titles.view");
+  const canViewAttendance = useCan("attendance.*");
 
   function handleLogout() {
     clearTokens();
@@ -32,16 +33,24 @@ export function AppLayout() {
                 Users
               </Button>
             )}
+            <Button component={Link} to="/attendance/self" variant="subtle">
+              My Attendance
+            </Button>
             {canViewEmployees && (
               <Button component={Link} to="/hr/employees" variant="subtle">
                 Employees
+              </Button>
+            )}
+            {canViewAttendance && (
+              <Button component={Link} to="/hr/attendance" variant="subtle">
+                HR Attendance
               </Button>
             )}
             {canViewDepartments && (
               <Button component={Link} to="/hr/departments" variant="subtle">
                 Departments
               </Button>
-            )}
+            )}            
             {canViewJobTitles && (
               <Button component={Link} to="/hr/job-titles" variant="subtle">
                 Job Titles

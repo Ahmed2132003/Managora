@@ -16,5 +16,9 @@ export const endpoints = {
     documentDelete: (id: number) => `/api/documents/${id}/`,
     department: (id: number) => `/api/departments/${id}/`,
     jobTitle: (id: number) => `/api/job-titles/${id}/`,
+    attendanceRecords: "/api/attendance/records/",
+    attendanceCheckIn: "/api/attendance/check-in/",
+    attendanceCheckOut: "/api/attendance/check-out/",
+    attendanceMy: "/api/attendance/my/",
   },
-};
+};  

@@ -2,6 +2,48 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { endpoints } from "../api/endpoints";
 import { http } from "../api/http";
 
+export type AttendanceEmployee = {
+  id: number;
+  employee_code: string;
+  full_name: string;
+  department: { id: number; name: string } | null;
+};
+
+export type AttendanceRecord = {
+  id: number;
+  employee: AttendanceEmployee;
+  date: string;
+  check_in_time: string | null;
+  check_out_time: string | null;
+  check_in_lat: string | null;
+  check_in_lng: string | null;
+  check_out_lat: string | null;
+  check_out_lng: string | null;
+  method: "gps" | "qr" | "manual";
+  status: "present" | "late" | "absent" | "early_leave" | "incomplete";
+  late_minutes: number;
+  early_leave_minutes: number;
+  notes: string | null;
+};
+
+export type AttendanceActionPayload = {
+  employee_id: number;
+  shift_id: number;
+  worksite_id?: number | null;
+  method: "gps" | "qr" | "manual";
+  lat?: number | null;
+  lng?: number | null;
+};
+
+export type AttendanceFilters = {
+  dateFrom?: string;
+  dateTo?: string;
+  departmentId?: string | null;
+  employeeId?: string | null;
+  status?: string | null;
+  search?: string;
+};
+
 export type Department = {
   id: number;
   name: string;
@@ -82,6 +124,66 @@ export type UploadDocumentPayload = {
   file: File;
 };
 
+export function useCheckInMutation() {
+  return useMutation({
+    mutationFn: async (payload: AttendanceActionPayload) => {
+      const response = await http.post<AttendanceRecord>(
+        endpoints.hr.attendanceCheckIn,
+        payload
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useCheckOutMutation() {
+  return useMutation({
+    mutationFn: async (payload: AttendanceActionPayload) => {
+      const response = await http.post<AttendanceRecord>(
+        endpoints.hr.attendanceCheckOut,
+        payload
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useMyAttendanceQuery(params?: { dateFrom?: string; dateTo?: string }) {
+  return useQuery({
+    queryKey: ["attendance", "my", params],
+    queryFn: async () => {
+      const response = await http.get<AttendanceRecord[]>(endpoints.hr.attendanceMy, {
+        params: {
+          date_from: params?.dateFrom,
+          date_to: params?.dateTo,
+        },
+      });
+      return response.data;
+    },
+  });
+}
+
+export function useAttendanceRecordsQuery(filters: AttendanceFilters) {
+  return useQuery({
+    queryKey: ["attendance", "records", filters],
+    queryFn: async () => {
+      const response = await http.get<AttendanceRecord[]>(
+        endpoints.hr.attendanceRecords,
+        {
+          params: {
+            date_from: filters.dateFrom,
+            date_to: filters.dateTo,
+            department_id: filters.departmentId ?? undefined,
+            employee_id: filters.employeeId ?? undefined,
+            status: filters.status ?? undefined,
+            search: filters.search ?? undefined,
+          },
+        }
+      );
+      return response.data;
+    },
+  });
+}
 export function useEmployees({ filters, search, page }: UseEmployeesParams) {
   return useQuery({
     queryKey: ["hr", "employees", { filters, search, page }],
