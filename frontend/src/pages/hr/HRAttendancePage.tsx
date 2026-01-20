@@ -126,11 +126,11 @@ export function HRAttendancePage() {
         title: "QR generated",
         message: "تم إنشاء كود QR بنجاح.",
       });
-    } catch (error) {
+    } catch {
       notifications.show({
         title: "Failed to generate QR",
         message: "حدث خطأ أثناء إنشاء كود QR.",
-        color: "red",
+        color: "red",        
       });
     }
   }
