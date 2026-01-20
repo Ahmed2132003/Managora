@@ -2,11 +2,12 @@ from datetime import date, datetime, time
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.test import APITestCase, TestCase
+from rest_framework.test import APITestCase
 
 from core.models import Company, Permission, Role, RolePermission, UserRole
 from hr.models import AttendanceRecord, Employee, Shift, WorkSite
