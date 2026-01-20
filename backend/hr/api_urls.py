@@ -6,11 +6,12 @@ from hr.views import (
     AttendanceCheckOutView,
     AttendanceMyView,
     AttendanceRecordViewSet,
+    AttendanceQrGenerateView,
     DepartmentViewSet,
     EmployeeDocumentDeleteView,
     EmployeeDocumentDownloadView,
     EmployeeDocumentListCreateView,
-    EmployeeViewSet,    
+    EmployeeViewSet,          
     JobTitleViewSet,
 )
 
@@ -53,5 +54,10 @@ urlpatterns = [
         "attendance/my/",
         AttendanceMyView.as_view(),
         name="attendance-my",
+    ),
+    path(
+        "attendance/qr/generate/",
+        AttendanceQrGenerateView.as_view(),
+        name="attendance-qr-generate",
     ),
 ]

@@ -264,7 +264,8 @@ class AttendanceActionSerializer(serializers.Serializer):
     lng = serializers.DecimalField(
         max_digits=9, decimal_places=6, required=False, allow_null=True
     )
-
+    qr_token = serializers.CharField(required=False, allow_blank=False)
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         request = self.context.get("request")
@@ -281,8 +282,10 @@ class AttendanceActionSerializer(serializers.Serializer):
         lat = attrs.get("lat")
         lng = attrs.get("lng")
 
-        if not shift:
+        if method != AttendanceRecord.Method.QR and not shift:
             raise serializers.ValidationError({"shift_id": "shift_id is required."})
+        if method == AttendanceRecord.Method.QR and not attrs.get("qr_token"):
+            raise serializers.ValidationError({"qr_token": "qr_token is required."})
 
         if (lat is None) ^ (lng is None):
             raise serializers.ValidationError({"location": "Both lat and lng are required."})
@@ -294,3 +297,34 @@ class AttendanceActionSerializer(serializers.Serializer):
                 raise serializers.ValidationError({"location": "lat/lng is required for GPS."})
 
         return attrs
+
+
+class AttendanceQrGenerateSerializer(serializers.Serializer):
+    worksite_id = serializers.PrimaryKeyRelatedField(
+        source="worksite", queryset=WorkSite.objects.none()
+    )
+    shift_id = serializers.PrimaryKeyRelatedField(
+        source="shift", queryset=Shift.objects.none()
+    )
+    expires_in_minutes = serializers.IntegerField(
+        required=False, min_value=1, max_value=1440
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            company = request.user.company
+            self.fields["worksite_id"].queryset = WorkSite.objects.filter(company=company)
+            self.fields["shift_id"].queryset = Shift.objects.filter(company=company)
+
+    def validate(self, attrs):
+        attrs.setdefault("expires_in_minutes", 60)
+        return attrs
+
+
+class AttendanceQrTokenSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    expires_at = serializers.DateTimeField()
+    worksite_id = serializers.IntegerField()
+    shift_id = serializers.IntegerField()

@@ -15,8 +15,13 @@ from rest_framework.views import APIView
 
 from core.permissions import HasAnyPermission, PermissionByActionMixin, user_has_permission
 from hr.models import AttendanceRecord, Department, Employee, EmployeeDocument, JobTitle
-from hr.serializers import AttendanceActionSerializer, AttendanceRecordSerializer
-from hr.services.attendance import check_in, check_out
+from hr.serializers import (
+    AttendanceActionSerializer,
+    AttendanceQrGenerateSerializer,
+    AttendanceQrTokenSerializer,
+    AttendanceRecordSerializer,
+)
+from hr.services.attendance import check_in, check_out, generate_qr_token
 from hr.serializers import (
     DepartmentSerializer,
     EmployeeCreateUpdateSerializer,
@@ -285,6 +290,41 @@ class AttendanceCheckOutView(APIView):
             )
         return employee
 
+
+class AttendanceQrGenerateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Attendance"],
+        summary="Generate attendance QR token",
+        request=AttendanceQrGenerateSerializer,
+        responses={201: AttendanceQrTokenSerializer},
+    )
+    def post(self, request):
+        serializer = AttendanceQrGenerateSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        token_data = generate_qr_token(
+            request.user,
+            serializer.validated_data["worksite"],
+            serializer.validated_data["shift"],
+            serializer.validated_data["expires_in_minutes"],
+        )
+        return Response(
+            {
+                "token": token_data["token"],
+                "expires_at": token_data["expires_at"],
+                "worksite_id": serializer.validated_data["worksite"].id,
+                "shift_id": serializer.validated_data["shift"].id,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["attendance.*"]))
+        return permissions
 
 class AttendanceMyView(ListAPIView):
     serializer_class = AttendanceRecordSerializer
