@@ -16,11 +16,11 @@ import { notifications } from "@mantine/notifications";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { isForbiddenError } from "../../shared/api/errors";
 import {
-  PayrollPeriod,
   useCreatePeriod,
   useGeneratePeriod,
   usePayrollPeriods,
 } from "../../shared/hr/hooks";
+import type { PayrollPeriod } from "../../shared/hr/hooks";
 
 const monthOptions = [
   { value: "1", label: "January" },
@@ -54,7 +54,7 @@ export function PayrollPage() {
   const periodsQuery = usePayrollPeriods();
   const createPeriodMutation = useCreatePeriod();
 
-  const periods = periodsQuery.data ?? [];
+  const periods = useMemo(() => periodsQuery.data ?? [], [periodsQuery.data]);  
   const selectedPeriod = useMemo(() => {
     if (!month || !year) return null;
     const monthValue = Number(month);

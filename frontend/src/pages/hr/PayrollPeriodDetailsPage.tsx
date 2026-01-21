@@ -17,12 +17,13 @@ import { notifications } from "@mantine/notifications";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { isForbiddenError } from "../../shared/api/errors";
 import {
-  PayrollRun,
   useLockPayrollPeriod,
   usePayrollRun,
   usePayrollPeriods,
   usePeriodRuns,
 } from "../../shared/hr/hooks";
+import type { PayrollRun } from "../../shared/hr/hooks";
+
 import { endpoints } from "../../shared/api/endpoints";
 import { http } from "../../shared/api/http";
 
@@ -57,7 +58,7 @@ export function PayrollPeriodDetailsPage() {
   const runDetailsQuery = usePayrollRun(selectedRun?.id ?? null);
   const lockMutation = useLockPayrollPeriod(periodId);
 
-  const runs = runsQuery.data ?? [];
+  const runs = useMemo(() => runsQuery.data ?? [], [runsQuery.data]);  
   const filteredRuns = useMemo(() => {
     if (!search) return runs;
     const term = search.toLowerCase();

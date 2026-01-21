@@ -16,8 +16,8 @@ import { LeaveRequestPage } from "../pages/leaves/LeaveRequestPage.tsx";
 import { LeaveInboxPage } from "../pages/hr/LeaveInboxPage.tsx";
 import { PoliciesPage } from "../pages/hr/PoliciesPage.tsx";
 import { HRActionsPage } from "../pages/hr/HRActionsPage.tsx";
-import { PayrollPage } from "../pages/hr/PayrollPage.tsx";
-import { PayrollPeriodDetailsPage } from "../pages/hr/PayrollPeriodDetailsPage.tsx";
+import { PayrollPage } from "../pages/hr/PayrollPage";
+import { PayrollPeriodDetailsPage } from "../pages/hr/PayrollPeriodDetailsPage";
 export const router = createBrowserRouter([
   {
     path: "/login",
