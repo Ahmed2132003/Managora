@@ -38,4 +38,11 @@ export const endpoints = {
     payrollRun: (id: number) => `/api/payroll/runs/${id}/`,
     payrollRunPayslip: (id: number) => `/api/payroll/runs/${id}/payslip.pdf`,
   },
+  accounting: {
+    accounts: "/api/accounting/accounts/",
+    account: (id: number) => `/api/accounting/accounts/${id}/`,
+    costCenters: "/api/accounting/cost-centers/",
+    costCenter: (id: number) => `/api/accounting/cost-centers/${id}/`,
+    applyTemplate: "/api/accounting/coa/apply-template/",
+  },
 };

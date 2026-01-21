@@ -18,7 +18,8 @@ import { PoliciesPage } from "../pages/hr/PoliciesPage.tsx";
 import { HRActionsPage } from "../pages/hr/HRActionsPage.tsx";
 import { PayrollPage } from "../pages/hr/PayrollPage";
 import { PayrollPeriodDetailsPage } from "../pages/hr/PayrollPeriodDetailsPage";
-export const router = createBrowserRouter([
+import { AccountingSetupWizardPage } from "../pages/accounting/AccountingSetupWizardPage";
+export const router = createBrowserRouter([  
   {
     path: "/login",
     element: <LoginPage />,
@@ -48,8 +49,9 @@ export const router = createBrowserRouter([
       { path: "hr/actions", element: <HRActionsPage /> },
       { path: "payroll", element: <PayrollPage /> },
       { path: "payroll/periods/:id", element: <PayrollPeriodDetailsPage /> },
+      { path: "accounting/setup", element: <AccountingSetupWizardPage /> },
     ],
-  },                                                                       
+  },                                                                                                                                                
   {
     path: "*",
     element: <Navigate to="/login" replace />,

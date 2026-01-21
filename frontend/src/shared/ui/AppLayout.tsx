@@ -60,7 +60,10 @@ export function AppLayout() {
             <Button component={Link} to="/hr/job-titles" variant="subtle">
               Job Titles
             </Button>
-          </Group>          
+            <Button component={Link} to="/accounting/setup" variant="subtle">
+              Accounting Setup
+            </Button>
+          </Group>                       
           <Button onClick={handleLogout} variant="light">
             Logout            
           </Button>

@@ -15,8 +15,10 @@ PERMISSION_DEFINITIONS = {
     "attendance.view_team": "View team attendance",
     "leaves.*": "Manage leaves",
     "accounting.*": "Manage accounting",
+    "accounting.view": "View chart of accounts",
+    "accounting.manage_coa": "Manage chart of accounts",
     "expenses.*": "Manage expenses",
-    "invoices.*": "Manage invoices",
+    "invoices.*": "Manage invoices",    
     "approvals.*": "Manage approvals",
     "hr.departments.view": "View departments",
     "hr.departments.create": "Create departments",
@@ -57,10 +59,12 @@ ROLE_PERMISSION_MAP = {
     
     "Accountant": [
         "accounting.*",
+        "accounting.view",
+        "accounting.manage_coa",
         "expenses.*",
         "invoices.*",
         "hr.payroll.*",
-    ],    
+    ],          
     "Manager": [
         "approvals.*",
         "attendance.view_team",
