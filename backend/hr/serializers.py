@@ -11,7 +11,13 @@ from hr.models import (
     LeaveBalance,
     LeaveRequest,
     LeaveType,
+    LoanAdvance,
+    PayrollLine,
+    PayrollPeriod,
+    PayrollRun,
     PolicyRule,
+    SalaryComponent,
+    SalaryStructure,
     Shift,
     WorkSite,
 )
@@ -486,7 +492,7 @@ class PolicyRuleSummarySerializer(serializers.ModelSerializer):
 class HRActionSerializer(serializers.ModelSerializer):
     employee = LeaveEmployeeSerializer(read_only=True)
     rule = PolicyRuleSummarySerializer(read_only=True)
-
+    
     class Meta:
         model = HRAction
         fields = (
@@ -501,3 +507,231 @@ class HRActionSerializer(serializers.ModelSerializer):
             "attendance_record",
             "created_at",
         )
+
+
+class PayrollPeriodSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PayrollPeriod
+        fields = ("id", "year", "month", "status", "locked_at", "created_by")
+        read_only_fields = ("id",)
+
+    def validate(self, attrs):
+        if "company" in self.initial_data:
+            raise serializers.ValidationError({"company": "This field is not allowed."})
+        request = self.context.get("request")
+        company = request.user.company if request else None
+        created_by = attrs.get("created_by")
+        if created_by and company and created_by.company_id != company.id:
+            raise serializers.ValidationError({"created_by": "User must belong to the same company."})
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        validated_data["company"] = request.user.company
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("company", None)
+        return super().update(instance, validated_data)
+
+
+class SalaryStructureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SalaryStructure
+        fields = ("id", "employee", "basic_salary", "currency")
+        read_only_fields = ("id",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            self.fields["employee"].queryset = Employee.objects.filter(
+                company=request.user.company
+            )
+
+    def validate(self, attrs):
+        if "company" in self.initial_data:
+            raise serializers.ValidationError({"company": "This field is not allowed."})
+        request = self.context.get("request")
+        company = request.user.company if request else None
+        employee = attrs.get("employee")
+        if employee and company and employee.company_id != company.id:
+            raise serializers.ValidationError({"employee": "Employee must belong to the same company."})
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        validated_data["company"] = request.user.company
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("company", None)
+        return super().update(instance, validated_data)
+
+
+class SalaryComponentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SalaryComponent
+        fields = ("id", "salary_structure", "name", "type", "amount", "is_recurring")
+        read_only_fields = ("id",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            self.fields["salary_structure"].queryset = SalaryStructure.objects.filter(
+                company=request.user.company
+            )
+
+    def validate(self, attrs):
+        if "company" in self.initial_data:
+            raise serializers.ValidationError({"company": "This field is not allowed."})
+        request = self.context.get("request")
+        company = request.user.company if request else None
+        salary_structure = attrs.get("salary_structure")
+        if salary_structure and company and salary_structure.company_id != company.id:
+            raise serializers.ValidationError(
+                {"salary_structure": "Salary structure must belong to the same company."}
+            )
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        validated_data["company"] = request.user.company
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("company", None)
+        return super().update(instance, validated_data)
+
+
+class LoanAdvanceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LoanAdvance
+        fields = (
+            "id",
+            "employee",
+            "type",
+            "principal_amount",
+            "start_date",
+            "installment_amount",
+            "remaining_amount",
+            "status",
+        )
+        read_only_fields = ("id",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            self.fields["employee"].queryset = Employee.objects.filter(
+                company=request.user.company
+            )
+
+    def validate(self, attrs):
+        if "company" in self.initial_data:
+            raise serializers.ValidationError({"company": "This field is not allowed."})
+        request = self.context.get("request")
+        company = request.user.company if request else None
+        employee = attrs.get("employee")
+        if employee and company and employee.company_id != company.id:
+            raise serializers.ValidationError({"employee": "Employee must belong to the same company."})
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        validated_data["company"] = request.user.company
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("company", None)
+        return super().update(instance, validated_data)
+
+
+class PayrollRunSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PayrollRun
+        fields = (
+            "id",
+            "period",
+            "employee",
+            "status",
+            "earnings_total",
+            "deductions_total",
+            "net_total",
+            "generated_at",
+            "generated_by",
+        )
+        read_only_fields = ("id",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            company = request.user.company
+            self.fields["period"].queryset = PayrollPeriod.objects.filter(company=company)
+            self.fields["employee"].queryset = Employee.objects.filter(company=company)
+            self.fields["generated_by"].queryset = User.objects.filter(company=company)
+
+    def validate(self, attrs):
+        if "company" in self.initial_data:
+            raise serializers.ValidationError({"company": "This field is not allowed."})
+        request = self.context.get("request")
+        company = request.user.company if request else None
+        period = attrs.get("period")
+        if period and company and period.company_id != company.id:
+            raise serializers.ValidationError({"period": "Period must belong to the same company."})
+        employee = attrs.get("employee")
+        if employee and company and employee.company_id != company.id:
+            raise serializers.ValidationError({"employee": "Employee must belong to the same company."})
+        generated_by = attrs.get("generated_by")
+        if generated_by and company and generated_by.company_id != company.id:
+            raise serializers.ValidationError(
+                {"generated_by": "User must belong to the same company."}
+            )
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        validated_data["company"] = request.user.company
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("company", None)
+        return super().update(instance, validated_data)
+
+
+class PayrollLineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PayrollLine
+        fields = ("id", "payroll_run", "code", "name", "type", "amount", "meta")
+        read_only_fields = ("id",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            self.fields["payroll_run"].queryset = PayrollRun.objects.filter(
+                company=request.user.company
+            )
+
+    def validate(self, attrs):
+        if "company" in self.initial_data:
+            raise serializers.ValidationError({"company": "This field is not allowed."})
+        request = self.context.get("request")
+        company = request.user.company if request else None
+        payroll_run = attrs.get("payroll_run")
+        if payroll_run and company and payroll_run.company_id != company.id:
+            raise serializers.ValidationError(
+                {"payroll_run": "Payroll run must belong to the same company."}
+            )
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        validated_data["company"] = request.user.company
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("company", None)
+        return super().update(instance, validated_data)

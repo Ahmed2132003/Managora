@@ -453,3 +453,174 @@ class LeaveRequest(BaseModel):
 
     def __str__(self):
         return f"{self.company.name} - {self.employee.full_name} - {self.start_date}"
+
+
+class PayrollPeriod(BaseModel):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        LOCKED = "locked", "Locked"
+
+    year = models.PositiveIntegerField()
+    month = models.PositiveSmallIntegerField()
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
+    locked_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_payroll_periods",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "year", "month"],
+                name="unique_payroll_period_per_company",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.company.name} - {self.year}/{self.month:02d}"
+
+
+class SalaryStructure(BaseModel):
+    employee = models.OneToOneField(
+        "hr.Employee",
+        on_delete=models.CASCADE,
+        related_name="salary_structure",
+    )
+    basic_salary = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=10, null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if self.employee_id:
+            self.company_id = self.employee.company_id
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.company.name} - {self.employee.full_name}"
+
+
+class SalaryComponent(BaseModel):
+    class ComponentType(models.TextChoices):
+        EARNING = "earning", "Earning"
+        DEDUCTION = "deduction", "Deduction"
+
+    salary_structure = models.ForeignKey(
+        "hr.SalaryStructure",
+        on_delete=models.CASCADE,
+        related_name="components",
+    )
+    name = models.CharField(max_length=255)
+    type = models.CharField(max_length=10, choices=ComponentType.choices)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    is_recurring = models.BooleanField(default=True)
+
+    def save(self, *args, **kwargs):
+        if self.salary_structure_id:
+            self.company_id = self.salary_structure.company_id
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.company.name} - {self.name}"
+
+
+class LoanAdvance(BaseModel):
+    class LoanType(models.TextChoices):
+        LOAN = "loan", "Loan"
+        ADVANCE = "advance", "Advance"
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        CLOSED = "closed", "Closed"
+
+    employee = models.ForeignKey(
+        "hr.Employee",
+        on_delete=models.CASCADE,
+        related_name="loan_advances",
+    )
+    type = models.CharField(max_length=10, choices=LoanType.choices)
+    principal_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    start_date = models.DateField()
+    installment_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    remaining_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.ACTIVE)
+
+    def save(self, *args, **kwargs):
+        if self.employee_id:
+            self.company_id = self.employee.company_id
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.company.name} - {self.employee.full_name} - {self.type}"
+
+
+class PayrollRun(BaseModel):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        APPROVED = "approved", "Approved"
+
+    period = models.ForeignKey(
+        "hr.PayrollPeriod",
+        on_delete=models.CASCADE,
+        related_name="runs",
+    )
+    employee = models.ForeignKey(
+        "hr.Employee",
+        on_delete=models.CASCADE,
+        related_name="payroll_runs",
+    )
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
+    earnings_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    deductions_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    net_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
+    generated_at = models.DateTimeField(null=True, blank=True)
+    generated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="generated_payroll_runs",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["period", "employee"],
+                name="unique_payroll_run_per_period_employee",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.period_id:
+            self.company_id = self.period.company_id
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.company.name} - {self.employee.full_name} - {self.period.year}/{self.period.month:02d}"
+
+
+class PayrollLine(BaseModel):
+    class LineType(models.TextChoices):
+        EARNING = "earning", "Earning"
+        DEDUCTION = "deduction", "Deduction"
+
+    payroll_run = models.ForeignKey(
+        "hr.PayrollRun",
+        on_delete=models.CASCADE,
+        related_name="lines",
+    )
+    code = models.CharField(max_length=50)
+    name = models.CharField(max_length=255)
+    type = models.CharField(max_length=10, choices=LineType.choices)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    meta = models.JSONField(default=dict, blank=True)
+
+    def save(self, *args, **kwargs):
+        if self.payroll_run_id:
+            self.company_id = self.payroll_run.company_id
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.company.name} - {self.code} - {self.amount}"

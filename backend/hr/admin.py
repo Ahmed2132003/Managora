@@ -10,7 +10,13 @@ from hr.models import (
     LeaveBalance,
     LeaveRequest,
     LeaveType,
+    LoanAdvance,
+    PayrollLine,
+    PayrollPeriod,
+    PayrollRun,
     PolicyRule,
+    SalaryComponent,
+    SalaryStructure,
     Shift,
     WorkSite,
 )
@@ -207,3 +213,92 @@ class LeaveRequestAdmin(admin.ModelAdmin):
     search_fields = ("employee__full_name", "leave_type__name")
     ordering = ("-requested_at",)
     autocomplete_fields = ("employee", "leave_type", "decided_by")
+
+
+@admin.register(PayrollPeriod)
+class PayrollPeriodAdmin(admin.ModelAdmin):
+    list_display = ("id", "company", "year", "month", "status", "locked_at", "created_at")
+    list_filter = ("company", "status", "year", "month")
+    search_fields = ("company__name",)
+    ordering = ("-year", "-month", "company")
+    autocomplete_fields = ("created_by",)
+
+
+@admin.register(SalaryStructure)
+class SalaryStructureAdmin(admin.ModelAdmin):
+    list_display = ("id", "company", "employee", "basic_salary", "currency", "created_at")
+    list_filter = ("company", "currency")
+    search_fields = ("employee__full_name", "employee__employee_code")
+    ordering = ("company", "employee")
+    autocomplete_fields = ("employee",)
+
+
+@admin.register(SalaryComponent)
+class SalaryComponentAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "company",
+        "salary_structure",
+        "name",
+        "type",
+        "amount",
+        "is_recurring",
+    )
+    list_filter = ("company", "type", "is_recurring")
+    search_fields = ("name", "salary_structure__employee__full_name")
+    ordering = ("company", "name")
+    autocomplete_fields = ("salary_structure",)
+
+
+@admin.register(LoanAdvance)
+class LoanAdvanceAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "company",
+        "employee",
+        "type",
+        "principal_amount",
+        "remaining_amount",
+        "status",
+        "start_date",
+    )
+    list_filter = ("company", "type", "status")
+    search_fields = ("employee__full_name", "employee__employee_code")
+    ordering = ("-start_date",)
+    autocomplete_fields = ("employee",)
+
+
+@admin.register(PayrollRun)
+class PayrollRunAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "company",
+        "period",
+        "employee",
+        "status",
+        "earnings_total",
+        "deductions_total",
+        "net_total",
+        "generated_at",
+    )
+    list_filter = ("company", "status", "period__year", "period__month")
+    search_fields = ("employee__full_name", "employee__employee_code")
+    ordering = ("-created_at",)
+    autocomplete_fields = ("period", "employee", "generated_by")
+
+
+@admin.register(PayrollLine)
+class PayrollLineAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "company",
+        "payroll_run",
+        "code",
+        "name",
+        "type",
+        "amount",
+    )
+    list_filter = ("company", "type")
+    search_fields = ("code", "name", "payroll_run__employee__full_name")
+    ordering = ("-created_at",)
+    autocomplete_fields = ("payroll_run",)
