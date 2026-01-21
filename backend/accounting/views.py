@@ -66,8 +66,13 @@ class CostCenterViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
 
 @extend_schema(tags=["Chart of Accounts"], summary="Apply COA template")
 class ApplyTemplateView(APIView):
-    permission_classes = [IsAuthenticated, HasPermission("accounting.manage_coa")]
+    permission_classes = [IsAuthenticated]
 
+    def get_permissions(self):
+        permissions = super().get_permissions()
+        permissions.append(HasPermission("accounting.manage_coa"))
+        return permissions
+    
     def post(self, request):
         serializer = ApplyTemplateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
