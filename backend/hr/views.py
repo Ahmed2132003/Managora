@@ -1,4 +1,5 @@
 from datetime import timedelta
+from io import BytesIO
 
 from django.db.models import Q
 from django.http import FileResponse, Http404
@@ -24,6 +25,8 @@ from hr.models import (
     LeaveBalance,
     LeaveRequest,
     LeaveType,
+    PayrollPeriod,
+    PayrollRun,
     PolicyRule,
 )
 from hr.services.attendance import check_in, check_out, generate_qr_token
@@ -46,8 +49,14 @@ from hr.serializers import (
     LeaveRequestSerializer,
     LeaveTypeSerializer,
     PolicyRuleSerializer,
+    PayrollPeriodSerializer,
+    PayrollRunDetailSerializer,
+    PayrollRunListSerializer,
 )
+from hr.services.generator import generate_period
 from hr.services.leaves import approve_leave, reject_leave
+from hr.services.lock import lock_period
+from hr.services.payslip import render_payslip_pdf
 
 @extend_schema_view(
     list=extend_schema(tags=["Departments"], summary="List departments"),
@@ -251,6 +260,10 @@ def _user_can_approve(user, leave_request):
             return False
         return leave_request.employee.manager_id == manager_employee.id
     return False
+
+
+def _user_has_payroll_permission(user, codes):
+    return any(user_has_permission(user, code) for code in codes)
 
 
 class AttendanceCheckInView(APIView):
@@ -740,3 +753,144 @@ class LeaveRejectView(APIView):
             request.user, leave_request.id, serializer.validated_data.get("reason")
         )
         return Response(LeaveRequestSerializer(leave_request).data)
+
+
+@extend_schema(
+    tags=["Payroll"],
+    summary="Create payroll period",
+    request=PayrollPeriodSerializer,
+    responses={201: PayrollPeriodSerializer},
+)
+class PayrollPeriodCreateView(CreateAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = PayrollPeriodSerializer
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(
+            HasAnyPermission(["hr.payroll.create", "hr.payroll.*"])
+        )
+        return permissions
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+@extend_schema(
+    tags=["Payroll"],
+    summary="Generate payroll runs for a period",
+)
+class PayrollPeriodGenerateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(
+            HasAnyPermission(["hr.payroll.generate", "hr.payroll.*"])
+        )
+        return permissions
+
+    def post(self, request, id=None):
+        period = get_object_or_404(PayrollPeriod, id=id, company=request.user.company)
+        summary = generate_period(
+            company=request.user.company,
+            year=period.year,
+            month=period.month,
+            actor=request.user,
+        )
+        return Response(summary)
+
+
+@extend_schema(
+    tags=["Payroll"],
+    summary="List payroll runs for a period",
+    responses={200: PayrollRunListSerializer(many=True)},
+)
+class PayrollPeriodRunsListView(ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = PayrollRunListSerializer
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["hr.payroll.view", "hr.payroll.*"]))
+        return permissions
+
+    def get_queryset(self):
+        period = get_object_or_404(
+            PayrollPeriod, id=self.kwargs["id"], company=self.request.user.company
+        )
+        return (
+            PayrollRun.objects.filter(period=period)
+            .select_related("employee")
+            .order_by("employee__full_name")
+        )
+
+
+@extend_schema(
+    tags=["Payroll"],
+    summary="Retrieve payroll run details",
+    responses={200: PayrollRunDetailSerializer},
+)
+class PayrollRunDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, id=None):
+        payroll_run = get_object_or_404(PayrollRun, id=id, company=request.user.company)
+        has_permission = _user_has_payroll_permission(
+            request.user,
+            ["hr.payroll.view", "hr.payroll.*", "hr.payroll.payslip"],
+        )
+        if not has_permission:
+            employee = getattr(request.user, "employee_profile", None)
+            if not employee or employee.id != payroll_run.employee_id:
+                raise PermissionDenied("You do not have permission to view this payslip.")
+
+        serializer = PayrollRunDetailSerializer(payroll_run)
+        return Response(serializer.data)
+
+
+@extend_schema(
+    tags=["Payroll"],
+    summary="Lock payroll period",
+    responses={200: PayrollPeriodSerializer},
+)
+class PayrollPeriodLockView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["hr.payroll.lock", "hr.payroll.*"]))
+        return permissions
+
+    def post(self, request, id=None):
+        period = get_object_or_404(PayrollPeriod, id=id, company=request.user.company)
+        period = lock_period(period, request.user)
+        return Response(PayrollPeriodSerializer(period).data)
+
+
+@extend_schema(
+    tags=["Payroll"],
+    summary="Download payslip PDF",
+)
+class PayrollRunPayslipPDFView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, id=None):
+        payroll_run = get_object_or_404(PayrollRun, id=id, company=request.user.company)
+        has_permission = _user_has_payroll_permission(
+            request.user,
+            ["hr.payroll.view", "hr.payroll.payslip", "hr.payroll.*"],
+        )
+        if not has_permission:
+            employee = getattr(request.user, "employee_profile", None)
+            if not employee or employee.id != payroll_run.employee_id:
+                raise PermissionDenied("You do not have permission to view this payslip.")
+
+        pdf_bytes = render_payslip_pdf(payroll_run)
+        filename = f"payslip-{payroll_run.id}.pdf"
+        return FileResponse(
+            BytesIO(pdf_bytes),
+            as_attachment=True,
+            filename=filename,
+            content_type="application/pdf",
+        )

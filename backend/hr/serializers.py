@@ -701,7 +701,55 @@ class PayrollRunSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
-class PayrollLineSerializer(serializers.ModelSerializer):
+class PayrollEmployeeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = ("id", "employee_code", "full_name")
+
+
+class PayrollLineDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PayrollLine
+        fields = ("id", "code", "name", "type", "amount", "meta")
+
+
+class PayrollRunListSerializer(serializers.ModelSerializer):
+    employee = PayrollEmployeeSerializer(read_only=True)
+
+    class Meta:
+        model = PayrollRun
+        fields = (
+            "id",
+            "employee",
+            "status",
+            "earnings_total",
+            "deductions_total",
+            "net_total",
+        )
+
+
+class PayrollRunDetailSerializer(serializers.ModelSerializer):
+    employee = PayrollEmployeeSerializer(read_only=True)
+    period = PayrollPeriodSerializer(read_only=True)
+    lines = PayrollLineDetailSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = PayrollRun
+        fields = (
+            "id",
+            "period",
+            "employee",
+            "status",
+            "earnings_total",
+            "deductions_total",
+            "net_total",
+            "generated_at",
+            "generated_by",
+            "lines",
+        )
+
+
+class PayrollLineSerializer(serializers.ModelSerializer):    
     class Meta:
         model = PayrollLine
         fields = ("id", "payroll_run", "code", "name", "type", "amount", "meta")

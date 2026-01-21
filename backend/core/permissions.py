@@ -34,6 +34,11 @@ PERMISSION_DEFINITIONS = {
     "hr.documents.view": "View employee documents",
     "hr.documents.create": "Create employee documents",
     "hr.documents.delete": "Delete employee documents",
+    "hr.payroll.view": "View payroll",
+    "hr.payroll.create": "Create payroll period",
+    "hr.payroll.generate": "Generate payroll runs",
+    "hr.payroll.lock": "Lock payroll period",
+    "hr.payroll.payslip": "Download payslips",
 }
 
 ROLE_PERMISSION_MAP = {
@@ -47,13 +52,15 @@ ROLE_PERMISSION_MAP = {
         "hr.job_titles.*",
         "hr.employees.*",
         "hr.documents.*",
+        "hr.payroll.*",
     ],     
     
     "Accountant": [
         "accounting.*",
         "expenses.*",
         "invoices.*",
-    ],
+        "hr.payroll.*",
+    ],    
     "Manager": [
         "approvals.*",
         "attendance.view_team",

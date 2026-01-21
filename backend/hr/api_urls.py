@@ -23,6 +23,12 @@ from hr.views import (
     EmployeeDocumentListCreateView,
     EmployeeViewSet,          
     JobTitleViewSet,
+    PayrollPeriodCreateView,
+    PayrollPeriodGenerateView,
+    PayrollPeriodLockView,
+    PayrollPeriodRunsListView,
+    PayrollRunDetailView,
+    PayrollRunPayslipPDFView,
     PolicyRuleViewSet,
 )
 
@@ -109,5 +115,35 @@ urlpatterns = [
         "attendance/qr/generate/",
         AttendanceQrGenerateView.as_view(),
         name="attendance-qr-generate",
+    ),
+    path(
+        "payroll/periods/",
+        PayrollPeriodCreateView.as_view(),
+        name="payroll-period-create",
+    ),
+    path(
+        "payroll/periods/<int:id>/generate/",
+        PayrollPeriodGenerateView.as_view(),
+        name="payroll-period-generate",
+    ),
+    path(
+        "payroll/periods/<int:id>/runs/",
+        PayrollPeriodRunsListView.as_view(),
+        name="payroll-period-runs",
+    ),
+    path(
+        "payroll/periods/<int:id>/lock/",
+        PayrollPeriodLockView.as_view(),
+        name="payroll-period-lock",
+    ),
+    path(
+        "payroll/runs/<int:id>/",
+        PayrollRunDetailView.as_view(),
+        name="payroll-run-detail",
+    ),
+    path(
+        "payroll/runs/<int:id>/payslip.pdf",
+        PayrollRunPayslipPDFView.as_view(),
+        name="payroll-run-payslip",
     ),
 ]
