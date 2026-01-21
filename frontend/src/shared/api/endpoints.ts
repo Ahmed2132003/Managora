@@ -31,5 +31,11 @@ export const endpoints = {
     leaveRequestReject: (id: number) => `/api/leaves/requests/${id}/reject/`,
     policies: "/api/policies/",
     hrActions: "/api/actions/",
+    payrollPeriods: "/api/payroll/periods/",
+    payrollPeriodGenerate: (id: number) => `/api/payroll/periods/${id}/generate/`,
+    payrollPeriodRuns: (id: number) => `/api/payroll/periods/${id}/runs/`,
+    payrollPeriodLock: (id: number) => `/api/payroll/periods/${id}/lock/`,
+    payrollRun: (id: number) => `/api/payroll/runs/${id}/`,
+    payrollRunPayslip: (id: number) => `/api/payroll/runs/${id}/payslip.pdf`,
   },
-};  
+};

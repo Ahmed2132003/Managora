@@ -92,6 +92,48 @@ export type EmployeeDocument = {
   created_at: string;
 };
 
+export type PayrollPeriodStatus = "draft" | "locked";
+
+export type PayrollPeriod = {
+  id: number;
+  year: number;
+  month: number;
+  status: PayrollPeriodStatus;
+  locked_at: string | null;
+  created_by: number | null;
+};
+
+export type PayrollEmployee = {
+  id: number;
+  employee_code: string;
+  full_name: string;
+};
+
+export type PayrollRunLine = {
+  id: number;
+  code: string;
+  name: string;
+  type: "earning" | "deduction";
+  amount: string;
+  meta: Record<string, unknown>;
+};
+
+export type PayrollRun = {
+  id: number;
+  employee: PayrollEmployee;
+  status: string;
+  earnings_total: string;
+  deductions_total: string;
+  net_total: string;
+};
+
+export type PayrollRunDetail = PayrollRun & {
+  period: PayrollPeriod;
+  generated_at: string | null;
+  generated_by: number | null;
+  lines: PayrollRunLine[];
+};
+
 export type EmployeeFilters = {
   departmentId?: string;
   jobTitleId?: string;
@@ -577,6 +619,88 @@ export function useHrActionsQuery(params?: { employeeId?: number }) {
           employee_id: params?.employeeId,
         },
       });
+      return response.data;
+    },
+  });
+}
+
+export function usePayrollPeriods() {
+  return useQuery({
+    queryKey: ["payroll", "periods"],
+    queryFn: async () => {
+      const response = await http.get<PayrollPeriod[]>(endpoints.hr.payrollPeriods);
+      return response.data;
+    },
+  });
+}
+
+export function useCreatePeriod() {
+  return useMutation({
+    mutationFn: async (payload: { year: number; month: number }) => {
+      const response = await http.post<PayrollPeriod>(
+        endpoints.hr.payrollPeriods,
+        payload
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useGeneratePeriod(periodId: number | null) {
+  return useMutation({
+    mutationFn: async () => {
+      if (!periodId) {
+        throw new Error("Period ID is required");
+      }
+      const response = await http.post(
+        endpoints.hr.payrollPeriodGenerate(periodId)
+      );
+      return response.data;
+    },
+  });
+}
+
+export function usePeriodRuns(periodId: number | null) {
+  return useQuery({
+    queryKey: ["payroll", "periods", periodId, "runs"],
+    queryFn: async () => {
+      if (!periodId) {
+        return [];
+      }
+      const response = await http.get<PayrollRun[]>(
+        endpoints.hr.payrollPeriodRuns(periodId)
+      );
+      return response.data;
+    },
+    enabled: Boolean(periodId),
+  });
+}
+
+export function usePayrollRun(runId: number | null) {
+  return useQuery({
+    queryKey: ["payroll", "runs", runId],
+    queryFn: async () => {
+      if (!runId) {
+        throw new Error("Run ID is required");
+      }
+      const response = await http.get<PayrollRunDetail>(
+        endpoints.hr.payrollRun(runId)
+      );
+      return response.data;
+    },
+    enabled: Boolean(runId),
+  });
+}
+
+export function useLockPayrollPeriod(periodId: number | null) {
+  return useMutation({
+    mutationFn: async () => {
+      if (!periodId) {
+        throw new Error("Period ID is required");
+      }
+      const response = await http.post<PayrollPeriod>(
+        endpoints.hr.payrollPeriodLock(periodId)
+      );
       return response.data;
     },
   });

@@ -29,11 +29,23 @@ export const PERMISSION_CODES = [
   "hr.documents.view",
   "hr.documents.create",
   "hr.documents.delete",
+  "hr.payroll.view",
+  "hr.payroll.create",
+  "hr.payroll.generate",
+  "hr.payroll.lock",
+  "hr.payroll.payslip",
+  "hr.payroll.*",
 ] as const;
 
 export const ROLE_PERMISSIONS = {
   Admin: ["*"],
-  HR: ["employees.*", "attendance.*", "leaves.*", "users.view"],
+  HR: [
+    "employees.*",
+    "attendance.*",
+    "leaves.*",
+    "users.view",
+    "hr.payroll.*",
+  ],  
   Accountant: ["accounting.*", "expenses.*", "invoices.*"],
   Manager: ["approvals.*", "attendance.view_team", "employees.view_team"],
 } as const;
