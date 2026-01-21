@@ -146,8 +146,9 @@ class PayrollApiTests(APITestCase):
         response = self.client.get(payslip_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "application/pdf")
-        self.assertTrue(response.content.startswith(b"%PDF"))
-        
+        pdf_bytes = b"".join(response.streaming_content)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+                
         lock_url = reverse("payroll-period-lock", kwargs={"id": period_id})
         response = self.client.post(lock_url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
