@@ -44,5 +44,7 @@ export const endpoints = {
     costCenters: "/api/accounting/cost-centers/",
     costCenter: (id: number) => `/api/accounting/cost-centers/${id}/`,
     applyTemplate: "/api/accounting/coa/apply-template/",
+    journalEntries: "/api/accounting/journal-entries/",
+    journalEntry: (id: number) => `/api/accounting/journal-entries/${id}/`,
   },
 };

@@ -19,6 +19,8 @@ import { HRActionsPage } from "../pages/hr/HRActionsPage.tsx";
 import { PayrollPage } from "../pages/hr/PayrollPage";
 import { PayrollPeriodDetailsPage } from "../pages/hr/PayrollPeriodDetailsPage";
 import { AccountingSetupWizardPage } from "../pages/accounting/AccountingSetupWizardPage";
+import { JournalEntriesPage } from "../pages/accounting/JournalEntriesPage.tsx";
+import { JournalEntryDetailsPage } from "../pages/accounting/JournalEntryDetailsPage.tsx";
 export const router = createBrowserRouter([  
   {
     path: "/login",
@@ -50,8 +52,10 @@ export const router = createBrowserRouter([
       { path: "payroll", element: <PayrollPage /> },
       { path: "payroll/periods/:id", element: <PayrollPeriodDetailsPage /> },
       { path: "accounting/setup", element: <AccountingSetupWizardPage /> },
+      { path: "accounting/journal-entries", element: <JournalEntriesPage /> },
+      { path: "accounting/journal-entries/:id", element: <JournalEntryDetailsPage /> },
     ],
-  },                                                                                                                                                
+  },                                                
   {
     path: "*",
     element: <Navigate to="/login" replace />,

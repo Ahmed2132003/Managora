@@ -101,3 +101,106 @@ class CostCenter(models.Model):
 
     def __str__(self):
         return f"{self.code} - {self.name}"
+
+
+class JournalEntry(models.Model):
+    class ReferenceType(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        PAYROLL = "payroll", "Payroll"
+        EXPENSE = "expense", "Expense"
+        ADJUSTMENT = "adjustment", "Adjustment"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        POSTED = "posted", "Posted"
+
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="journal_entries",
+    )
+    date = models.DateField()
+    reference_type = models.CharField(
+        max_length=32,
+        choices=ReferenceType.choices,
+        default=ReferenceType.MANUAL,
+    )
+    reference_id = models.CharField(max_length=64, null=True, blank=True)
+    memo = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.POSTED,
+    )
+    created_by = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="journal_entries",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["company", "date"]),
+            models.Index(fields=["company", "reference_type", "reference_id"]),
+        ]
+
+    def __str__(self):
+        return f"{self.company.name} - {self.date} - {self.reference_type}"
+
+
+class JournalLine(models.Model):
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="journal_lines",
+    )
+    entry = models.ForeignKey(
+        "accounting.JournalEntry",
+        on_delete=models.CASCADE,
+        related_name="lines",
+    )
+    account = models.ForeignKey(
+        "accounting.Account",
+        on_delete=models.PROTECT,
+        related_name="journal_lines",
+    )
+    cost_center = models.ForeignKey(
+        "accounting.CostCenter",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="journal_lines",
+    )
+    description = models.CharField(max_length=255, blank=True)
+    debit = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    credit = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (Q(debit__gt=0) & Q(credit=0))
+                    | (Q(credit__gt=0) & Q(debit=0))
+                ),
+                name="journal_line_single_sided_amount",
+            ),
+        ]
+
+    def clean(self):
+        if self.debit and self.credit:
+            raise ValidationError("Journal line must not have both debit and credit.")
+        if self.debit <= 0 and self.credit <= 0:
+            raise ValidationError("Journal line must have a debit or credit amount.")
+        if self.account and self.account.company_id != self.company_id:
+            raise ValidationError("Account must belong to the same company.")
+        if self.cost_center and self.cost_center.company_id != self.company_id:
+            raise ValidationError("Cost center must belong to the same company.")
+
+    def __str__(self):
+        return f"{self.entry_id} - {self.account.code}"

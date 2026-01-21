@@ -1,6 +1,14 @@
+from django.core.exceptions import ValidationError
 from rest_framework import serializers
 
-from accounting.models import Account, ChartOfAccounts, CostCenter
+from accounting.models import (
+    Account,
+    ChartOfAccounts,
+    CostCenter,
+    JournalEntry,
+    JournalLine,
+)
+from accounting.services.journal import post_journal_entry
 from accounting.services.seed import TEMPLATES
 
 
@@ -66,3 +74,73 @@ class ChartOfAccountsSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["created_at", "updated_at"]
+
+
+class JournalLineSerializer(serializers.ModelSerializer):
+    account = AccountSerializer(read_only=True)
+    cost_center = CostCenterSerializer(read_only=True)
+
+    class Meta:
+        model = JournalLine
+        fields = [
+            "id",
+            "account",
+            "cost_center",
+            "description",
+            "debit",
+            "credit",
+        ]
+
+
+class JournalEntrySerializer(serializers.ModelSerializer):
+    lines = JournalLineSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = JournalEntry
+        fields = [
+            "id",
+            "date",
+            "reference_type",
+            "reference_id",
+            "memo",
+            "status",
+            "created_by",
+            "created_at",
+            "updated_at",
+            "lines",
+        ]
+        read_only_fields = ["created_at", "updated_at", "created_by"]
+
+
+class JournalLineInputSerializer(serializers.Serializer):
+    account_id = serializers.IntegerField()
+    cost_center_id = serializers.IntegerField(required=False, allow_null=True)
+    description = serializers.CharField(required=False, allow_blank=True)
+    debit = serializers.DecimalField(max_digits=14, decimal_places=2, required=False)
+    credit = serializers.DecimalField(max_digits=14, decimal_places=2, required=False)
+
+
+class JournalEntryCreateSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    memo = serializers.CharField(required=False, allow_blank=True)
+    reference_type = serializers.ChoiceField(
+        choices=JournalEntry.ReferenceType.choices,
+        required=False,
+    )
+    reference_id = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    status = serializers.ChoiceField(
+        choices=JournalEntry.Status.choices,
+        required=False,
+    )
+    lines = JournalLineInputSerializer(many=True)
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        try:
+            return post_journal_entry(
+                company=request.user.company,
+                payload=validated_data,
+                created_by=request.user,
+            )
+        except ValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict or exc.messages) from exc

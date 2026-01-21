@@ -17,6 +17,8 @@ PERMISSION_DEFINITIONS = {
     "accounting.*": "Manage accounting",
     "accounting.view": "View chart of accounts",
     "accounting.manage_coa": "Manage chart of accounts",
+    "accounting.journal.view": "View journal entries",
+    "accounting.journal.post": "Post journal entries",    
     "expenses.*": "Manage expenses",
     "invoices.*": "Manage invoices",    
     "approvals.*": "Manage approvals",

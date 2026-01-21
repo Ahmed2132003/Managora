@@ -63,7 +63,10 @@ export function AppLayout() {
             <Button component={Link} to="/accounting/setup" variant="subtle">
               Accounting Setup
             </Button>
-          </Group>                       
+            <Button component={Link} to="/accounting/journal-entries" variant="subtle">
+              Journal Entries
+            </Button>
+          </Group>                                                      
           <Button onClick={handleLogout} variant="light">
             Logout            
           </Button>
