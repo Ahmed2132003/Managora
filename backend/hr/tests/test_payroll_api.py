@@ -146,7 +146,8 @@ class PayrollApiTests(APITestCase):
         response = self.client.get(payslip_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response["Content-Type"], "application/pdf")
-
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        
         lock_url = reverse("payroll-period-lock", kwargs={"id": period_id})
         response = self.client.post(lock_url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -163,7 +164,7 @@ class PayrollApiTests(APITestCase):
         generate_url = reverse("payroll-period-generate", kwargs={"id": period.id})
         self.client.post(generate_url, format="json")
         run = period.runs.get(employee=self.employee)
-
+        
         self._auth(self.employee_user)
         payslip_url = reverse("payroll-run-payslip", kwargs={"id": run.id})
         response = self.client.get(payslip_url)
@@ -172,3 +173,19 @@ class PayrollApiTests(APITestCase):
         list_url = reverse("payroll-period-runs", kwargs={"id": period.id})
         response = self.client.get(list_url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_generate_blocked_after_lock(self):
+        self._auth(self.hr_user)
+        period = PayrollPeriod.objects.create(
+            company=self.company,
+            year=2026,
+            month=2,
+        )
+
+        lock_url = reverse("payroll-period-lock", kwargs={"id": period.id})
+        response = self.client.post(lock_url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        generate_url = reverse("payroll-period-generate", kwargs={"id": period.id})
+        response = self.client.post(generate_url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
