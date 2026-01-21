@@ -143,4 +143,8 @@ class JournalEntryCreateSerializer(serializers.Serializer):
                 created_by=request.user,
             )
         except ValidationError as exc:
-            raise serializers.ValidationError(exc.message_dict or exc.messages) from exc
+            if getattr(exc, "error_dict", None):
+                detail = exc.message_dict
+            else:
+                detail = exc.messages
+            raise serializers.ValidationError(detail) from exc
