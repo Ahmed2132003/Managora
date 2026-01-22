@@ -6,6 +6,7 @@ from accounting.models import (
     AccountMapping,
     ChartOfAccounts,
     CostCenter,
+    Customer,
     Expense,
     ExpenseAttachment,
     JournalEntry,
@@ -61,6 +62,29 @@ class CostCenterSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["created_at", "updated_at"]
 
+
+class CustomerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Customer
+        fields = [
+            "id",
+            "code",
+            "name",
+            "email",
+            "phone",
+            "address",
+            "credit_limit",
+            "payment_terms_days",
+            "is_active",
+            "created_at",
+        ]
+        read_only_fields = ["created_at"]
+
+    def validate_payment_terms_days(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Payment terms must be 0 or greater.")
+        return value
+    
 
 class ApplyTemplateSerializer(serializers.Serializer):
     template_key = serializers.ChoiceField(choices=sorted(TEMPLATES.keys()))

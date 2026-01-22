@@ -69,9 +69,12 @@ export function AppLayout() {
             <Button component={Link} to="/accounting/expenses" variant="subtle">
               Expenses
             </Button>            
+            <Button component={Link} to="/customers" variant="subtle">
+              Customers
+            </Button>
             <Button component={Link} to="/accounting/reports/trial-balance" variant="subtle">
               Trial Balance
-            </Button>
+            </Button>            
             <Button component={Link} to="/accounting/reports/general-ledger" variant="subtle">
               General Ledger
             </Button>

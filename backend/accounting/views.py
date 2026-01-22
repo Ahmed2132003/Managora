@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounting.models import Account, AccountMapping, CostCenter, Expense, JournalEntry, JournalLine
+from accounting.models import Account, AccountMapping, CostCenter, Customer, Expense, JournalEntry, JournalLine
 
 from accounting.serializers import (
     AccountSerializer,
@@ -18,6 +18,7 @@ from accounting.serializers import (
     AccountMappingSerializer,
     ApplyTemplateSerializer,
     CostCenterSerializer,
+    CustomerSerializer,
     ExpenseAttachmentCreateSerializer,
     ExpenseAttachmentSerializer,
     ExpenseSerializer,
@@ -92,6 +93,48 @@ class CostCenterViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(company=self.request.user.company)
 
+
+@extend_schema_view(
+    list=extend_schema(tags=["Customers"], summary="List customers"),
+    retrieve=extend_schema(tags=["Customers"], summary="Retrieve customer"),
+    create=extend_schema(tags=["Customers"], summary="Create customer"),
+    partial_update=extend_schema(tags=["Customers"], summary="Update customer"),
+)
+class CustomerViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
+    serializer_class = CustomerSerializer
+    permission_classes = [IsAuthenticated]
+    permission_map = {
+        "list": "customers.view",
+        "retrieve": "customers.view",
+        "create": "customers.create",
+        "partial_update": "customers.edit",
+        "update": "customers.edit",
+        "destroy": "customers.edit",
+    }
+
+    def get_queryset(self):
+        queryset = Customer.objects.filter(company=self.request.user.company)
+        name = self.request.query_params.get("name")
+        code = self.request.query_params.get("code")
+        is_active = self.request.query_params.get("is_active")
+
+        if name:
+            queryset = queryset.filter(name__icontains=name)
+        if code:
+            queryset = queryset.filter(code__icontains=code)
+        if is_active is not None and is_active != "":
+            if is_active.lower() in {"true", "1", "yes"}:
+                queryset = queryset.filter(is_active=True)
+            elif is_active.lower() in {"false", "0", "no"}:
+                queryset = queryset.filter(is_active=False)
+        return queryset.order_by("code", "id")
+
+    def perform_create(self, serializer):
+        serializer.save(company=self.request.user.company)
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=["is_active"])
 
 
 @extend_schema_view(

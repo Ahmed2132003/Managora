@@ -27,6 +27,40 @@ class ChartOfAccounts(models.Model):
         return f"{self.company.name} - {self.name}"
 
 
+class Customer(models.Model):
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="customers",
+    )
+    code = models.CharField(max_length=32)
+    name = models.CharField(max_length=255)
+    email = models.EmailField(blank=True, null=True)
+    phone = models.CharField(max_length=50, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    credit_limit = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        blank=True,
+        null=True,
+    )
+    payment_terms_days = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "code"],
+                name="unique_customer_code_per_company",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+
+
 class Account(models.Model):
     class Type(models.TextChoices):
         ASSET = "ASSET", "Asset"

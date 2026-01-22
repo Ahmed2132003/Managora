@@ -20,7 +20,10 @@ export const PERMISSION_CODES = [
   "expenses.create",
   "expenses.approve",
   "invoices.*",  
-  "approvals.*",
+  "customers.view",
+  "customers.create",
+  "customers.edit",
+  "approvals.*",  
   "hr.departments.view",
   "hr.departments.create",
   "hr.departments.edit",
@@ -54,7 +57,8 @@ export const ROLE_PERMISSIONS = {
     "users.view",
     "hr.payroll.*",
   ],  
-  Accountant: ["accounting.*", "expenses.*", "invoices.*"],
+  Accountant: ["accounting.*", "expenses.*", "invoices.*", "customers.*"],
+  Sales: ["customers.view"],  
   Manager: ["approvals.*", "attendance.view_team", "employees.view_team"],
 } as const;
 
