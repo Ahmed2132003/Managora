@@ -266,6 +266,50 @@ class InvoiceLine(models.Model):
         return f"{self.invoice_id} - {self.description}"
 
 
+class Payment(models.Model):
+    class Method(models.TextChoices):
+        CASH = "cash", "Cash"
+        BANK = "bank", "Bank"
+
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="payments",
+    )
+    customer = models.ForeignKey(
+        "accounting.Customer",
+        on_delete=models.PROTECT,
+        related_name="payments",
+    )
+    invoice = models.ForeignKey(
+        "accounting.Invoice",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payments",
+    )
+    payment_date = models.DateField()
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    method = models.CharField(max_length=16, choices=Method.choices)
+    cash_account = models.ForeignKey(
+        "accounting.Account",
+        on_delete=models.PROTECT,
+        related_name="payments",
+    )
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payments",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.company.name} - Payment {self.id}"
+
+
 class JournalEntry(models.Model):
     class ReferenceType(models.TextChoices):
         MANUAL = "manual", "Manual"
@@ -273,6 +317,7 @@ class JournalEntry(models.Model):
         PAYROLL_PERIOD = "payroll_period", "Payroll Period"
         EXPENSE = "expense", "Expense"
         INVOICE = "invoice", "Invoice"
+        PAYMENT = "payment", "Payment"
         ADJUSTMENT = "adjustment", "Adjustment"
 
     class Status(models.TextChoices):

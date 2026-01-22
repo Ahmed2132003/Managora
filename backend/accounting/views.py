@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.db.models import Q, Sum, Value, DecimalField
+from django.db.models import Q, Sum, Value, DecimalField, ExpressionWrapper, F
 from django.db.models.functions import Coalesce
 from django.utils.dateparse import parse_date
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -22,6 +22,7 @@ from accounting.models import (
     Invoice,
     JournalEntry,
     JournalLine,
+    Payment,
 )
 
 from accounting.serializers import (
@@ -37,6 +38,7 @@ from accounting.serializers import (
     InvoiceSerializer,
     JournalEntryCreateSerializer,
     JournalEntrySerializer,
+    PaymentSerializer,
 )
 from accounting.services.expenses import ensure_expense_journal_entry
 from accounting.services.invoices import ensure_invoice_journal_entry
@@ -320,8 +322,19 @@ class InvoiceViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
     }
 
     def get_queryset(self):
-        return Invoice.objects.filter(company=self.request.user.company).select_related(
-            "customer", "created_by"
+        total_paid = Coalesce(
+            Sum("payments__amount"),
+            Value(0),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        )
+        remaining_balance = ExpressionWrapper(
+            F("total_amount") - total_paid,
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        )
+        return (
+            Invoice.objects.filter(company=self.request.user.company)
+            .select_related("customer", "created_by")
+            .annotate(total_paid=total_paid, remaining_balance=remaining_balance)            
         )
 
     def perform_create(self, serializer):
@@ -439,6 +452,31 @@ class ExpenseViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         )
         output = ExpenseAttachmentSerializer(attachment, context={"request": request})
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Payments"], summary="List payments"),
+    retrieve=extend_schema(tags=["Payments"], summary="Retrieve payment"),
+    create=extend_schema(tags=["Payments"], summary="Create payment"),
+)
+class PaymentViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
+    serializer_class = PaymentSerializer
+    permission_classes = [IsAuthenticated]
+    permission_map = {
+        "list": "payments.*",
+        "retrieve": "payments.*",
+        "create": "payments.*",
+    }
+
+    def get_queryset(self):
+        queryset = Payment.objects.filter(company=self.request.user.company).select_related(
+            "customer", "invoice", "cash_account", "created_by"
+        )
+        customer_id = self.request.query_params.get("customer")
+        if customer_id:
+            queryset = queryset.filter(customer_id=customer_id)
+        return queryset.order_by("-payment_date", "-id")
 
 
 @extend_schema(tags=["Reports"], summary="Trial balance")

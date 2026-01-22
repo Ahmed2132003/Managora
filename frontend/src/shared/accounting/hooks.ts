@@ -200,6 +200,39 @@ export function useApproveExpense() {
   });
 }
 
+export type Payment = {
+  id: number;
+  company: number;
+  customer: number;
+  invoice: number | null;
+  payment_date: string;
+  amount: string;
+  method: "cash" | "bank";
+  cash_account: number;
+  notes: string;
+  created_by: number | null;
+  created_at: string;
+};
+
+export type PaymentPayload = {
+  customer: number;
+  invoice?: number | null;
+  payment_date: string;
+  amount: string;
+  method: "cash" | "bank";
+  cash_account: number;
+  notes?: string;
+};
+
+export function useCreatePayment() {
+  return useMutation({
+    mutationFn: async (payload: PaymentPayload) => {
+      const response = await http.post<Payment>(endpoints.accounting.payments, payload);
+      return response.data;
+    },
+  });
+}
+
 export function useUploadExpenseAttachment() {
   return useMutation({
     mutationFn: async ({ id, file }: { id: number; file: File }) => {

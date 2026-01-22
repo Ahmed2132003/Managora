@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from rest_framework import serializers
 
 from accounting.models import (
@@ -16,9 +17,11 @@ from accounting.models import (
     InvoiceLine,
     JournalEntry,
     JournalLine,
+    Payment,
 )
 
 from accounting.services.journal import post_journal_entry
+from accounting.services.payments import record_payment
 from accounting.services.seed import TEMPLATES
 
 class AccountSerializer(serializers.ModelSerializer):
@@ -191,6 +194,10 @@ class InvoiceLineSerializer(serializers.ModelSerializer):
 
 class InvoiceSerializer(serializers.ModelSerializer):
     lines = InvoiceLineSerializer(many=True)
+    total_paid = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    remaining_balance = serializers.DecimalField(
+        max_digits=14, decimal_places=2, read_only=True
+    )
 
     class Meta:
         model = Invoice
@@ -204,6 +211,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
             "subtotal",
             "tax_amount",
             "total_amount",
+            "total_paid",
+            "remaining_balance",
             "notes",
             "created_by",
             "created_at",
@@ -214,10 +223,12 @@ class InvoiceSerializer(serializers.ModelSerializer):
             "status",
             "subtotal",
             "total_amount",
+            "total_paid",
+            "remaining_balance",
             "created_by",
             "created_at",
         ]
-
+        
     def validate(self, attrs):
         request = self.context["request"]
         company = request.user.company
@@ -400,6 +411,68 @@ class AccountMappingSerializer(serializers.ModelSerializer):
             validated_data["required"] = key in AccountMapping.REQUIRED_KEYS
         return super().create(validated_data)
 
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = [
+            "id",
+            "company",
+            "customer",
+            "invoice",
+            "payment_date",
+            "amount",
+            "method",
+            "cash_account",
+            "notes",
+            "created_by",
+            "created_at",
+        ]
+        read_only_fields = ["company", "created_by", "created_at"]
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        company = request.user.company
+        customer = attrs.get("customer") or getattr(self.instance, "customer", None)
+        invoice = attrs.get("invoice") or getattr(self.instance, "invoice", None)
+        cash_account = attrs.get("cash_account") or getattr(
+            self.instance, "cash_account", None
+        )
+
+        if customer and customer.company_id != company.id:
+            raise serializers.ValidationError("Customer must belong to the same company.")
+        if invoice:
+            if invoice.company_id != company.id:
+                raise serializers.ValidationError("Invoice must belong to the same company.")
+            if customer and invoice.customer_id != customer.id:
+                raise serializers.ValidationError("Invoice customer mismatch.")
+        if cash_account and cash_account.company_id != company.id:
+            raise serializers.ValidationError("Cash account must belong to the same company.")
+        return attrs
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Amount must be greater than zero.")
+        return value
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        try:
+            with transaction.atomic():
+                payment = Payment.objects.create(
+                    company=request.user.company,
+                    created_by=request.user,
+                    **validated_data,
+                )
+                record_payment(payment)
+        except ValidationError as exc:
+            if getattr(exc, "error_dict", None):
+                detail = exc.message_dict
+            else:
+                detail = exc.messages
+            raise serializers.ValidationError(detail) from exc
+        return payment
+    
 
 class AccountMappingBulkSetSerializer(serializers.Serializer):
     mappings = serializers.DictField(

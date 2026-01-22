@@ -26,6 +26,7 @@ import { TrialBalancePage } from "../pages/accounting/TrialBalancePage.tsx";
 import { GeneralLedgerPage } from "../pages/accounting/GeneralLedgerPage.tsx";
 import { ProfitLossPage } from "../pages/accounting/ProfitLossPage.tsx";
 import { BalanceSheetPage } from "../pages/accounting/BalanceSheetPage.tsx";
+import { CollectionsPage } from "../pages/accounting/CollectionsPage.tsx";
 import { CustomersPage } from "../pages/customers/CustomersPage";
 import { CustomerFormPage } from "../pages/customers/CustomerFormPage.tsx";
 import { InvoiceDetailsPage } from "../pages/invoices/InvoiceDetailsPage.tsx";
@@ -65,6 +66,7 @@ export const router = createBrowserRouter([
       { path: "accounting/journal-entries", element: <JournalEntriesPage /> },
       { path: "accounting/journal-entries/:id", element: <JournalEntryDetailsPage /> },
       { path: "accounting/expenses", element: <ExpensesPage /> },
+      { path: "collections", element: <CollectionsPage /> },      
       { path: "accounting/reports/trial-balance", element: <TrialBalancePage /> },
       { path: "accounting/reports/general-ledger", element: <GeneralLedgerPage /> },
       { path: "accounting/reports/pnl", element: <ProfitLossPage /> },

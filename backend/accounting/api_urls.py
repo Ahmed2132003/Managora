@@ -12,6 +12,7 @@ from accounting.views import (
     GeneralLedgerView,
     InvoiceViewSet,
     JournalEntryViewSet,    
+    PaymentViewSet,
     ProfitLossView,
     TrialBalanceView,
 )
@@ -26,6 +27,7 @@ router.register(
     "accounting/journal-entries", JournalEntryViewSet, basename="journal-entry"
 )
 router.register("expenses", ExpenseViewSet, basename="expense")
+router.register("payments", PaymentViewSet, basename="payment")
 
 urlpatterns = [
     path("", include(router.urls)),

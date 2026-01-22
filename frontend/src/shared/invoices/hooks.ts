@@ -20,6 +20,8 @@ export type Invoice = {
   subtotal: string;
   tax_amount: string | null;
   total_amount: string;
+  total_paid: string;
+  remaining_balance: string;
   notes: string;
   created_by: number | null;
   created_at: string;
