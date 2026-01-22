@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.db.models import Q, Sum, Value, DecimalField
 from django.db.models.functions import Coalesce
 from django.utils.dateparse import parse_date
@@ -10,7 +11,18 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounting.models import Account, AccountMapping, CostCenter, Customer, Expense, JournalEntry, JournalLine
+from django.db import transaction
+
+from accounting.models import (
+    Account,
+    AccountMapping,
+    CostCenter,
+    Customer,
+    Expense,
+    Invoice,
+    JournalEntry,
+    JournalLine,
+)
 
 from accounting.serializers import (
     AccountSerializer,
@@ -22,10 +34,12 @@ from accounting.serializers import (
     ExpenseAttachmentCreateSerializer,
     ExpenseAttachmentSerializer,
     ExpenseSerializer,
+    InvoiceSerializer,
     JournalEntryCreateSerializer,
     JournalEntrySerializer,
 )
 from accounting.services.expenses import ensure_expense_journal_entry
+from accounting.services.invoices import ensure_invoice_journal_entry
 from accounting.services.seed import seed_coa_template
 from core.permissions import HasPermission, PermissionByActionMixin, user_has_permission
 
@@ -285,6 +299,52 @@ class JournalEntryViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         entry.save(update_fields=["status"])
         serializer = JournalEntrySerializer(entry, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Invoices"], summary="List invoices"),
+    retrieve=extend_schema(tags=["Invoices"], summary="Retrieve invoice"),
+    create=extend_schema(tags=["Invoices"], summary="Create invoice"),
+    partial_update=extend_schema(tags=["Invoices"], summary="Update invoice"),
+)
+class InvoiceViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
+    serializer_class = InvoiceSerializer
+    permission_classes = [IsAuthenticated]
+    permission_map = {
+        "list": "invoices.*",
+        "retrieve": "invoices.*",
+        "create": "invoices.*",
+        "partial_update": "invoices.*",
+        "update": "invoices.*",
+        "issue": "invoices.*",
+    }
+
+    def get_queryset(self):
+        return Invoice.objects.filter(company=self.request.user.company).select_related(
+            "customer", "created_by"
+        )
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    @action(detail=True, methods=["post"], url_path="issue")
+    def issue(self, request, *args, **kwargs):
+        invoice = self.get_object()
+        if invoice.status != Invoice.Status.DRAFT:
+            return Response(
+                {"detail": "Invoice is already issued."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            with transaction.atomic():
+                invoice.status = Invoice.Status.ISSUED
+                invoice.save(update_fields=["status"])
+                ensure_invoice_journal_entry(invoice)
+        except ValidationError as exc:
+            return Response({"detail": exc.messages}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = self.get_serializer(invoice)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 
 @extend_schema_view(

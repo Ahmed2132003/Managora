@@ -54,7 +54,10 @@ export const endpoints = {
     expenseApprove: (id: number) => `/api/expenses/${id}/approve/`,
     expenseAttachments: (id: number) => `/api/expenses/${id}/attachments/`,
   },
-  customers: "/api/customers/",
+  invoices: "/api/invoices/",
+  invoice: (id: number) => `/api/invoices/${id}/`,
+  invoiceIssue: (id: number) => `/api/invoices/${id}/issue/`,
+  customers: "/api/customers/",  
   customer: (id: number) => `/api/customers/${id}/`,  
   reports: {
     trialBalance: "/api/reports/trial-balance/",

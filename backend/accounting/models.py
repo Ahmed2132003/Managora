@@ -115,12 +115,16 @@ class Account(models.Model):
 
 class AccountMapping(models.Model):
     class Key(models.TextChoices):
+        ACCOUNTS_RECEIVABLE = "ACCOUNTS_RECEIVABLE", "Accounts Receivable"
+        SALES_REVENUE = "SALES_REVENUE", "Sales Revenue"
         PAYROLL_SALARIES_EXPENSE = "PAYROLL_SALARIES_EXPENSE", "Payroll Salaries Expense"
         PAYROLL_PAYABLE = "PAYROLL_PAYABLE", "Payroll Payable"
         EXPENSE_DEFAULT_CASH = "EXPENSE_DEFAULT_CASH", "Expense Default Cash"
         EXPENSE_DEFAULT_AP = "EXPENSE_DEFAULT_AP", "Expense Default AP"
 
     REQUIRED_KEYS = {
+        Key.ACCOUNTS_RECEIVABLE,
+        Key.SALES_REVENUE,
         Key.PAYROLL_SALARIES_EXPENSE,
         Key.PAYROLL_PAYABLE,
     }
@@ -191,12 +195,84 @@ class CostCenter(models.Model):
         return f"{self.code} - {self.name}"
 
 
+class Invoice(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        ISSUED = "issued", "Issued"
+        PARTIALLY_PAID = "partially_paid", "Partially Paid"
+        PAID = "paid", "Paid"
+        VOID = "void", "Void"
+
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="invoices",
+    )
+    invoice_number = models.CharField(max_length=64)
+    customer = models.ForeignKey(
+        "accounting.Customer",
+        on_delete=models.PROTECT,
+        related_name="invoices",
+    )
+    issue_date = models.DateField()
+    due_date = models.DateField()
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
+    )
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    tax_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    total_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="invoices",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "invoice_number"],
+                name="unique_invoice_number_per_company",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.company.name} - Invoice {self.invoice_number}"
+
+
+class InvoiceLine(models.Model):
+    invoice = models.ForeignKey(
+        "accounting.Invoice",
+        on_delete=models.CASCADE,
+        related_name="lines",
+    )
+    description = models.CharField(max_length=255)
+    quantity = models.DecimalField(max_digits=14, decimal_places=2)
+    unit_price = models.DecimalField(max_digits=14, decimal_places=2)
+    line_total = models.DecimalField(max_digits=14, decimal_places=2)
+
+    def __str__(self):
+        return f"{self.invoice_id} - {self.description}"
+
+
 class JournalEntry(models.Model):
     class ReferenceType(models.TextChoices):
         MANUAL = "manual", "Manual"
         PAYROLL = "payroll", "Payroll"
         PAYROLL_PERIOD = "payroll_period", "Payroll Period"
         EXPENSE = "expense", "Expense"
+        INVOICE = "invoice", "Invoice"
         ADJUSTMENT = "adjustment", "Adjustment"
 
     class Status(models.TextChoices):

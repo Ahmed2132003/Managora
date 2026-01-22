@@ -10,6 +10,7 @@ from accounting.views import (
     CustomerViewSet,
     ExpenseViewSet,
     GeneralLedgerView,
+    InvoiceViewSet,
     JournalEntryViewSet,    
     ProfitLossView,
     TrialBalanceView,
@@ -20,6 +21,7 @@ router.register("accounting/accounts", AccountViewSet, basename="accounting-acco
 router.register("accounting/mappings", AccountMappingViewSet, basename="accounting-mapping")
 router.register("accounting/cost-centers", CostCenterViewSet, basename="cost-center")
 router.register("customers", CustomerViewSet, basename="customer")
+router.register("invoices", InvoiceViewSet, basename="invoice")
 router.register(
     "accounting/journal-entries", JournalEntryViewSet, basename="journal-entry"
 )

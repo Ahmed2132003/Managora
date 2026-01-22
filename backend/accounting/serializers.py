@@ -1,3 +1,6 @@
+from datetime import timedelta
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from rest_framework import serializers
 
@@ -9,6 +12,8 @@ from accounting.models import (
     Customer,
     Expense,
     ExpenseAttachment,
+    Invoice,
+    InvoiceLine,
     JournalEntry,
     JournalLine,
 )
@@ -177,9 +182,134 @@ class JournalEntryCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError(detail) from exc
 
 
+class InvoiceLineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InvoiceLine
+        fields = ["id", "description", "quantity", "unit_price", "line_total"]
+        read_only_fields = ["id", "line_total"]
+
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    lines = InvoiceLineSerializer(many=True)
+
+    class Meta:
+        model = Invoice
+        fields = [
+            "id",
+            "invoice_number",
+            "customer",
+            "issue_date",
+            "due_date",
+            "status",
+            "subtotal",
+            "tax_amount",
+            "total_amount",
+            "notes",
+            "created_by",
+            "created_at",
+            "lines",
+        ]
+        read_only_fields = [
+            "due_date",
+            "status",
+            "subtotal",
+            "total_amount",
+            "created_by",
+            "created_at",
+        ]
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        company = request.user.company
+        customer = attrs.get("customer") or getattr(self.instance, "customer", None)
+        if customer and customer.company_id != company.id:
+            raise serializers.ValidationError("Customer must belong to the same company.")
+
+        if not self.instance and not attrs.get("lines"):
+            raise serializers.ValidationError({"lines": "At least one line is required."})
+        if "lines" in attrs and not attrs.get("lines"):
+            raise serializers.ValidationError({"lines": "At least one line is required."})
+        return attrs
+
+    def _calculate_totals(self, lines_data, tax_amount):
+        subtotal = sum(
+            (line["quantity"] * line["unit_price"] for line in lines_data),
+            Decimal("0"),
+        )
+        tax_value = tax_amount or Decimal("0")
+        total_amount = subtotal + tax_value
+        return subtotal, total_amount
+
+    def _get_due_date(self, issue_date, customer):
+        return issue_date + timedelta(days=customer.payment_terms_days)
+
+    def _create_lines(self, invoice, lines_data):
+        InvoiceLine.objects.bulk_create(
+            [
+                InvoiceLine(
+                    invoice=invoice,
+                    description=line["description"],
+                    quantity=line["quantity"],
+                    unit_price=line["unit_price"],
+                    line_total=line["quantity"] * line["unit_price"],
+                )
+                for line in lines_data
+            ]
+        )
+
+    def create(self, validated_data):
+        lines_data = validated_data.pop("lines")
+        tax_amount = validated_data.get("tax_amount")
+        issue_date = validated_data["issue_date"]
+        customer = validated_data["customer"]
+
+        subtotal, total_amount = self._calculate_totals(lines_data, tax_amount)
+        due_date = self._get_due_date(issue_date, customer)
+
+        invoice = Invoice.objects.create(
+            company=self.context["request"].user.company,
+            created_by=self.context["request"].user,
+            due_date=due_date,
+            subtotal=subtotal,
+            total_amount=total_amount,
+            **validated_data,
+        )
+        self._create_lines(invoice, lines_data)
+        return invoice
+
+    def update(self, instance, validated_data):
+        lines_data = validated_data.pop("lines", None)
+        tax_amount = validated_data.get("tax_amount", instance.tax_amount)
+        issue_date = validated_data.get("issue_date", instance.issue_date)
+        customer = validated_data.get("customer", instance.customer)
+
+        if "issue_date" in validated_data or "customer" in validated_data:
+            instance.due_date = self._get_due_date(issue_date, customer)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        if lines_data is not None:
+            instance.lines.all().delete()
+            self._create_lines(instance, lines_data)
+            subtotal, total_amount = self._calculate_totals(lines_data, tax_amount)
+        else:
+            subtotal = sum(
+                (line.line_total for line in instance.lines.all()),
+                Decimal("0"),
+            )
+            total_amount = subtotal + (tax_amount or Decimal("0"))
+
+        instance.subtotal = subtotal
+        instance.tax_amount = tax_amount
+        instance.total_amount = total_amount
+        instance.save()
+        return instance
+
+
 class ExpenseAttachmentSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ExpenseAttachment
+        model = ExpenseAttachment        
         fields = ["id", "file", "uploaded_by", "created_at"]
         read_only_fields = ["id", "uploaded_by", "created_at"]
 
