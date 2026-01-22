@@ -150,10 +150,35 @@ class PayrollApiTests(APITestCase):
         self.assertEqual(response["Content-Type"], "application/pdf")
         pdf_bytes = b"".join(response.streaming_content)
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
-                
+
+        salaries_account = Account.objects.create(
+            company=self.company,
+            code="5000",
+            name="Salaries Expense",
+            type=Account.Type.EXPENSE,
+        )
+        payable_account = Account.objects.create(
+            company=self.company,
+            code="2100",
+            name="Payroll Payable",
+            type=Account.Type.LIABILITY,
+        )
+        AccountMapping.objects.create(
+            company=self.company,
+            key=AccountMapping.Key.PAYROLL_SALARIES_EXPENSE,
+            account=salaries_account,
+            required=True,
+        )
+        AccountMapping.objects.create(
+            company=self.company,
+            key=AccountMapping.Key.PAYROLL_PAYABLE,
+            account=payable_account,
+            required=True,
+        )
+
         lock_url = reverse("payroll-period-lock", kwargs={"id": period_id})
         response = self.client.post(lock_url, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)        
         period = PayrollPeriod.objects.get(id=period_id)
         self.assertEqual(period.status, PayrollPeriod.Status.LOCKED)
 
