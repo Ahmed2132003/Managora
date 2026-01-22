@@ -39,16 +39,14 @@ export function AgingReportPage() {
     );
   }, [agingQuery.data, selectedCustomerId]);
 
-  const overdueInvoices = useMemo(() => {
+  const openInvoices = useMemo(() => {
     if (!selectedCustomerId) {
       return [];
     }
-    const today = new Date().toISOString().slice(0, 10);
     return (invoicesQuery.data ?? []).filter(
       (invoice) =>
         invoice.customer === selectedCustomerId &&
-        invoice.remaining_balance !== "0.00" &&
-        invoice.due_date < today
+        Number(invoice.remaining_balance) > 0
     );
   }, [invoicesQuery.data, selectedCustomerId]);
 
@@ -77,10 +75,10 @@ export function AgingReportPage() {
               {(agingQuery.data ?? []).length === 0 ? (
                 <Table.Tr>
                   <Table.Td colSpan={6}>
-                    <Text c="dimmed">No overdue invoices.</Text>
+                    <Text c="dimmed">No receivables found.</Text>
                   </Table.Td>
                 </Table.Tr>
-              ) : (
+              ) : (                
                 (agingQuery.data ?? []).map((row) => (
                   <Table.Tr key={row.customer.id}>
                     <Table.Td>
@@ -158,10 +156,10 @@ export function AgingReportPage() {
       <Modal
         opened={Boolean(selectedCustomerId)}
         onClose={() => setSelectedCustomerId(null)}
-        title={`Overdue invoices ${selectedCustomerName ? `- ${selectedCustomerName}` : ""}`}
+        title={`Open invoices ${selectedCustomerName ? `- ${selectedCustomerName}` : ""}`}
         size="lg"
       >
-        <Table striped highlightOnHover>
+        <Table striped highlightOnHover>            
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Invoice</Table.Th>
@@ -171,14 +169,14 @@ export function AgingReportPage() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {overdueInvoices.length === 0 ? (
+            {openInvoices.length === 0 ? (
               <Table.Tr>
                 <Table.Td colSpan={4}>
-                  <Text c="dimmed">No overdue invoices for this customer.</Text>
+                  <Text c="dimmed">No open invoices for this customer.</Text>
                 </Table.Td>
               </Table.Tr>
             ) : (
-              overdueInvoices.map((invoice) => (
+              openInvoices.map((invoice) => (
                 <Table.Tr key={invoice.id}>
                   <Table.Td>{invoice.invoice_number}</Table.Td>
                   <Table.Td>{invoice.due_date}</Table.Td>
@@ -189,7 +187,7 @@ export function AgingReportPage() {
             )}
           </Table.Tbody>
         </Table>
-      </Modal>
+      </Modal>      
     </Stack>
   );
 }

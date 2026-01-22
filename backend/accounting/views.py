@@ -352,6 +352,11 @@ class InvoiceViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
                 {"detail": "Invoice is already issued."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if not invoice.lines.exists():
+            return Response(
+                {"detail": "Invoice must include at least one line item before issuing."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
             with transaction.atomic():
                 invoice.status = Invoice.Status.ISSUED
@@ -494,17 +499,10 @@ class ARAgingReportView(APIView):
 
     def get(self, request):
         today = timezone.now().date()
-        invoices = (
-            get_open_invoices(request.user.company)
-            .filter(due_date__lt=today)
-            .select_related("customer")
-        )
-
+        invoices = get_open_invoices(request.user.company).select_related("customer")
         customers = {}
         for invoice in invoices:
-            days_overdue = (today - invoice.due_date).days
-            if days_overdue <= 0:
-                continue
+            days_overdue = max(0, (today - invoice.due_date).days)            
             if days_overdue <= 30:
                 bucket = "0_30"
             elif days_overdue <= 60:

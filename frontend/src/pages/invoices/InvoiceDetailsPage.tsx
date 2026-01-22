@@ -25,6 +25,14 @@ const statusColors: Record<string, string> = {
   void: "red",
 };
 
+const isInvoiceOverdue = (invoice: { due_date: string; remaining_balance: string; status: string }) => {
+  if (invoice.status === "paid" || invoice.status === "void") {
+    return false;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  return invoice.due_date < today && Number(invoice.remaining_balance) > 0;
+};
+
 export function InvoiceDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -61,9 +69,11 @@ export function InvoiceDetailsPage() {
   }
 
   const invoice = invoiceQuery.data;
+  const overdue = isInvoiceOverdue(invoice);
+  const hasLines = invoice.lines.length > 0;
 
   return (
-    <Stack gap="lg">
+    <Stack gap="lg">      
       <Group justify="space-between">
         <Stack gap={0}>
           <Title order={3}>Invoice {invoice.invoice_number}</Title>
@@ -74,7 +84,19 @@ export function InvoiceDetailsPage() {
             Back to Invoices
           </Button>
           {invoice.status === "draft" && (
-            <Button onClick={() => issueMutation.mutate()} loading={issueMutation.isPending}>
+            <Button
+              onClick={() => {
+                if (!hasLines) {
+                  return;
+                }
+                if (!window.confirm("Issue this invoice now?")) {
+                  return;
+                }
+                issueMutation.mutate();
+              }}
+              loading={issueMutation.isPending}
+              disabled={!hasLines}
+            >
               Issue Invoice
             </Button>
           )}
@@ -87,14 +109,21 @@ export function InvoiceDetailsPage() {
             <Text>Issue Date: {invoice.issue_date}</Text>
             <Text>Due Date: {invoice.due_date}</Text>
           </Stack>
-          <Badge color={statusColors[invoice.status] || "gray"}>
-            {invoice.status.replace("_", " ")}
-          </Badge>
+          <Group gap="xs">
+            <Badge color={statusColors[invoice.status] || "gray"}>
+              {invoice.status.replace("_", " ")}
+            </Badge>
+            {overdue && (
+              <Badge color="red" variant="light">
+                overdue
+              </Badge>
+            )}
+          </Group>
         </Group>
 
         <Divider my="md" />
 
-        <Table striped highlightOnHover>
+        <Table striped highlightOnHover>          
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Description</Table.Th>
@@ -104,17 +133,24 @@ export function InvoiceDetailsPage() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {invoice.lines.map((line) => (
-              <Table.Tr key={line.id}>
-                <Table.Td>{line.description}</Table.Td>
-                <Table.Td>{line.quantity}</Table.Td>
-                <Table.Td>{line.unit_price}</Table.Td>
-                <Table.Td>{line.line_total}</Table.Td>
+            {invoice.lines.length === 0 ? (
+              <Table.Tr>
+                <Table.Td colSpan={4}>
+                  <Text c="dimmed">No line items yet.</Text>
+                </Table.Td>
               </Table.Tr>
-            ))}
+            ) : (
+              invoice.lines.map((line) => (
+                <Table.Tr key={line.id}>
+                  <Table.Td>{line.description}</Table.Td>
+                  <Table.Td>{line.quantity}</Table.Td>
+                  <Table.Td>{line.unit_price}</Table.Td>
+                  <Table.Td>{line.line_total}</Table.Td>
+                </Table.Tr>
+              ))
+            )}
           </Table.Tbody>
         </Table>
-
         <Divider my="md" />
 
         <Group justify="flex-end">

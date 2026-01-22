@@ -15,6 +15,14 @@ const statusColors: Record<string, string> = {
   void: "red",
 };
 
+const isInvoiceOverdue = (invoice: { due_date: string; remaining_balance: string; status: string }) => {
+  if (invoice.status === "paid" || invoice.status === "void") {
+    return false;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  return invoice.due_date < today && Number(invoice.remaining_balance) > 0;
+};
+
 export function InvoicesPage() {
   const navigate = useNavigate();
   const canManage = useCan("invoices.*");
@@ -69,10 +77,17 @@ export function InvoicesPage() {
                     <Table.Td>{invoice.issue_date}</Table.Td>
                     <Table.Td>{invoice.due_date}</Table.Td>
                     <Table.Td>
-                      <Badge color={statusColors[invoice.status] || "gray"}>
-                        {invoice.status.replace("_", " ")}
-                      </Badge>
-                    </Table.Td>
+                      <Group gap="xs">
+                        <Badge color={statusColors[invoice.status] || "gray"}>
+                          {invoice.status.replace("_", " ")}
+                        </Badge>
+                        {isInvoiceOverdue(invoice) && (
+                          <Badge color="red" variant="light">
+                            overdue
+                          </Badge>
+                        )}
+                      </Group>
+                    </Table.Td>                    
                     <Table.Td>{invoice.total_amount}</Table.Td>
                     <Table.Td>
                       <Button

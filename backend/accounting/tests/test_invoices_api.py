@@ -169,3 +169,21 @@ class InvoiceApiTests(APITestCase):
             ).count(),
             1,
         )
+
+    def test_issue_requires_lines(self):
+        self.auth("accountant")
+        invoice = Invoice.objects.create(
+            company=self.company,
+            invoice_number="INV-2003",
+            customer=self.customer,
+            issue_date="2024-03-04",
+            due_date="2024-04-03",
+            subtotal="0.00",
+            total_amount="0.00",
+            created_by=self.accountant,
+        )
+        issue_url = reverse("invoice-issue", args=[invoice.id])
+        res = self.client.post(issue_url, format="json")
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.status, Invoice.Status.DRAFT)

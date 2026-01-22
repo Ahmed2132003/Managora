@@ -191,9 +191,35 @@ class ReportsApiTests(APITestCase):
         self.assertEqual(entry["buckets"]["31_60"], "500.00")
         self.assertEqual(entry["total_due"], "500.00")
 
+    def test_ar_aging_includes_current_invoices(self):
+        self.auth("accountant")
+        customer = Customer.objects.create(company=self.company, code="C-101", name="Nova")
+        today = timezone.now().date()
+        Invoice.objects.create(
+            company=self.company,
+            invoice_number="INV-101",
+            customer=customer,
+            issue_date=today,
+            due_date=today + timedelta(days=30),
+            status=Invoice.Status.ISSUED,
+            subtotal="600.00",
+            total_amount="600.00",
+        )
+
+        url = reverse("report-ar-aging")
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        entry = next(
+            (row for row in res.data if row["customer"]["id"] == customer.id),
+            None,
+        )
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["buckets"]["0_30"], "600.00")
+        self.assertEqual(entry["total_due"], "600.00")
+
     def test_alerts_generated_once(self):
         self.auth("accountant")
-        customer = Customer.objects.create(company=self.company, code="C-200", name="Beta")
+        customer = Customer.objects.create(company=self.company, code="C-200", name="Beta")        
         today = timezone.now().date()
         Invoice.objects.create(
             company=self.company,

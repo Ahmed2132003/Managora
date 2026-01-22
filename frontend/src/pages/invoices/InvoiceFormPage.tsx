@@ -68,6 +68,8 @@ export function InvoiceFormPage() {
 
   const taxValue = taxAmount === "" ? 0 : Number(taxAmount);
   const totalAmount = subtotal + taxValue;
+  const hasLines = lines.length > 0;
+  const canIssue = Boolean(invoiceNumber && customerId && issueDate && hasLines);
 
   const dueDatePreview = useMemo(() => {
     if (!issueDate || !selectedCustomer) {
@@ -262,12 +264,18 @@ export function InvoiceFormPage() {
               Save Draft
             </Button>
             <Button
-              onClick={() => submitMutation.mutate("issue")}
+              onClick={() => {
+                if (!window.confirm("Issue this invoice now?")) {
+                  return;
+                }
+                submitMutation.mutate("issue");
+              }}
               loading={submitMutation.isPending}
+              disabled={!canIssue}
             >
               Issue Invoice
             </Button>
-          </Group>
+          </Group>          
         </Stack>
       </Card>
     </Stack>

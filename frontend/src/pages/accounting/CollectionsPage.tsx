@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import {
+  Badge,
   Button,
   Card,
   Group,
-  Modal,
+  Modal,  
   NumberInput,
   Select,
   Stack,
@@ -37,13 +38,19 @@ export function CollectionsPage() {
     return new Map((customersQuery.data ?? []).map((customer) => [customer.id, customer]));
   }, [customersQuery.data]);
 
-  const invoiceOptions = (invoicesQuery.data ?? []).map((invoice) => ({
+  const openInvoices = useMemo(() => {
+    return (invoicesQuery.data ?? []).filter(
+      (invoice) =>
+        Number(invoice.remaining_balance) > 0 && invoice.status !== "void"
+    );
+  }, [invoicesQuery.data]);
+
+  const invoiceOptions = openInvoices.map((invoice) => ({
     value: String(invoice.id),
     label: `${invoice.invoice_number} - ${
       customerLookup.get(invoice.customer)?.name ?? `Customer #${invoice.customer}`
     }`,
   }));
-
   const accountOptions = (accountsQuery.data ?? []).map((account) => ({
     value: String(account.id),
     label: `${account.code} - ${account.name}`,
@@ -112,21 +119,22 @@ export function CollectionsPage() {
                 <Table.Th>Invoice total</Table.Th>
                 <Table.Th>Paid</Table.Th>
                 <Table.Th>Remaining</Table.Th>
+                <Table.Th>Status</Table.Th>
                 <Table.Th>Actions</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {(invoicesQuery.data ?? []).length === 0 ? (
+              {openInvoices.length === 0 ? (
                 <Table.Tr>
-                  <Table.Td colSpan={6}>
-                    <Text c="dimmed">No invoices found.</Text>
+                  <Table.Td colSpan={7}>
+                    <Text c="dimmed">No open invoices found.</Text>
                   </Table.Td>
                 </Table.Tr>
               ) : (
-                (invoicesQuery.data ?? []).map((invoice) => (
+                openInvoices.map((invoice) => (
                   <Table.Tr key={invoice.id}>
                     <Table.Td>{invoice.invoice_number}</Table.Td>
-                    <Table.Td>
+                    <Table.Td>                      
                       {customerLookup.get(invoice.customer)?.name ??
                         `Customer #${invoice.customer}`}
                     </Table.Td>
@@ -134,9 +142,21 @@ export function CollectionsPage() {
                     <Table.Td>{invoice.total_paid}</Table.Td>
                     <Table.Td>{invoice.remaining_balance}</Table.Td>
                     <Table.Td>
+                      <Group gap="xs">
+                        <Badge color={invoice.status === "paid" ? "green" : "blue"}>
+                          {invoice.status.replace("_", " ")}
+                        </Badge>
+                        {invoice.due_date < new Date().toISOString().slice(0, 10) && (
+                          <Badge color="red" variant="light">
+                            overdue
+                          </Badge>
+                        )}
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>
                       <Button
                         size="xs"
-                        variant="light"
+                        variant="light"                        
                         onClick={() => handleOpenModal(invoice.id)}
                       >
                         Record Payment
@@ -209,11 +229,16 @@ export function CollectionsPage() {
           />
           <Group justify="flex-end">
             <Button
-              onClick={() => submitPayment.mutate()}
+              onClick={() => {
+                if (!window.confirm("Record this payment?")) {
+                  return;
+                }
+                submitPayment.mutate();
+              }}
               loading={submitPayment.isPending}
             >
               Save
-            </Button>
+            </Button>            
           </Group>
         </Stack>
       </Modal>
