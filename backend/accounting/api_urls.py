@@ -5,6 +5,7 @@ from accounting.views import (
     AccountViewSet,
     ApplyTemplateView,
     CostCenterViewSet,
+    ExpenseViewSet,
     JournalEntryViewSet,
 )
 
@@ -14,6 +15,7 @@ router.register("accounting/cost-centers", CostCenterViewSet, basename="cost-cen
 router.register(
     "accounting/journal-entries", JournalEntryViewSet, basename="journal-entry"
 )
+router.register("expenses", ExpenseViewSet, basename="expense")
 
 urlpatterns = [
     path("", include(router.urls)),

@@ -5,12 +5,13 @@ from accounting.models import (
     Account,
     ChartOfAccounts,
     CostCenter,
+    Expense,
+    ExpenseAttachment,
     JournalEntry,
     JournalLine,
 )
 from accounting.services.journal import post_journal_entry
 from accounting.services.seed import TEMPLATES
-
 
 class AccountSerializer(serializers.ModelSerializer):
     class Meta:
@@ -148,3 +149,58 @@ class JournalEntryCreateSerializer(serializers.Serializer):
             else:
                 detail = exc.messages
             raise serializers.ValidationError(detail) from exc
+
+
+class ExpenseAttachmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExpenseAttachment
+        fields = ["id", "file", "uploaded_by", "created_at"]
+        read_only_fields = ["id", "uploaded_by", "created_at"]
+
+
+class ExpenseSerializer(serializers.ModelSerializer):
+    attachments = ExpenseAttachmentSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Expense
+        fields = [
+            "id",
+            "date",
+            "vendor_name",
+            "category",
+            "amount",
+            "currency",
+            "payment_method",
+            "paid_from_account",
+            "expense_account",
+            "cost_center",
+            "notes",
+            "status",
+            "created_by",
+            "created_at",
+            "updated_at",
+            "attachments",
+        ]
+        read_only_fields = ["created_by", "created_at", "updated_at", "attachments"]
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        company = request.user.company
+        paid_from_account = attrs.get("paid_from_account")
+        expense_account = attrs.get("expense_account")
+        cost_center = attrs.get("cost_center")
+
+        if paid_from_account and paid_from_account.company_id != company.id:
+            raise serializers.ValidationError("Paid-from account must belong to the same company.")
+        if expense_account and expense_account.company_id != company.id:
+            raise serializers.ValidationError("Expense account must belong to the same company.")
+        if cost_center and cost_center.company_id != company.id:
+            raise serializers.ValidationError("Cost center must belong to the same company.")
+        return attrs
+
+
+class ExpenseAttachmentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExpenseAttachment
+        fields = ["id", "file"]
+        read_only_fields = ["id"]

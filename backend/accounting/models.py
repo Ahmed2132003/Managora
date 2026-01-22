@@ -204,3 +204,85 @@ class JournalLine(models.Model):
 
     def __str__(self):
         return f"{self.entry_id} - {self.account.code}"
+
+
+class Expense(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        APPROVED = "approved", "Approved"
+
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="expenses",
+    )
+    date = models.DateField()
+    vendor_name = models.CharField(max_length=255, blank=True)
+    category = models.CharField(max_length=255, blank=True)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    currency = models.CharField(max_length=16, blank=True)
+    payment_method = models.CharField(max_length=32, blank=True)
+    paid_from_account = models.ForeignKey(
+        "accounting.Account",
+        on_delete=models.PROTECT,
+        related_name="paid_expenses",
+    )
+    expense_account = models.ForeignKey(
+        "accounting.Account",
+        on_delete=models.PROTECT,
+        related_name="expense_postings",
+    )
+    cost_center = models.ForeignKey(
+        "accounting.CostCenter",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="expenses",
+    )
+    notes = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.DRAFT,
+    )
+    created_by = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="expenses",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        if self.paid_from_account and self.paid_from_account.company_id != self.company_id:
+            raise ValidationError("Paid-from account must belong to the same company.")
+        if self.expense_account and self.expense_account.company_id != self.company_id:
+            raise ValidationError("Expense account must belong to the same company.")
+        if self.cost_center and self.cost_center.company_id != self.company_id:
+            raise ValidationError("Cost center must belong to the same company.")
+
+    def __str__(self):
+        return f"{self.company.name} - Expense {self.id}"
+
+
+class ExpenseAttachment(models.Model):
+    expense = models.ForeignKey(
+        "accounting.Expense",
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to="expense_attachments/")
+    uploaded_by = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="expense_attachments",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"ExpenseAttachment {self.id}"

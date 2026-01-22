@@ -7,16 +7,20 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounting.models import Account, CostCenter , JournalEntry
+from accounting.models import Account, CostCenter , Expense, JournalEntry
 from accounting.serializers import (
     AccountSerializer,
     ApplyTemplateSerializer,
     CostCenterSerializer,
+    ExpenseAttachmentCreateSerializer,
+    ExpenseAttachmentSerializer,
+    ExpenseSerializer,
     JournalEntryCreateSerializer,
     JournalEntrySerializer,
 )
+from accounting.services.expenses import ensure_expense_journal_entry
 from accounting.services.seed import seed_coa_template
-from core.permissions import HasPermission, PermissionByActionMixin
+from core.permissions import HasPermission, PermissionByActionMixin, user_has_permission
 
 
 @extend_schema_view(
@@ -153,3 +157,97 @@ class JournalEntryViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         entry.save(update_fields=["status"])
         serializer = JournalEntrySerializer(entry, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Expenses"], summary="List expenses"),
+    retrieve=extend_schema(tags=["Expenses"], summary="Retrieve expense"),
+    create=extend_schema(tags=["Expenses"], summary="Create expense"),
+    partial_update=extend_schema(tags=["Expenses"], summary="Update expense"),
+)
+class ExpenseViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
+    serializer_class = ExpenseSerializer
+    permission_classes = [IsAuthenticated]
+    permission_map = {
+        "list": "expenses.view",
+        "retrieve": "expenses.view",
+        "create": "expenses.create",
+        "partial_update": "expenses.create",
+        "update": "expenses.create",
+        "approve": "expenses.approve",
+        "attachments": "expenses.create",
+    }
+
+    def get_queryset(self):
+        queryset = Expense.objects.filter(company=self.request.user.company)
+        date_from = parse_date(self.request.query_params.get("date_from") or "")
+        date_to = parse_date(self.request.query_params.get("date_to") or "")
+        vendor = self.request.query_params.get("vendor")
+        amount_min = self.request.query_params.get("amount_min")
+        amount_max = self.request.query_params.get("amount_max")
+
+        if date_from:
+            queryset = queryset.filter(date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(date__lte=date_to)
+        if vendor:
+            queryset = queryset.filter(vendor_name__icontains=vendor)
+        if amount_min:
+            queryset = queryset.filter(amount__gte=amount_min)
+        if amount_max:
+            queryset = queryset.filter(amount__lte=amount_max)
+        return queryset.order_by("-date", "-id")
+
+    def perform_create(self, serializer):
+        status_value = serializer.validated_data.get("status", Expense.Status.DRAFT)
+        if status_value == Expense.Status.APPROVED and not user_has_permission(
+            self.request.user, "expenses.approve"
+        ):
+            raise PermissionError("You do not have permission to approve expenses.")
+        expense = serializer.save(company=self.request.user.company, created_by=self.request.user)
+        if expense.status == Expense.Status.APPROVED:
+            ensure_expense_journal_entry(expense)
+
+    def perform_update(self, serializer):
+        expense = self.get_object()
+        if expense.status == Expense.Status.APPROVED:
+            raise PermissionError("Approved expenses cannot be edited.")
+        status_value = serializer.validated_data.get("status", expense.status)
+        if status_value == Expense.Status.APPROVED and not user_has_permission(
+            self.request.user, "expenses.approve"
+        ):
+            raise PermissionError("You do not have permission to approve expenses.")
+        expense = serializer.save()
+        if expense.status == Expense.Status.APPROVED:
+            ensure_expense_journal_entry(expense)
+
+    def handle_exception(self, exc):
+        if isinstance(exc, PermissionError):
+            return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        return super().handle_exception(exc)
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, *args, **kwargs):
+        expense = self.get_object()
+        if expense.status == Expense.Status.APPROVED:
+            return Response(
+                {"detail": "Expense is already approved."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        expense.status = Expense.Status.APPROVED
+        expense.save(update_fields=["status"])
+        ensure_expense_journal_entry(expense)
+        serializer = ExpenseSerializer(expense, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="attachments")
+    def attachments(self, request, *args, **kwargs):
+        expense = self.get_object()
+        serializer = ExpenseAttachmentCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        attachment = serializer.save(
+            expense=expense,
+            uploaded_by=request.user,
+        )
+        output = ExpenseAttachmentSerializer(attachment, context={"request": request})
+        return Response(output.data, status=status.HTTP_201_CREATED)

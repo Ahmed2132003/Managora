@@ -46,5 +46,9 @@ export const endpoints = {
     applyTemplate: "/api/accounting/coa/apply-template/",
     journalEntries: "/api/accounting/journal-entries/",
     journalEntry: (id: number) => `/api/accounting/journal-entries/${id}/`,
+    expenses: "/api/expenses/",
+    expense: (id: number) => `/api/expenses/${id}/`,
+    expenseApprove: (id: number) => `/api/expenses/${id}/approve/`,
+    expenseAttachments: (id: number) => `/api/expenses/${id}/attachments/`,
   },
 };
