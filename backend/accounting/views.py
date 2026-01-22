@@ -11,6 +11,8 @@ from accounting.models import Account, AccountMapping, CostCenter, Expense, Jour
 
 from accounting.serializers import (
     AccountSerializer,
+    AccountMappingBulkSetSerializer,
+    AccountMappingSerializer,
     ApplyTemplateSerializer,
     CostCenterSerializer,
     ExpenseAttachmentCreateSerializer,
