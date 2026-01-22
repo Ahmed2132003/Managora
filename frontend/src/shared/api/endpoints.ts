@@ -41,7 +41,10 @@ export const endpoints = {
   accounting: {
     accounts: "/api/accounting/accounts/",
     account: (id: number) => `/api/accounting/accounts/${id}/`,
-    costCenters: "/api/accounting/cost-centers/",
+    mappings: "/api/accounting/mappings/",
+    mapping: (id: number) => `/api/accounting/mappings/${id}/`,
+    mappingsBulkSet: "/api/accounting/mappings/bulk-set/",
+    costCenters: "/api/accounting/cost-centers/",    
     costCenter: (id: number) => `/api/accounting/cost-centers/${id}/`,
     applyTemplate: "/api/accounting/coa/apply-template/",
     journalEntries: "/api/accounting/journal-entries/",

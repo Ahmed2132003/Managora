@@ -7,7 +7,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounting.models import Account, CostCenter , Expense, JournalEntry
+from accounting.models import Account, AccountMapping, CostCenter, Expense, JournalEntry
+
 from accounting.serializers import (
     AccountSerializer,
     ApplyTemplateSerializer,
@@ -71,6 +72,71 @@ class CostCenterViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(company=self.request.user.company)
+
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Account Mapping"], summary="List account mappings"),
+    retrieve=extend_schema(tags=["Account Mapping"], summary="Retrieve account mapping"),
+    create=extend_schema(tags=["Account Mapping"], summary="Create account mapping"),
+    partial_update=extend_schema(tags=["Account Mapping"], summary="Update account mapping"),
+)
+class AccountMappingViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
+    serializer_class = AccountMappingSerializer
+    permission_classes = [IsAuthenticated]
+    permission_map = {
+        "list": "accounting.view",
+        "retrieve": "accounting.view",
+        "create": "accounting.manage_coa",
+        "partial_update": "accounting.manage_coa",
+        "update": "accounting.manage_coa",
+        "bulk_set": "accounting.manage_coa",
+    }
+
+    def get_queryset(self):
+        return AccountMapping.objects.filter(company=self.request.user.company).select_related(
+            "account"
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(company=self.request.user.company)
+
+    @action(detail=False, methods=["post"], url_path="bulk-set")
+    def bulk_set(self, request):
+        serializer = AccountMappingBulkSetSerializer(data={"mappings": request.data})
+        serializer.is_valid(raise_exception=True)
+        mappings = serializer.validated_data["mappings"]
+        company = request.user.company
+
+        account_ids = {account_id for account_id in mappings.values() if account_id}
+        accounts = {
+            account.id: account
+            for account in Account.objects.filter(company=company, id__in=account_ids)
+        }
+        if len(accounts) != len(account_ids):
+            return Response(
+                {"detail": "Account must belong to the same company."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        updated = []
+        for key, account_id in mappings.items():
+            required = key in AccountMapping.REQUIRED_KEYS
+            account = accounts.get(account_id) if account_id else None
+            if required and not account:
+                return Response(
+                    {"detail": f"Mapping {key} is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            mapping, _ = AccountMapping.objects.update_or_create(
+                company=company,
+                key=key,
+                defaults={"account": account, "required": required},
+            )
+            updated.append(mapping)
+
+        output = AccountMappingSerializer(updated, many=True, context={"request": request})
+        return Response(output.data, status=status.HTTP_200_OK)
 
 
 @extend_schema(tags=["Chart of Accounts"], summary="Apply COA template")

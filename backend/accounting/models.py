@@ -79,6 +79,60 @@ class Account(models.Model):
         return f"{self.code} - {self.name}"
 
 
+class AccountMapping(models.Model):
+    class Key(models.TextChoices):
+        PAYROLL_SALARIES_EXPENSE = "PAYROLL_SALARIES_EXPENSE", "Payroll Salaries Expense"
+        PAYROLL_PAYABLE = "PAYROLL_PAYABLE", "Payroll Payable"
+        EXPENSE_DEFAULT_CASH = "EXPENSE_DEFAULT_CASH", "Expense Default Cash"
+        EXPENSE_DEFAULT_AP = "EXPENSE_DEFAULT_AP", "Expense Default AP"
+
+    REQUIRED_KEYS = {
+        Key.PAYROLL_SALARIES_EXPENSE,
+        Key.PAYROLL_PAYABLE,
+    }
+
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="account_mappings",
+    )
+    key = models.CharField(max_length=64, choices=Key.choices)
+    account = models.ForeignKey(
+        "accounting.Account",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="account_mappings",
+    )
+    required = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "key"],
+                name="unique_account_mapping_per_company_key",
+            ),
+        ]
+
+    def clean(self):
+        if self.account and self.account.company_id != self.company_id:
+            raise ValidationError("Account must belong to the same company.")
+
+    def save(self, *args, **kwargs):
+        if not self.required:
+            super().save(*args, **kwargs)
+            return
+        if not self.account_id and self.key in self.REQUIRED_KEYS:
+            raise ValidationError("Required account mapping must include an account.")
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.company.name} - {self.key}"
+
+
+
 class CostCenter(models.Model):
     company = models.ForeignKey(
         "core.Company",
@@ -107,6 +161,7 @@ class JournalEntry(models.Model):
     class ReferenceType(models.TextChoices):
         MANUAL = "manual", "Manual"
         PAYROLL = "payroll", "Payroll"
+        PAYROLL_PERIOD = "payroll_period", "Payroll Period"
         EXPENSE = "expense", "Expense"
         ADJUSTMENT = "adjustment", "Adjustment"
 

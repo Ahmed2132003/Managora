@@ -6,6 +6,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from accounting.models import Account, AccountMapping, JournalEntry
 from core.models import Company, Permission, Role, RolePermission, UserRole
 from hr.models import (
     AttendanceRecord,
@@ -14,6 +15,7 @@ from hr.models import (
     LeaveType,
     LoanAdvance,
     PayrollPeriod,
+    PayrollRun,
     SalaryComponent,
     SalaryStructure,
 )
@@ -182,7 +184,7 @@ class PayrollApiTests(APITestCase):
             year=2026,
             month=2,
         )
-
+        
         lock_url = reverse("payroll-period-lock", kwargs={"id": period.id})
         response = self.client.post(lock_url, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -190,3 +192,78 @@ class PayrollApiTests(APITestCase):
         generate_url = reverse("payroll-period-generate", kwargs={"id": period.id})
         response = self.client.post(generate_url, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_lock_requires_account_mappings(self):
+        self._auth(self.hr_user)
+        period = PayrollPeriod.objects.create(
+            company=self.company,
+            year=2026,
+            month=3,
+        )
+        run = PayrollRun.objects.create(
+            period=period,
+            employee=self.employee,
+            earnings_total=Decimal("1000.00"),
+            deductions_total=Decimal("200.00"),
+            net_total=Decimal("800.00"),
+        )
+        self.assertEqual(run.company_id, self.company.id)
+
+        lock_url = reverse("payroll-period-lock", kwargs={"id": period.id})
+        response = self.client.post(lock_url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        period.refresh_from_db()
+        self.assertEqual(period.status, PayrollPeriod.Status.DRAFT)
+
+    def test_lock_creates_payroll_journal_entry(self):
+        self._auth(self.hr_user)
+        period = PayrollPeriod.objects.create(
+            company=self.company,
+            year=2026,
+            month=4,
+        )
+        PayrollRun.objects.create(
+            period=period,
+            employee=self.employee,
+            earnings_total=Decimal("1200.00"),
+            deductions_total=Decimal("200.00"),
+            net_total=Decimal("1000.00"),
+        )
+
+        salaries_account = Account.objects.create(
+            company=self.company,
+            code="5000",
+            name="Salaries Expense",
+            type=Account.Type.EXPENSE,
+        )
+        payable_account = Account.objects.create(
+            company=self.company,
+            code="2100",
+            name="Payroll Payable",
+            type=Account.Type.LIABILITY,
+        )
+        AccountMapping.objects.create(
+            company=self.company,
+            key=AccountMapping.Key.PAYROLL_SALARIES_EXPENSE,
+            account=salaries_account,
+            required=True,
+        )
+        AccountMapping.objects.create(
+            company=self.company,
+            key=AccountMapping.Key.PAYROLL_PAYABLE,
+            account=payable_account,
+            required=True,
+        )
+
+        lock_url = reverse("payroll-period-lock", kwargs={"id": period.id})
+        response = self.client.post(lock_url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        entry = JournalEntry.objects.get(
+            company=self.company,
+            reference_type=JournalEntry.ReferenceType.PAYROLL_PERIOD,
+            reference_id=str(period.id),
+        )
+        lines = {line.account_id: line for line in entry.lines.all()}
+        self.assertEqual(lines[salaries_account.id].debit, Decimal("1200.00"))
+        self.assertEqual(lines[payable_account.id].credit, Decimal("1000.00"))

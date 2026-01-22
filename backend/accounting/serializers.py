@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from accounting.models import (
     Account,
+    AccountMapping,
     ChartOfAccounts,
     CostCenter,
     Expense,
@@ -10,6 +11,7 @@ from accounting.models import (
     JournalEntry,
     JournalLine,
 )
+
 from accounting.services.journal import post_journal_entry
 from accounting.services.seed import TEMPLATES
 
@@ -198,6 +200,67 @@ class ExpenseSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Cost center must belong to the same company.")
         return attrs
 
+
+class AccountMappingSerializer(serializers.ModelSerializer):
+    account_name = serializers.CharField(source="account.name", read_only=True)
+    account_code = serializers.CharField(source="account.code", read_only=True)
+
+    class Meta:
+        model = AccountMapping
+        fields = [
+            "id",
+            "key",
+            "account",
+            "account_name",
+            "account_code",
+            "required",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+    def validate_account(self, account):
+        if not account:
+            return account
+        company = self.context["request"].user.company
+        if account.company_id != company.id:
+            raise serializers.ValidationError("Account must belong to the same company.")
+        return account
+
+    def validate(self, attrs):
+        key = attrs.get("key") or getattr(self.instance, "key", None)
+        account = attrs.get("account") or getattr(self.instance, "account", None)
+        required = attrs.get("required", getattr(self.instance, "required", None))
+        if required is None:
+            required = key in AccountMapping.REQUIRED_KEYS
+            attrs["required"] = required
+        if key in AccountMapping.REQUIRED_KEYS and required is False:
+            raise serializers.ValidationError("Required mappings cannot be optional.")
+        if key in AccountMapping.REQUIRED_KEYS and not account:
+            raise serializers.ValidationError("Required account mapping must include an account.")
+        return attrs
+
+    def create(self, validated_data):
+        key = validated_data.get("key")
+        if "required" not in validated_data:
+            validated_data["required"] = key in AccountMapping.REQUIRED_KEYS
+        return super().create(validated_data)
+
+
+class AccountMappingBulkSetSerializer(serializers.Serializer):
+    mappings = serializers.DictField(
+        child=serializers.IntegerField(allow_null=True),
+        allow_empty=False,
+    )
+
+    def validate_mappings(self, mappings):
+        allowed_keys = {key for key, _ in AccountMapping.Key.choices}
+        invalid_keys = [key for key in mappings.keys() if key not in allowed_keys]
+        if invalid_keys:
+            raise serializers.ValidationError(
+                f"Invalid mapping keys: {', '.join(sorted(invalid_keys))}."
+            )
+        return mappings
 
 class ExpenseAttachmentCreateSerializer(serializers.ModelSerializer):
     class Meta:
