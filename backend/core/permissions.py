@@ -50,6 +50,10 @@ PERMISSION_DEFINITIONS = {
     "hr.payroll.generate": "Generate payroll runs",
     "hr.payroll.lock": "Lock payroll period",
     "hr.payroll.payslip": "Download payslips",
+    "analytics.view_ceo": "View CEO analytics dashboards",
+    "analytics.view_finance": "View finance analytics dashboards",
+    "analytics.view_hr": "View HR analytics dashboards",
+    "analytics.manage_rebuild": "Rebuild analytics KPIs",
 }
 
 ROLE_PERMISSION_MAP = {
@@ -64,8 +68,9 @@ ROLE_PERMISSION_MAP = {
         "hr.employees.*",
         "hr.documents.*",
         "hr.payroll.*",
+        "analytics.view_hr",
     ],     
-    
+        
     "Accountant": [
         "accounting.*",
         "accounting.view",
@@ -77,7 +82,8 @@ ROLE_PERMISSION_MAP = {
         "customers.view",
         "customers.create",
         "customers.edit",
-    ],                   
+        "analytics.view_finance",
+    ],                                        
     "Sales": [
         "customers.view",
     ],

@@ -2,6 +2,8 @@ from pathlib import Path
 import os
 from datetime import timedelta
 
+from celery.schedules import crontab
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
@@ -26,6 +28,7 @@ INSTALLED_APPS = [
     "core.apps.CoreConfig",
     "hr.apps.HrConfig",
     "accounting.apps.AccountingConfig",
+    "analytics.apps.AnalyticsConfig",
 ]
 
 MIDDLEWARE = [
@@ -107,7 +110,6 @@ REST_FRAMEWORK = {
 }
 
 
-from datetime import timedelta
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
@@ -131,3 +133,22 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5174",
 ]
 CORS_ALLOW_CREDENTIALS = True
+
+# Celery
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+
+CELERY_BEAT_SCHEDULE = {
+    "analytics-build-yesterday": {
+        "task": "analytics.tasks.build_yesterday_kpis",
+        "schedule": crontab(hour=2, minute=0),
+    },
+    "analytics-backfill-30-days": {
+        "task": "analytics.tasks.backfill_last_30_days",
+        "schedule": crontab(hour=3, minute=0, day_of_week="mon"),
+    },
+}
