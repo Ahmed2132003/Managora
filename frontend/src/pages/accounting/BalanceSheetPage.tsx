@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Card, Group, Stack, Table, Text, TextInput, Title, Button } from "@mantine/core";
 import { isForbiddenError } from "../../shared/api/errors";
-import { useBalanceSheet } from "../../shared/accounting/hooks";
+import { type BalanceSheetLine, useBalanceSheet } from "../../shared/accounting/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { downloadCsv, formatAmount } from "../../shared/accounting/reporting.ts";
 
@@ -41,7 +41,7 @@ export function BalanceSheetPage() {
     downloadCsv(`balance-sheet-${asOf || "as-of"}.csv`, headers, rows);
   }
 
-  function renderSection(title: string, rows: typeof balanceSheetQuery.data.assets) {
+  function renderSection(title: string, rows: BalanceSheetLine[]) {    
     return (
       <Card withBorder radius="md" p="md">
         <Title order={5} mb="sm">
