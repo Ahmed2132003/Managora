@@ -204,7 +204,7 @@ export function useUploadExpenseAttachment() {
   return useMutation({
     mutationFn: async ({ id, file }: { id: number; file: File }) => {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", file);      
       const response = await http.post(
         endpoints.accounting.expenseAttachments(id),
         formData,
@@ -213,6 +213,135 @@ export function useUploadExpenseAttachment() {
         }
       );
       return response.data as Expense["attachments"][number];
+    },
+  });
+}
+
+export type TrialBalanceRow = {
+  account_id: number;
+  code: string;
+  name: string;
+  type: string;
+  debit: string;
+  credit: string;
+};
+
+export type GeneralLedgerLine = {
+  id: number;
+  date: string;
+  description: string;
+  debit: string;
+  credit: string;
+  memo: string;
+  reference_type: string;
+  reference_id: string | null;
+  cost_center: { id: number; code: string; name: string } | null;
+  running_balance: string;
+};
+
+export type GeneralLedgerResponse = {
+  account: Account;
+  lines: GeneralLedgerLine[];
+};
+
+export type ProfitLossAccount = {
+  account_id: number;
+  code: string;
+  name: string;
+  type: string;
+  debit: string;
+  credit: string;
+  net: string;
+};
+
+export type ProfitLossResponse = {
+  date_from: string;
+  date_to: string;
+  income_total: string;
+  expense_total: string;
+  net_profit: string;
+  income_accounts: ProfitLossAccount[];
+  expense_accounts: ProfitLossAccount[];
+};
+
+export type BalanceSheetLine = {
+  account_id: number | null;
+  code: string;
+  name: string;
+  balance: string;
+};
+
+export type BalanceSheetResponse = {
+  as_of: string;
+  assets: BalanceSheetLine[];
+  liabilities: BalanceSheetLine[];
+  equity: BalanceSheetLine[];
+  totals: {
+    assets_total: string;
+    liabilities_total: string;
+    equity_total: string;
+    liabilities_equity_total: string;
+  };
+};
+
+export function useTrialBalance(dateFrom?: string, dateTo?: string) {
+  return useQuery({
+    queryKey: ["trial-balance", dateFrom, dateTo],
+    enabled: Boolean(dateFrom && dateTo),
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        date_from: dateFrom ?? "",
+        date_to: dateTo ?? "",
+      });
+      const url = `${endpoints.reports.trialBalance}?${params.toString()}`;
+      const response = await http.get<TrialBalanceRow[]>(url);
+      return response.data;
+    },
+  });
+}
+
+export function useGeneralLedger(accountId?: number, dateFrom?: string, dateTo?: string) {
+  return useQuery({
+    queryKey: ["general-ledger", accountId, dateFrom, dateTo],
+    enabled: Boolean(accountId && dateFrom && dateTo),
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        account_id: String(accountId ?? ""),
+        date_from: dateFrom ?? "",
+        date_to: dateTo ?? "",
+      });
+      const url = `${endpoints.reports.generalLedger}?${params.toString()}`;
+      const response = await http.get<GeneralLedgerResponse>(url);
+      return response.data;
+    },
+  });
+}
+
+export function useProfitLoss(dateFrom?: string, dateTo?: string) {
+  return useQuery({
+    queryKey: ["profit-loss", dateFrom, dateTo],
+    enabled: Boolean(dateFrom && dateTo),
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        date_from: dateFrom ?? "",
+        date_to: dateTo ?? "",
+      });
+      const url = `${endpoints.reports.pnl}?${params.toString()}`;
+      const response = await http.get<ProfitLossResponse>(url);
+      return response.data;
+    },
+  });
+}
+
+export function useBalanceSheet(asOf?: string) {
+  return useQuery({
+    queryKey: ["balance-sheet", asOf],
+    enabled: Boolean(asOf),
+    queryFn: async () => {
+      const params = new URLSearchParams({ as_of: asOf ?? "" });
+      const url = `${endpoints.reports.balanceSheet}?${params.toString()}`;
+      const response = await http.get<BalanceSheetResponse>(url);
+      return response.data;
     },
   });
 }

@@ -1,0 +1,163 @@
+from django.contrib.auth import get_user_model
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from accounting.models import Account
+from accounting.services.journal import post_journal_entry
+from core.models import Company, Permission, Role, RolePermission, UserRole
+
+User = get_user_model()
+
+
+class ReportsApiTests(APITestCase):
+    def setUp(self):
+        self.company = Company.objects.create(name="Company A")
+        self.other_company = Company.objects.create(name="Company B")
+
+        self.accountant = User.objects.create_user(
+            username="accountant",
+            password="pass12345",
+            company=self.company,
+        )
+        self.hr = User.objects.create_user(
+            username="hr",
+            password="pass12345",
+            company=self.company,
+        )
+
+        accountant_role = Role.objects.create(company=self.company, name="Accountant")
+        hr_role = Role.objects.create(company=self.company, name="HR")
+        UserRole.objects.create(user=self.accountant, role=accountant_role)
+        UserRole.objects.create(user=self.hr, role=hr_role)
+
+        permission = Permission.objects.create(code="accounting.reports.view", name="View reports")
+        RolePermission.objects.create(role=accountant_role, permission=permission)
+
+        self.cash = Account.objects.create(
+            company=self.company,
+            code="1000",
+            name="Cash",
+            type=Account.Type.ASSET,
+        )
+        self.utilities = Account.objects.create(
+            company=self.company,
+            code="5100",
+            name="Utilities",
+            type=Account.Type.EXPENSE,
+        )
+        self.revenue = Account.objects.create(
+            company=self.company,
+            code="4000",
+            name="Revenue",
+            type=Account.Type.INCOME,
+        )
+        self.equity = Account.objects.create(
+            company=self.company,
+            code="3000",
+            name="Equity",
+            type=Account.Type.EQUITY,
+        )
+        self.other_company_account = Account.objects.create(
+            company=self.other_company,
+            code="2000",
+            name="Other",
+            type=Account.Type.ASSET,
+        )
+
+        post_journal_entry(
+            company=self.company,
+            payload={
+                "date": "2024-01-05",
+                "memo": "Capital injection",
+                "lines": [
+                    {"account_id": self.cash.id, "debit": "2000.00", "credit": "0"},
+                    {"account_id": self.equity.id, "debit": "0", "credit": "2000.00"},
+                ],
+            },
+            created_by=self.accountant,
+        )
+        post_journal_entry(
+            company=self.company,
+            payload={
+                "date": "2024-01-15",
+                "memo": "Utilities",
+                "lines": [
+                    {"account_id": self.utilities.id, "debit": "1000.00", "credit": "0"},
+                    {"account_id": self.cash.id, "debit": "0", "credit": "1000.00"},
+                ],
+            },
+            created_by=self.accountant,
+        )
+        post_journal_entry(
+            company=self.company,
+            payload={
+                "date": "2024-01-20",
+                "memo": "Service revenue",
+                "lines": [
+                    {"account_id": self.cash.id, "debit": "1500.00", "credit": "0"},
+                    {"account_id": self.revenue.id, "debit": "0", "credit": "1500.00"},
+                ],
+            },
+            created_by=self.accountant,
+        )
+
+    def auth(self, username):
+        url = reverse("token_obtain_pair")
+        res = self.client.post(
+            url, {"username": username, "password": "pass12345"}, format="json"
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {res.data['access']}")
+
+    def test_trial_balance_returns_totals(self):
+        self.auth("accountant")
+        url = reverse("report-trial-balance")
+        res = self.client.get(
+            url, {"date_from": "2024-01-01", "date_to": "2024-01-31"}
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        codes = {row["code"]: row for row in res.data}
+        self.assertEqual(codes["1000"]["credit"], "1000.00")
+        self.assertEqual(codes["5100"]["debit"], "1000.00")
+        self.assertEqual(codes["4000"]["credit"], "1500.00")
+
+    def test_general_ledger_returns_running_balance(self):
+        self.auth("accountant")
+        url = reverse("report-general-ledger")
+        res = self.client.get(
+            url,
+            {"account_id": self.cash.id, "date_from": "2024-01-01", "date_to": "2024-01-31"},
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["account"]["code"], "1000")
+        self.assertEqual(len(res.data["lines"]), 3)
+        self.assertEqual(res.data["lines"][-1]["running_balance"], "2500.00")
+
+    def test_profit_and_loss_totals(self):
+        self.auth("accountant")
+        url = reverse("report-pnl")
+        res = self.client.get(
+            url, {"date_from": "2024-01-01", "date_to": "2024-01-31"}
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["income_total"], "1500.00")
+        self.assertEqual(res.data["expense_total"], "1000.00")
+        self.assertEqual(res.data["net_profit"], "500.00")
+
+    def test_balance_sheet_balances(self):
+        self.auth("accountant")
+        url = reverse("report-balance-sheet")
+        res = self.client.get(url, {"as_of": "2024-01-31"})
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        totals = res.data["totals"]
+        self.assertEqual(totals["assets_total"], "2500.00")
+        self.assertEqual(totals["liabilities_equity_total"], "2500.00")
+
+    def test_user_without_permission_cannot_view_reports(self):
+        self.auth("hr")
+        url = reverse("report-trial-balance")
+        res = self.client.get(
+            url, {"date_from": "2024-01-01", "date_to": "2024-01-31"}
+        )
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)

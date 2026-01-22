@@ -54,4 +54,10 @@ export const endpoints = {
     expenseApprove: (id: number) => `/api/expenses/${id}/approve/`,
     expenseAttachments: (id: number) => `/api/expenses/${id}/attachments/`,
   },
+  reports: {
+    trialBalance: "/api/reports/trial-balance/",
+    generalLedger: "/api/reports/general-ledger/",
+    pnl: "/api/reports/pnl/",
+    balanceSheet: "/api/reports/balance-sheet/",
+  },
 };

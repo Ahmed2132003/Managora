@@ -1,4 +1,7 @@
-from django.db.models import Q
+from decimal import Decimal
+
+from django.db.models import Q, Sum, Value, DecimalField
+from django.db.models.functions import Coalesce
 from django.utils.dateparse import parse_date
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status, viewsets
@@ -7,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounting.models import Account, AccountMapping, CostCenter, Expense, JournalEntry
+from accounting.models import Account, AccountMapping, CostCenter, Expense, JournalEntry, JournalLine
 
 from accounting.serializers import (
     AccountSerializer,
@@ -24,6 +27,20 @@ from accounting.serializers import (
 from accounting.services.expenses import ensure_expense_journal_entry
 from accounting.services.seed import seed_coa_template
 from core.permissions import HasPermission, PermissionByActionMixin, user_has_permission
+
+
+def _format_amount(value):
+    if value is None:
+        value = Decimal("0")
+    return f"{Decimal(value):.2f}"
+
+
+def _parse_date_param(request, param_name):
+    value = request.query_params.get(param_name)
+    if not value:
+        return None
+    return parse_date(value)
+
 
 
 @extend_schema_view(
@@ -319,3 +336,334 @@ class ExpenseViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         )
         output = ExpenseAttachmentSerializer(attachment, context={"request": request})
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Reports"], summary="Trial balance")
+class TrialBalanceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = super().get_permissions()
+        permissions.append(HasPermission("accounting.reports.view"))
+        return permissions
+
+    def get(self, request):
+        date_from = _parse_date_param(request, "date_from")
+        date_to = _parse_date_param(request, "date_to")
+        if not date_from or not date_to:
+            return Response(
+                {"detail": "date_from and date_to are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if date_from > date_to:
+            return Response(
+                {"detail": "date_from must be before date_to."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        lines = (
+            JournalLine.objects.filter(
+                company=request.user.company,
+                entry__status=JournalEntry.Status.POSTED,
+                entry__date__gte=date_from,
+                entry__date__lte=date_to,
+            )
+            .values("account_id", "account__code", "account__name", "account__type")
+            .annotate(
+                debit=Coalesce(
+                    Sum("debit"), Value(0), output_field=DecimalField(max_digits=14, decimal_places=2)
+                ),
+                credit=Coalesce(
+                    Sum("credit"), Value(0), output_field=DecimalField(max_digits=14, decimal_places=2)
+                ),
+            )
+            .order_by("account__code")
+        )
+
+        data = [
+            {
+                "account_id": row["account_id"],
+                "code": row["account__code"],
+                "name": row["account__name"],
+                "type": row["account__type"],
+                "debit": _format_amount(row["debit"]),
+                "credit": _format_amount(row["credit"]),
+            }
+            for row in lines
+        ]
+        return Response(data, status=status.HTTP_200_OK)
+
+
+@extend_schema(tags=["Reports"], summary="General ledger")
+class GeneralLedgerView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = super().get_permissions()
+        permissions.append(HasPermission("accounting.reports.view"))
+        return permissions
+
+    def get(self, request):
+        account_id = request.query_params.get("account_id")
+        date_from = _parse_date_param(request, "date_from")
+        date_to = _parse_date_param(request, "date_to")
+        if not account_id or not date_from or not date_to:
+            return Response(
+                {"detail": "account_id, date_from, and date_to are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if date_from > date_to:
+            return Response(
+                {"detail": "date_from must be before date_to."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        account = Account.objects.filter(company=request.user.company, id=account_id).first()
+        if not account:
+            return Response({"detail": "Account not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        journal_lines = (
+            JournalLine.objects.filter(
+                company=request.user.company,
+                account=account,
+                entry__status=JournalEntry.Status.POSTED,
+                entry__date__gte=date_from,
+                entry__date__lte=date_to,
+            )
+            .select_related("entry", "cost_center")
+            .order_by("entry__date", "id")
+        )
+
+        running_balance = Decimal("0")
+        lines = []
+        for line in journal_lines:
+            running_balance += (line.debit - line.credit)
+            lines.append(
+                {
+                    "id": line.id,
+                    "date": line.entry.date.isoformat(),
+                    "description": line.description,
+                    "debit": _format_amount(line.debit),
+                    "credit": _format_amount(line.credit),
+                    "memo": line.entry.memo,
+                    "reference_type": line.entry.reference_type,
+                    "reference_id": line.entry.reference_id,
+                    "cost_center": (
+                        {
+                            "id": line.cost_center.id,
+                            "code": line.cost_center.code,
+                            "name": line.cost_center.name,
+                        }
+                        if line.cost_center
+                        else None
+                    ),
+                    "running_balance": _format_amount(running_balance),
+                }
+            )
+
+        return Response(
+            {
+                "account": {
+                    "id": account.id,
+                    "code": account.code,
+                    "name": account.name,
+                    "type": account.type,
+                },
+                "lines": lines,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+@extend_schema(tags=["Reports"], summary="Profit and loss")
+class ProfitLossView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = super().get_permissions()
+        permissions.append(HasPermission("accounting.reports.view"))
+        return permissions
+
+    def get(self, request):
+        date_from = _parse_date_param(request, "date_from")
+        date_to = _parse_date_param(request, "date_to")
+        if not date_from or not date_to:
+            return Response(
+                {"detail": "date_from and date_to are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if date_from > date_to:
+            return Response(
+                {"detail": "date_from must be before date_to."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        rows = (
+            JournalLine.objects.filter(
+                company=request.user.company,
+                entry__status=JournalEntry.Status.POSTED,
+                entry__date__gte=date_from,
+                entry__date__lte=date_to,
+                account__type__in=[Account.Type.INCOME, Account.Type.EXPENSE],
+            )
+            .values("account_id", "account__code", "account__name", "account__type")
+            .annotate(
+                debit=Coalesce(
+                    Sum("debit"), Value(0), output_field=DecimalField(max_digits=14, decimal_places=2)
+                ),
+                credit=Coalesce(
+                    Sum("credit"), Value(0), output_field=DecimalField(max_digits=14, decimal_places=2)
+                ),
+            )
+            .order_by("account__code")
+        )
+
+        income_accounts = []
+        expense_accounts = []
+        income_total = Decimal("0")
+        expense_total = Decimal("0")
+
+        for row in rows:
+            debit = Decimal(row["debit"])
+            credit = Decimal(row["credit"])
+            account_type = row["account__type"]
+            if account_type == Account.Type.INCOME:
+                net = credit - debit
+                income_total += net
+            else:
+                net = debit - credit
+                expense_total += net
+
+            item = {
+                "account_id": row["account_id"],
+                "code": row["account__code"],
+                "name": row["account__name"],
+                "type": account_type,
+                "debit": _format_amount(debit),
+                "credit": _format_amount(credit),
+                "net": _format_amount(net),
+            }
+            if account_type == Account.Type.INCOME:
+                income_accounts.append(item)
+            else:
+                expense_accounts.append(item)
+
+        net_profit = income_total - expense_total
+
+        return Response(
+            {
+                "date_from": date_from.isoformat(),
+                "date_to": date_to.isoformat(),
+                "income_total": _format_amount(income_total),
+                "expense_total": _format_amount(expense_total),
+                "net_profit": _format_amount(net_profit),
+                "income_accounts": income_accounts,
+                "expense_accounts": expense_accounts,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+@extend_schema(tags=["Reports"], summary="Balance sheet")
+class BalanceSheetView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = super().get_permissions()
+        permissions.append(HasPermission("accounting.reports.view"))
+        return permissions
+
+    def get(self, request):
+        as_of = _parse_date_param(request, "as_of")
+        if not as_of:
+            return Response(
+                {"detail": "as_of is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        rows = (
+            JournalLine.objects.filter(
+                company=request.user.company,
+                entry__status=JournalEntry.Status.POSTED,
+                entry__date__lte=as_of,
+                account__type__in=[
+                    Account.Type.ASSET,
+                    Account.Type.LIABILITY,
+                    Account.Type.EQUITY,
+                ],
+            )
+            .values("account_id", "account__code", "account__name", "account__type")
+            .annotate(
+                debit=Coalesce(
+                    Sum("debit"), Value(0), output_field=DecimalField(max_digits=14, decimal_places=2)
+                ),
+                credit=Coalesce(
+                    Sum("credit"), Value(0), output_field=DecimalField(max_digits=14, decimal_places=2)
+                ),
+            )
+            .order_by("account__code")
+        )
+
+        assets = []
+        liabilities = []
+        equity = []
+        assets_total = Decimal("0")
+        liabilities_total = Decimal("0")
+        equity_total = Decimal("0")
+
+        for row in rows:
+            debit = Decimal(row["debit"])
+            credit = Decimal(row["credit"])
+            account_type = row["account__type"]
+            if account_type == Account.Type.ASSET:
+                balance = debit - credit
+                assets_total += balance
+            elif account_type == Account.Type.LIABILITY:
+                balance = credit - debit
+                liabilities_total += balance
+            else:
+                balance = credit - debit
+                equity_total += balance
+
+            item = {
+                "account_id": row["account_id"],
+                "code": row["account__code"],
+                "name": row["account__name"],
+                "balance": _format_amount(balance),
+            }
+            if account_type == Account.Type.ASSET:
+                assets.append(item)
+            elif account_type == Account.Type.LIABILITY:
+                liabilities.append(item)
+            else:
+                equity.append(item)
+
+        auto_equity = assets_total - liabilities_total - equity_total
+        if auto_equity.copy_abs() > Decimal("0.01"):
+            equity.append(
+                {
+                    "account_id": None,
+                    "code": "AUTO",
+                    "name": "Retained Earnings (Auto)",
+                    "balance": _format_amount(auto_equity),
+                }
+            )
+            equity_total += auto_equity
+
+        liabilities_equity_total = liabilities_total + equity_total
+
+        return Response(
+            {
+                "as_of": as_of.isoformat(),
+                "assets": assets,
+                "liabilities": liabilities,
+                "equity": equity,
+                "totals": {
+                    "assets_total": _format_amount(assets_total),
+                    "liabilities_total": _format_amount(liabilities_total),
+                    "equity_total": _format_amount(equity_total),
+                    "liabilities_equity_total": _format_amount(liabilities_equity_total),
+                },
+            },
+            status=status.HTTP_200_OK,
+        )

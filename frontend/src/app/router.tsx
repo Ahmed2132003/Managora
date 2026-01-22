@@ -22,8 +22,12 @@ import { AccountingSetupWizardPage } from "../pages/accounting/AccountingSetupWi
 import { JournalEntriesPage } from "../pages/accounting/JournalEntriesPage.tsx";
 import { JournalEntryDetailsPage } from "../pages/accounting/JournalEntryDetailsPage.tsx";
 import { ExpensesPage } from "../pages/accounting/ExpensesPage";
+import { TrialBalancePage } from "../pages/accounting/TrialBalancePage.tsx";
+import { GeneralLedgerPage } from "../pages/accounting/GeneralLedgerPage.tsx";
+import { ProfitLossPage } from "../pages/accounting/ProfitLossPage.tsx";
+import { BalanceSheetPage } from "../pages/accounting/BalanceSheetPage.tsx";
 export const router = createBrowserRouter([  
-  {
+  {    
     path: "/login",
     element: <LoginPage />,
   },
@@ -56,9 +60,13 @@ export const router = createBrowserRouter([
       { path: "accounting/journal-entries", element: <JournalEntriesPage /> },
       { path: "accounting/journal-entries/:id", element: <JournalEntryDetailsPage /> },
       { path: "accounting/expenses", element: <ExpensesPage /> },
+      { path: "accounting/reports/trial-balance", element: <TrialBalancePage /> },
+      { path: "accounting/reports/general-ledger", element: <GeneralLedgerPage /> },
+      { path: "accounting/reports/pnl", element: <ProfitLossPage /> },
+      { path: "accounting/reports/balance-sheet", element: <BalanceSheetPage /> },
     ],
   },                                                                                                
-  {
+  {    
     path: "*",
     element: <Navigate to="/login" replace />,
   },
