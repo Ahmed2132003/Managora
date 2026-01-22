@@ -310,6 +310,38 @@ class Payment(models.Model):
         return f"{self.company.name} - Payment {self.id}"
 
 
+class Alert(models.Model):
+    class Type(models.TextChoices):
+        OVERDUE_INVOICE = "overdue_invoice", "Overdue Invoice"
+        CREDIT_LIMIT = "credit_limit", "Credit Limit"
+
+    class Severity(models.TextChoices):
+        LOW = "low", "Low"
+        HIGH = "high", "High"
+
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="alerts",
+    )
+    type = models.CharField(max_length=32, choices=Type.choices)
+    entity_id = models.CharField(max_length=64)
+    severity = models.CharField(max_length=16, choices=Severity.choices)
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "type", "entity_id"],
+                name="unique_alert_per_company_entity",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.company.name} - {self.type} - {self.entity_id}"
+
+
 class JournalEntry(models.Model):
     class ReferenceType(models.TextChoices):
         MANUAL = "manual", "Manual"

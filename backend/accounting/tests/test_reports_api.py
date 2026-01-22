@@ -1,9 +1,12 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from accounting.models import Account
+from accounting.models import Account, Alert, Customer, Invoice
 from accounting.services.journal import post_journal_entry
 from core.models import Company, Permission, Role, RolePermission, UserRole
 
@@ -161,3 +164,53 @@ class ReportsApiTests(APITestCase):
             url, {"date_from": "2024-01-01", "date_to": "2024-01-31"}
         )
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_ar_aging_places_invoice_in_bucket(self):
+        self.auth("accountant")
+        customer = Customer.objects.create(company=self.company, code="C-100", name="ACME")
+        today = timezone.now().date()
+        Invoice.objects.create(
+            company=self.company,
+            invoice_number="INV-100",
+            customer=customer,
+            issue_date=today - timedelta(days=60),
+            due_date=today - timedelta(days=45),
+            status=Invoice.Status.ISSUED,
+            subtotal="500.00",
+            total_amount="500.00",
+        )
+
+        url = reverse("report-ar-aging")
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        entry = next(
+            (row for row in res.data if row["customer"]["id"] == customer.id),
+            None,
+        )
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["buckets"]["31_60"], "500.00")
+        self.assertEqual(entry["total_due"], "500.00")
+
+    def test_alerts_generated_once(self):
+        self.auth("accountant")
+        customer = Customer.objects.create(company=self.company, code="C-200", name="Beta")
+        today = timezone.now().date()
+        Invoice.objects.create(
+            company=self.company,
+            invoice_number="INV-200",
+            customer=customer,
+            issue_date=today - timedelta(days=70),
+            due_date=today - timedelta(days=50),
+            status=Invoice.Status.ISSUED,
+            subtotal="120.00",
+            total_amount="120.00",
+        )
+
+        url = reverse("alerts-list")
+        res_first = self.client.get(url)
+        res_second = self.client.get(url)
+
+        self.assertEqual(res_first.status_code, status.HTTP_200_OK)
+        self.assertEqual(res_second.status_code, status.HTTP_200_OK)
+        self.assertEqual(Alert.objects.filter(company=self.company).count(), 1)
+        self.assertEqual(res_second.data[0]["type"], Alert.Type.OVERDUE_INVOICE)

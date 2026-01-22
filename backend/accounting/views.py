@@ -2,7 +2,8 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db.models import Q, Sum, Value, DecimalField, ExpressionWrapper, F
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesceغ
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status, viewsets
@@ -16,6 +17,7 @@ from django.db import transaction
 from accounting.models import (
     Account,
     AccountMapping,
+    Alert,
     CostCenter,
     Customer,
     Expense,
@@ -42,6 +44,8 @@ from accounting.serializers import (
 )
 from accounting.services.expenses import ensure_expense_journal_entry
 from accounting.services.invoices import ensure_invoice_journal_entry
+from accounting.services.alerts import generate_alerts
+from accounting.services.receivables import get_open_invoices
 from accounting.services.seed import seed_coa_template
 from core.permissions import HasPermission, PermissionByActionMixin, user_has_permission
 
@@ -477,6 +481,109 @@ class PaymentViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         if customer_id:
             queryset = queryset.filter(customer_id=customer_id)
         return queryset.order_by("-payment_date", "-id")
+
+
+@extend_schema(tags=["Reports"], summary="Accounts receivable aging")
+class ARAgingReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = super().get_permissions()
+        permissions.append(HasPermission("accounting.reports.view"))
+        return permissions
+
+    def get(self, request):
+        today = timezone.now().date()
+        invoices = (
+            get_open_invoices(request.user.company)
+            .filter(due_date__lt=today)
+            .select_related("customer")
+        )
+
+        customers = {}
+        for invoice in invoices:
+            days_overdue = (today - invoice.due_date).days
+            if days_overdue <= 0:
+                continue
+            if days_overdue <= 30:
+                bucket = "0_30"
+            elif days_overdue <= 60:
+                bucket = "31_60"
+            elif days_overdue <= 90:
+                bucket = "61_90"
+            else:
+                bucket = "90_plus"
+
+            entry = customers.setdefault(
+                invoice.customer_id,
+                {
+                    "customer": {
+                        "id": invoice.customer_id,
+                        "name": invoice.customer.name,
+                    },
+                    "total_due": Decimal("0"),
+                    "buckets": {
+                        "0_30": Decimal("0"),
+                        "31_60": Decimal("0"),
+                        "61_90": Decimal("0"),
+                        "90_plus": Decimal("0"),
+                    },
+                },
+            )
+            entry["buckets"][bucket] += Decimal(invoice.remaining_balance)
+            entry["total_due"] += Decimal(invoice.remaining_balance)
+
+        data = []
+        for entry in sorted(customers.values(), key=lambda item: item["customer"]["name"]):
+            data.append(
+                {
+                    "customer": entry["customer"],
+                    "total_due": _format_amount(entry["total_due"]),
+                    "buckets": {
+                        key: _format_amount(value)
+                        for key, value in entry["buckets"].items()
+                    },
+                }
+            )
+        return Response(data, status=status.HTTP_200_OK)
+
+
+@extend_schema(tags=["Reports"], summary="Accounts receivable alerts")
+class AlertsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = super().get_permissions()
+        permissions.append(HasPermission("accounting.reports.view"))
+        return permissions
+
+    def get(self, request):
+        overdue_days = request.query_params.get("overdue_days")
+        if overdue_days:
+            try:
+                overdue_days_value = int(overdue_days)
+            except ValueError:
+                return Response(
+                    {"detail": "overdue_days must be an integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            overdue_days_value = 30
+
+        generate_alerts(request.user.company, overdue_days=overdue_days_value)
+        alerts = Alert.objects.filter(company=request.user.company).order_by("-created_at")
+        data = [
+            {
+                "id": alert.id,
+                "type": alert.type,
+                "entity_id": alert.entity_id,
+                "severity": alert.severity,
+                "message": alert.message,
+                "created_at": alert.created_at.isoformat(),
+            }
+            for alert in alerts
+        ]
+        return Response(data, status=status.HTTP_200_OK)
 
 
 @extend_schema(tags=["Reports"], summary="Trial balance")

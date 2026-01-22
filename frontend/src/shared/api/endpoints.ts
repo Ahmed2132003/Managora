@@ -61,9 +61,11 @@ export const endpoints = {
   customers: "/api/customers/",  
   customer: (id: number) => `/api/customers/${id}/`,  
   reports: {
+    arAging: "/api/reports/ar-aging/",
     trialBalance: "/api/reports/trial-balance/",
     generalLedger: "/api/reports/general-ledger/",
     pnl: "/api/reports/pnl/",
     balanceSheet: "/api/reports/balance-sheet/",
   },
+  alerts: "/api/alerts/",
 };

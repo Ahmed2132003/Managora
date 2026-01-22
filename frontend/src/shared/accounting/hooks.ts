@@ -317,8 +317,33 @@ export type BalanceSheetResponse = {
   };
 };
 
+export type AgingBuckets = {
+  "0_30": string;
+  "31_60": string;
+  "61_90": string;
+  "90_plus": string;
+};
+
+export type AgingCustomerRow = {
+  customer: {
+    id: number;
+    name: string;
+  };
+  total_due: string;
+  buckets: AgingBuckets;
+};
+
+export type AlertItem = {
+  id: number;
+  type: "overdue_invoice" | "credit_limit";
+  entity_id: string;
+  severity: "low" | "high";
+  message: string;
+  created_at: string;
+};
+
 export function useTrialBalance(dateFrom?: string, dateTo?: string) {
-  return useQuery({
+  return useQuery({    
     queryKey: ["trial-balance", dateFrom, dateTo],
     enabled: Boolean(dateFrom && dateTo),
     queryFn: async () => {
@@ -374,6 +399,26 @@ export function useBalanceSheet(asOf?: string) {
       const params = new URLSearchParams({ as_of: asOf ?? "" });
       const url = `${endpoints.reports.balanceSheet}?${params.toString()}`;
       const response = await http.get<BalanceSheetResponse>(url);
+      return response.data;
+    },
+  });
+}
+
+export function useAgingReport() {
+  return useQuery({
+    queryKey: ["ar-aging"],
+    queryFn: async () => {
+      const response = await http.get<AgingCustomerRow[]>(endpoints.reports.arAging);
+      return response.data;
+    },
+  });
+}
+
+export function useAlerts() {
+  return useQuery({
+    queryKey: ["alerts"],
+    queryFn: async () => {
+      const response = await http.get<AlertItem[]>(endpoints.alerts);
       return response.data;
     },
   });

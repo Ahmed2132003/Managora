@@ -26,6 +26,7 @@ import { TrialBalancePage } from "../pages/accounting/TrialBalancePage.tsx";
 import { GeneralLedgerPage } from "../pages/accounting/GeneralLedgerPage.tsx";
 import { ProfitLossPage } from "../pages/accounting/ProfitLossPage.tsx";
 import { BalanceSheetPage } from "../pages/accounting/BalanceSheetPage.tsx";
+import { AgingReportPage } from "../pages/accounting/AgingReportPage";
 import { CollectionsPage } from "../pages/accounting/CollectionsPage.tsx";
 import { CustomersPage } from "../pages/customers/CustomersPage";
 import { CustomerFormPage } from "../pages/customers/CustomerFormPage.tsx";
@@ -71,6 +72,7 @@ export const router = createBrowserRouter([
       { path: "accounting/reports/general-ledger", element: <GeneralLedgerPage /> },
       { path: "accounting/reports/pnl", element: <ProfitLossPage /> },
       { path: "accounting/reports/balance-sheet", element: <BalanceSheetPage /> },
+      { path: "accounting/reports/ar-aging", element: <AgingReportPage /> },      
       { path: "customers", element: <CustomersPage /> },
       { path: "customers/new", element: <CustomerFormPage /> },
       { path: "customers/:id/edit", element: <CustomerFormPage /> },
