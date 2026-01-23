@@ -20,7 +20,8 @@ import {
   YAxis,
 } from "recharts";
 import { useAnalyticsSummary, useAnalyticsKpis, useAnalyticsBreakdown } from "../../shared/analytics/insights.ts";
-import { buildRangeSelection, RangeOption } from "../../shared/analytics/range.ts";
+import { buildRangeSelection } from "../../shared/analytics/range.ts";
+import type { RangeOption } from "../../shared/analytics/range.ts";
 import { RangeSelector } from "../../shared/analytics/RangeSelector.ts";
 import { formatNumber, formatPercent } from "../../shared/analytics/format.ts";
 
