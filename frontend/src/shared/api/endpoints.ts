@@ -5,6 +5,10 @@ export const endpoints = {
   },
   me: "/api/me/",
   users: "/api/users/",
+  setup: {
+    templates: "/api/setup/templates/",
+    applyTemplate: "/api/setup/apply-template/",
+  },  
   hr: {
     departments: "/api/departments/",
     jobTitles: "/api/job-titles/",

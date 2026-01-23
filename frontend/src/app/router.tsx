@@ -38,6 +38,9 @@ import { CashForecastPage } from "../pages/analytics/CashForecastPage.tsx";
 import { CEODashboardPage } from "../pages/analytics/CEODashboardPage.tsx";
 import { FinanceDashboardPage } from "../pages/analytics/FinanceDashboardPage.tsx";
 import { HRDashboardPage } from "../pages/analytics/HRDashboardPage.tsx";
+import { SetupWizardPage } from "../pages/setup/SetupWizardPage";
+import { SetupTemplatesPage } from "../pages/setup/SetupTemplatesPage";
+import { SetupProgressPage } from "../pages/setup/SetupProgressPage";
 export const router = createBrowserRouter([     
   {    
     path: "/login",
@@ -83,11 +86,20 @@ export const router = createBrowserRouter([
       { path: "customers/:id/edit", element: <CustomerFormPage /> },
       { path: "invoices", element: <InvoicesPage /> },
       { path: "invoices/new", element: <InvoiceFormPage /> },
-      { path: "invoices/:id", element: <InvoiceDetailsPage /> },
-      { path: "analytics/alerts", element: <AlertsCenterPage /> },
-      { path: "analytics/forecast", element: <CashForecastPage /> },      
       { path: "analytics/ceo", element: <CEODashboardPage /> },
       { path: "analytics/finance", element: <FinanceDashboardPage /> },
+      { path: "analytics/hr", element: <HRDashboardPage /> },
+      {
+        path: "setup",
+        element: <SetupWizardPage />,
+        children: [
+          { index: true, element: <Navigate to="/setup/templates" replace /> },
+          { path: "templates", element: <SetupTemplatesPage /> },
+          { path: "progress", element: <SetupProgressPage /> },
+        ],
+      },
+    ],
+  },                                                                                                                                        
       { path: "analytics/hr", element: <HRDashboardPage /> },
     ],
   },                                                                                                                                  

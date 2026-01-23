@@ -43,8 +43,26 @@ TEMPLATES = {
             {"code": "CC-WH", "name": "Warehouse"},
         ],
     },
+    "retail_basic": {
+        "name": "Retail Basic COA",
+        "accounts": [
+            {"code": "1000", "name": "Cash", "type": Account.Type.ASSET},
+            {"code": "1010", "name": "Bank", "type": Account.Type.ASSET},
+            {"code": "1200", "name": "Accounts Receivable", "type": Account.Type.ASSET},
+            {"code": "2000", "name": "Accounts Payable", "type": Account.Type.LIABILITY},
+            {"code": "2100", "name": "Payroll Payable", "type": Account.Type.LIABILITY},
+            {"code": "3000", "name": "Owner's Equity", "type": Account.Type.EQUITY},
+            {"code": "4000", "name": "Sales Revenue", "type": Account.Type.INCOME},
+            {"code": "5000", "name": "Cost of Goods Sold", "type": Account.Type.EXPENSE},
+            {"code": "5200", "name": "Salaries Expense", "type": Account.Type.EXPENSE},
+            {"code": "5300", "name": "Rent Expense", "type": Account.Type.EXPENSE},
+        ],
+        "cost_centers": [
+            {"code": "CC-STORE", "name": "Store"},
+            {"code": "CC-ADMIN", "name": "Admin"},
+        ],
+    },
 }
-
 
 def seed_coa_template(company, template_key):
     if template_key not in TEMPLATES:

@@ -1,0 +1,42 @@
+{
+  "roles": [
+    {"name": "Admin", "permissions": ["*"]},
+    {
+      "name": "Store Manager",
+      "permissions": ["attendance.view_team", "employees.view_team", "approvals.*", "customers.view"]
+    },
+    {
+      "name": "Cashier",
+      "permissions": ["customers.view", "invoices.*"]
+    },
+    {
+      "name": "Accountant",
+      "permissions": ["accounting.*", "expenses.*", "customers.view", "customers.create", "customers.edit"]
+    }
+  ],
+  "attendance": {
+    "worksites": [
+      {"name": "Main Store", "lat": 30.0500, "lng": 31.2333, "radius_meters": 120}
+    ],
+    "shifts": [
+      {"name": "Retail Morning", "start_time": "10:00", "end_time": "18:00", "grace_minutes": 10},
+      {"name": "Retail Evening", "start_time": "14:00", "end_time": "22:00", "grace_minutes": 10}
+    ]
+  },
+  "policies": {
+    "rules": [
+      {"type": "late_deduction", "threshold_minutes": 10, "amount": 30},
+      {"type": "absence_deduction", "amount_per_day": 250}
+    ]
+  },
+  "accounting": {
+    "chart_of_accounts_template": "retail_basic",
+    "mappings": {
+      "payroll_expense": "5200",
+      "payroll_payable": "2100",
+      "cash": "1000",
+      "receivables": "1200",
+      "sales": "4000"
+    }
+  }
+}

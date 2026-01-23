@@ -135,16 +135,16 @@ class AlertEventListView(APIView):
         return [HasPermission("analytics.alerts.view")]
 
     def _get_queryset(self):
-        range_param = self.request.query_params.get("range", "30d")
-        days = self._parse_range_days(range_param)
-        end_date = timezone.localdate()
-        start_date = end_date - timedelta(days=days - 1)
-
-        queryset = AlertEvent.objects.filter(
-            company=self.request.user.company,
-            event_date__gte=start_date,
-            event_date__lte=end_date,
-        )
+        range_param = self.request.query_params.get("range")
+        queryset = AlertEvent.objects.filter(company=self.request.user.company)
+        if range_param:
+            days = self._parse_range_days(range_param)
+            end_date = timezone.localdate()
+            start_date = end_date - timedelta(days=days - 1)
+            queryset = queryset.filter(
+                event_date__gte=start_date,
+                event_date__lte=end_date,
+            )        
         status_param = self.request.query_params.get("status")
         if status_param:
             queryset = queryset.filter(status=status_param)

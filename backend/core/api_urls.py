@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from core.api_views.auth import LoginView
 from core.api_views.me import MeView
 from core.api_views.roles import RoleListView
+from core.api_views.setup import ApplySetupTemplateView, SetupTemplateListView
 from core.api_views.users import UsersViewSet
 
 router = DefaultRouter()
@@ -21,4 +22,8 @@ urlpatterns = [
 
     # Roles
     path("roles/", RoleListView.as_view(), name="roles"),
+
+    # Setup
+    path("setup/templates/", SetupTemplateListView.as_view(), name="setup-templates"),
+    path("setup/apply-template/", ApplySetupTemplateView.as_view(), name="setup-apply-template"),
 ]

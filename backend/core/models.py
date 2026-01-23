@@ -179,3 +179,63 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"{self.company.name} - {self.action} - {self.entity}:{self.entity_id}"
+
+
+class SetupTemplate(models.Model):
+    code = models.CharField(max_length=100, unique=True)
+    name_ar = models.CharField(max_length=255)
+    name_en = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    version = models.PositiveIntegerField(default=1)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.code
+
+
+class TemplateApplyLog(models.Model):
+    class Status(models.TextChoices):
+        STARTED = "started", "Started"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="template_apply_logs",
+    )
+    template_code = models.CharField(max_length=100)
+    template_version = models.PositiveIntegerField()
+    status = models.CharField(max_length=20, choices=Status.choices)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["company", "template_code", "template_version"],
+                name="core_template_log_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.company.name} - {self.template_code} v{self.template_version}"
+
+
+class CompanySetupState(models.Model):
+    company = models.OneToOneField(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="setup_state",
+    )
+    roles_applied = models.BooleanField(default=False)
+    policies_applied = models.BooleanField(default=False)
+    shifts_applied = models.BooleanField(default=False)
+    coa_applied = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.company.name} setup state"

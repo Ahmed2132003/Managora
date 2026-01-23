@@ -1,0 +1,37 @@
+{
+  "roles": [
+    {"name": "Admin", "permissions": ["*"]},
+    {
+      "name": "HR",
+      "permissions": ["employees.*", "attendance.*", "leaves.*", "users.view", "hr.employees.*", "hr.documents.*"]
+    },
+    {
+      "name": "Accountant",
+      "permissions": ["accounting.*", "expenses.*", "invoices.*", "customers.view", "customers.create", "customers.edit"]
+    }
+  ],
+  "attendance": {
+    "worksites": [
+      {"name": "HQ", "lat": 30.0444, "lng": 31.2357, "radius_meters": 150}
+    ],
+    "shifts": [
+      {"name": "Morning", "start_time": "09:00", "end_time": "17:00", "grace_minutes": 15}
+    ]
+  },
+  "policies": {
+    "rules": [
+      {"type": "late_deduction", "threshold_minutes": 15, "amount": 50},
+      {"type": "absence_deduction", "amount_per_day": 200}
+    ]
+  },
+  "accounting": {
+    "chart_of_accounts_template": "services_small",
+    "mappings": {
+      "payroll_expense": "5000",
+      "payroll_payable": "2100",
+      "cash": "1000",
+      "receivables": "1100",
+      "sales": "4100"
+    }
+  }
+}

@@ -5,11 +5,8 @@ from rest_framework.views import APIView
 from rest_framework import status
 
 from core.models import Role
+from core.permissions import is_admin_user
 from core.serializers.roles import RoleSerializer
-
-
-def is_admin_user(user):
-    return user.is_superuser or user.roles.filter(name="Admin").exists()
 
 
 class RoleListView(APIView):

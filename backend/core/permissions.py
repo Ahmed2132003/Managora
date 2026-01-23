@@ -131,6 +131,9 @@ def user_has_permission(user, required_code):
     )
 
 
+def is_admin_user(user):
+    return user and (user.is_superuser or user.roles.filter(name="Admin").exists())
+
 class HasPermission(BasePermission):
     message = "You do not have permission to perform this action."
 
