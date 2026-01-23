@@ -24,7 +24,7 @@ import { useAlerts } from "../../shared/analytics/hooks";
 import { useCashForecast } from "../../shared/analytics/forecast";
 import { buildRangeSelection } from "../../shared/analytics/range.ts";
 import type { RangeOption } from "../../shared/analytics/range.ts";
-import { RangeSelector } from "../../shared/analytics/RangeSelector.ts";
+import { RangeSelector } from "../../shared/analytics/RangeSelector";
 import { formatCurrency, formatPercent } from "../../shared/analytics/format.ts";
 
 const kpiKeys = ["revenue_daily", "expenses_daily", "absence_rate_daily"];

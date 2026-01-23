@@ -19,7 +19,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useCashForecast } from "../../shared/analytics/forecast.tsx";
+import { useCashForecast } from "../../shared/analytics/forecast";
 
 const currencyFormatter = new Intl.NumberFormat("ar", {
   style: "currency",

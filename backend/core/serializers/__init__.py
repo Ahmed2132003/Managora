@@ -1,0 +1,1 @@
+"""Serializer package for core app."""
