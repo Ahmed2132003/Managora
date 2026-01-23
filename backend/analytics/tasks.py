@@ -184,10 +184,16 @@ def _get_contributors(company: Company, day: date, kpi_key: str) -> list[dict[st
     ]
 
 
+def _format_decimal(value: Decimal | None, quant: str = "0.01") -> str | None:
+    if value is None:
+        return None
+    return str(value.quantize(Decimal(quant)))
+
+
 def _build_alert_event(
     company: Company,
     rule: AlertRule,
-    day: date,
+    day: date,    
     today_value: Decimal,
     baseline_avg: Decimal,
     contributors: list[dict[str, str]],
@@ -199,13 +205,11 @@ def _build_alert_event(
         else None
     )
     evidence = {
-        "today_value": str(today_value),
-        "baseline_avg": str(baseline_avg),
-        "delta_percent": str(delta_percent.quantize(Decimal("0.01")))
-        if delta_percent is not None
-        else None,
+        "today_value": _format_decimal(today_value),
+        "baseline_avg": _format_decimal(baseline_avg),
+        "delta_percent": _format_decimal(delta_percent),
         "contributors": contributors,
-    }
+    }    
     return AlertEvent.objects.create(
         company=company,
         rule=rule,
