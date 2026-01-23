@@ -41,6 +41,7 @@ import { HRDashboardPage } from "../pages/analytics/HRDashboardPage.tsx";
 import { SetupWizardPage } from "../pages/setup/SetupWizardPage";
 import { SetupTemplatesPage } from "../pages/setup/SetupTemplatesPage";
 import { SetupProgressPage } from "../pages/setup/SetupProgressPage";
+import { CopilotPage } from "../pages/CopilotPage";
 export const router = createBrowserRouter([     
   {    
     path: "/login",
@@ -92,7 +93,8 @@ export const router = createBrowserRouter([
       { path: "analytics/ceo", element: <CEODashboardPage /> },
       { path: "analytics/finance", element: <FinanceDashboardPage /> },
       { path: "analytics/hr", element: <HRDashboardPage /> },
-      {
+      { path: "copilot", element: <CopilotPage /> },
+      {        
         path: "setup",
         element: <SetupWizardPage />,
         children: [

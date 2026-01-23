@@ -108,7 +108,10 @@ export function AppLayout() {
             <Button component={Link} to="/analytics/forecast" variant="subtle">
               Cash Forecast
             </Button>            
-          </Group>                                                                                                                                                                                                                                                
+            <Button component={Link} to="/copilot" variant="subtle">
+              Copilot
+            </Button>
+          </Group>                                                                                                                                                                                                           
           <Button onClick={handleLogout} variant="light">
             Logout            
           </Button>

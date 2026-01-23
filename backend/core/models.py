@@ -181,6 +181,36 @@ class AuditLog(models.Model):
         return f"{self.company.name} - {self.action} - {self.entity}:{self.entity_id}"
 
 
+class CopilotQueryLog(models.Model):
+    class Status(models.TextChoices):
+        OK = "ok", "OK"
+        BLOCKED = "blocked", "Blocked"
+        ERROR = "error", "Error"
+
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="copilot_query_logs",
+    )
+    user = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="copilot_query_logs",
+    )
+    question = models.TextField()
+    intent = models.CharField(max_length=100)
+    input_payload = models.JSONField(default=dict, blank=True)
+    output_payload = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.company.name} - {self.intent} - {self.status}"
+
+
 class SetupTemplate(models.Model):
     code = models.CharField(max_length=100, unique=True)
     name_ar = models.CharField(max_length=255)

@@ -82,4 +82,7 @@ export const endpoints = {
     breakdown: "/api/analytics/breakdown/",
     cashForecast: "/api/analytics/forecast/cash/",
   },
+  copilot: {
+    query: "/api/copilot/query/",
+  },
 };

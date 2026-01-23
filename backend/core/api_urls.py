@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from core.api_views.auth import LoginView
+from core.api_views.copilot import CopilotQueryView
 from core.api_views.me import MeView
 from core.api_views.roles import RoleListView
 from core.api_views.setup import ApplySetupTemplateView, SetupTemplateListView
@@ -23,7 +24,10 @@ urlpatterns = [
     # Roles
     path("roles/", RoleListView.as_view(), name="roles"),
 
-    # Setup
+    # Copilot
+    path("copilot/query/", CopilotQueryView.as_view(), name="copilot-query"),
+
+    # Setup    
     path("setup/templates/", SetupTemplateListView.as_view(), name="setup-templates"),
     path("setup/apply-template/", ApplySetupTemplateView.as_view(), name="setup-apply-template"),
 ]
