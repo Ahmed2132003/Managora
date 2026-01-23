@@ -22,7 +22,7 @@ import {
 import { useAnalyticsSummary, useAnalyticsKpis, useAnalyticsBreakdown } from "../../shared/analytics/insights.ts";
 import { buildRangeSelection } from "../../shared/analytics/range.ts";
 import type { RangeOption } from "../../shared/analytics/range.ts";
-import { RangeSelector } from "../../shared/analytics/RangeSelector.ts";
+import { RangeSelector } from "../../shared/analytics/RangeSelector";
 import { formatNumber, formatPercent } from "../../shared/analytics/format.ts";
 
 const kpiKeys = ["absence_rate_daily", "lateness_rate_daily", "overtime_hours_daily"];

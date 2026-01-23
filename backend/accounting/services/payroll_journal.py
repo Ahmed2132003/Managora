@@ -25,7 +25,10 @@ def generate_payroll_journal(period, actor=None):
     if existing:
         return existing
 
-    required_keys = AccountMapping.REQUIRED_KEYS
+    required_keys = {
+        AccountMapping.Key.PAYROLL_SALARIES_EXPENSE,
+        AccountMapping.Key.PAYROLL_PAYABLE,
+    }    
     mappings = {
         mapping.key: mapping
         for mapping in AccountMapping.objects.filter(
