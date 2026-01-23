@@ -27,7 +27,7 @@ import { useCashForecast } from "../../shared/analytics/forecast";
 import { useAgingReport } from "../../shared/accounting/hooks";
 import { buildRangeSelection } from "../../shared/analytics/range.ts";
 import type { RangeOption } from "../../shared/analytics/range.ts";
-import { RangeSelector } from "../../shared/analytics/RangeSelector.ts";
+import { RangeSelector } from "../../shared/analytics/RangeSelector";
 import { formatCurrency } from "../../shared/analytics/format.ts";
 
 export function FinanceDashboardPage() {
