@@ -13,16 +13,8 @@ from core.permissions import HasAnyPermission, HasPermission, user_has_permissio
 
 class KPIFactDailyListView(ListAPIView):
     serializer_class = KPIFactDailySerializer
-    permission_classes = [
-        HasAnyPermission(
-            [
-                "analytics.view_ceo",
-                "analytics.view_finance",
-                "analytics.view_hr",
-            ]
-        )
-    ]
-
+    permission_classes = []
+    
     @extend_schema(
         tags=["Analytics"],
         summary="List KPI facts",
@@ -30,6 +22,17 @@ class KPIFactDailyListView(ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+    def get_permissions(self):
+        return [
+            HasAnyPermission(
+                [
+                    "analytics.view_ceo",
+                    "analytics.view_finance",
+                    "analytics.view_hr",
+                ]
+            )
+        ]
 
     def _allowed_categories(self, user):
         if user_has_permission(user, "analytics.view_ceo"):
@@ -70,8 +73,8 @@ class KPIFactDailyListView(ListAPIView):
 
 
 class AnalyticsRebuildView(APIView):
-    permission_classes = [HasPermission("analytics.manage_rebuild")]
-
+    permission_classes = []
+    
     @extend_schema(
         tags=["Analytics"],
         summary="Rebuild analytics KPIs for a date range",
@@ -95,3 +98,6 @@ class AnalyticsRebuildView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+    def get_permissions(self):
+        return [HasPermission("analytics.manage_rebuild")]
