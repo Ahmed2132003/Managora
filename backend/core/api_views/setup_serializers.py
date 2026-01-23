@@ -6,7 +6,10 @@ from rest_framework.views import APIView
 
 from core.models import SetupTemplate, TemplateApplyLog
 from core.permissions import is_admin_user
-from core.serializers.setup import CompanySetupStateSerializer, SetupTemplateSerializer
+from core.serializers.setup_serializers import (
+    CompanySetupStateSerializer,
+    SetupTemplateSerializer,
+)
 from core.services.setup_templates import apply_template_bundle, build_template_overview, load_template_bundle
 
 
