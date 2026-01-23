@@ -68,4 +68,10 @@ export const endpoints = {
     balanceSheet: "/api/reports/balance-sheet/",
   },
   alerts: "/api/alerts/",
+  analytics: {
+    alerts: "/api/analytics/alerts/",
+    alert: (id: number) => `/api/analytics/alerts/${id}/`,
+    alertAck: (id: number) => `/api/analytics/alerts/${id}/ack/`,
+    alertResolve: (id: number) => `/api/analytics/alerts/${id}/resolve/`,
+  },
 };

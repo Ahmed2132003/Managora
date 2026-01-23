@@ -7,7 +7,14 @@ from analytics.api import (
     AnalyticsKPIView,
     AnalyticsSummaryView,
 )
-from analytics.views import AnalyticsRebuildView, KPIFactDailyListView
+from analytics.views import (
+    AlertEventAcknowledgeView,
+    AlertEventDetailView,
+    AlertEventListView,
+    AlertEventResolveView,
+    AnalyticsRebuildView,
+    KPIFactDailyListView,
+)
 
 urlpatterns = [
     path("analytics/summary/", AnalyticsSummaryView.as_view(), name="analytics-summary"),
@@ -24,5 +31,21 @@ urlpatterns = [
         "analytics/rebuild/",
         AnalyticsRebuildView.as_view(),
         name="analytics-rebuild",
+    ),
+    path("analytics/alerts/", AlertEventListView.as_view(), name="analytics-alerts"),
+    path(
+        "analytics/alerts/<int:pk>/",
+        AlertEventDetailView.as_view(),
+        name="analytics-alert-detail",
+    ),
+    path(
+        "analytics/alerts/<int:pk>/ack/",
+        AlertEventAcknowledgeView.as_view(),
+        name="analytics-alert-ack",
+    ),
+    path(
+        "analytics/alerts/<int:pk>/resolve/",
+        AlertEventResolveView.as_view(),
+        name="analytics-alert-resolve",
     ),
 ]

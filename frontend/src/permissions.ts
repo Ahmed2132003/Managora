@@ -46,6 +46,8 @@ export const PERMISSION_CODES = [
   "hr.payroll.lock",
   "hr.payroll.payslip",
   "hr.payroll.*",
+  "analytics.alerts.view",
+  "analytics.alerts.manage",
 ] as const;
 
 export const ROLE_PERMISSIONS = {

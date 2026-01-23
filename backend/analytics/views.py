@@ -1,12 +1,23 @@
+from datetime import timedelta
+
+from django.db import transaction
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from django.shortcuts import get_object_or_404
 from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from analytics.models import KPIDefinition, KPIFactDaily
-from analytics.serializers import AnalyticsRebuildSerializer, KPIFactDailySerializer
+from analytics.models import AlertEvent, KPIDefinition, KPIFactDaily
+from analytics.serializers import (
+    AlertAckCreateSerializer,
+    AlertEventDetailSerializer,
+    AlertEventListSerializer,
+    AnalyticsRebuildSerializer,
+    KPIFactDailySerializer,
+)
 from analytics.tasks import build_analytics_range
 from core.permissions import HasAnyPermission, HasPermission, user_has_permission
 
@@ -101,3 +112,134 @@ class AnalyticsRebuildView(APIView):
 
     def get_permissions(self):
         return [HasPermission("analytics.manage_rebuild")]
+
+
+class AlertEventListView(APIView):
+    permission_classes = []
+
+    @extend_schema(
+        tags=["Analytics"],
+        summary="List alerts",
+        responses={200: AlertEventListSerializer(many=True)},
+    )
+    def get(self, request, *args, **kwargs):
+        return Response(
+            AlertEventListSerializer(self._get_queryset(), many=True).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def get_permissions(self):
+        return [HasPermission("analytics.alerts.view")]
+
+    def _get_queryset(self):
+        range_param = self.request.query_params.get("range", "30d")
+        days = self._parse_range_days(range_param)
+        end_date = timezone.localdate()
+        start_date = end_date - timedelta(days=days - 1)
+
+        queryset = AlertEvent.objects.filter(
+            company=self.request.user.company,
+            event_date__gte=start_date,
+            event_date__lte=end_date,
+        )
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+        return queryset.order_by("-event_date", "-created_at")
+
+    @staticmethod
+    def _parse_range_days(range_param: str) -> int:
+        if not range_param:
+            return 30
+        range_param = range_param.strip().lower()
+        if range_param.endswith("d"):
+            value = range_param[:-1]
+            if value.isdigit():
+                return max(int(value), 1)
+        return 30
+
+
+class AlertEventDetailView(APIView):
+    permission_classes = []
+
+    @extend_schema(
+        tags=["Analytics"],
+        summary="Get alert details",
+        responses={200: AlertEventDetailSerializer},
+    )
+    def get(self, request, pk, *args, **kwargs):
+        event = self._get_event(pk)
+        return Response(
+            AlertEventDetailSerializer(event).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def get_permissions(self):
+        return [HasPermission("analytics.alerts.view")]
+
+    def _get_event(self, pk):
+        return get_object_or_404(
+            AlertEvent, company=self.request.user.company, pk=pk
+        )
+
+
+class AlertEventAcknowledgeView(APIView):
+    permission_classes = []
+
+    @extend_schema(
+        tags=["Analytics"],
+        summary="Acknowledge alert",
+        request=AlertAckCreateSerializer,
+        responses={200: AlertEventDetailSerializer},
+    )
+    def post(self, request, pk, *args, **kwargs):
+        serializer = AlertAckCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            event = get_object_or_404(
+                AlertEvent.objects.select_for_update(),
+                company=request.user.company,
+                pk=pk,
+            )
+            if event.status == AlertEvent.Status.RESOLVED:
+                return Response(
+                    {"detail": "Resolved alerts cannot be acknowledged."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            event.refresh_from_db()
+            event.acknowledgements.create(
+                acked_by=request.user,
+                note=serializer.validated_data.get("note", ""),
+            )
+            event.status = AlertEvent.Status.ACKNOWLEDGED
+            event.save(update_fields=["status"])
+        return Response(
+            AlertEventDetailSerializer(event).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def get_permissions(self):
+        return [HasPermission("analytics.alerts.manage")]
+
+
+class AlertEventResolveView(APIView):
+    permission_classes = []
+
+    @extend_schema(
+        tags=["Analytics"],
+        summary="Resolve alert",
+        responses={200: AlertEventDetailSerializer},
+    )
+    def post(self, request, pk, *args, **kwargs):
+        event = get_object_or_404(
+            AlertEvent, company=request.user.company, pk=pk
+        )
+        event.status = AlertEvent.Status.RESOLVED
+        event.save(update_fields=["status"])
+        return Response(
+            AlertEventDetailSerializer(event).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def get_permissions(self):
+        return [HasPermission("analytics.alerts.manage")]

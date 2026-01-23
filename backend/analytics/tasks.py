@@ -5,12 +5,20 @@ from decimal import Decimal
 
 from celery import shared_task
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Avg, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from accounting.models import Expense
-from analytics.models import AnalyticsJobRun, KPIContributionDaily, KPIDefinition, KPIFactDaily
+from analytics.models import (
+    AlertEvent,
+    AlertRule,
+    AnalyticsJobRun,
+    KPIContributionDaily,
+    KPIDefinition,
+    KPIFactDaily,
+)
+
 from core.models import Company
 from hr.models import AttendanceRecord, Employee
 
@@ -52,6 +60,51 @@ KPI_CATALOG = {
     },
 }
 
+ALERT_RULE_DEFAULTS = {
+    "expense_spike": {
+        "name": "Expense Spike",
+        "severity": AlertRule.Severity.HIGH,
+        "kpi_key": "expenses_daily",
+        "method": AlertRule.Method.ROLLING_AVG,
+        "params": {
+            "window_days": 14,
+            "multiplier": 1.8,
+            "min_value": "5000",
+            "contributors_kpi_key": "expense_by_category_daily",
+        },
+        "cooldown_hours": 24,
+    },
+    "absence_spike": {
+        "name": "Absence Spike",
+        "severity": AlertRule.Severity.MEDIUM,
+        "kpi_key": "absence_rate_daily",
+        "method": AlertRule.Method.ROLLING_AVG,
+        "params": {
+            "window_days": 14,
+            "threshold": "0.05",
+        },
+        "cooldown_hours": 24,
+    },
+}
+
+ALERT_RECOMMENDATIONS = {
+    "expense_spike": [
+        "Review the largest expense categories for unusual spend.",
+        "Validate approvals and receipts for high-value expenses.",
+        "Check vendor activity for unexpected spikes.",
+    ],
+    "absence_spike": [
+        "Check attendance logs for anomalies or missed check-ins.",
+        "Contact department leads to confirm any planned absences.",
+        "Review recent policy changes that may impact attendance.",
+    ],
+    "collections_delay_spike": [
+        "Follow up on overdue customer balances.",
+        "Review recent invoice disputes or payment delays.",
+        "Escalate high-risk accounts to collections.",
+    ],
+}
+
 
 def _coerce_date(value: date | str) -> date:
     if isinstance(value, date):
@@ -76,6 +129,92 @@ def _ensure_kpi_definition(company: Company, kpi_key: str) -> None:
         },
     )
 
+
+def _ensure_alert_rules(company: Company) -> None:
+    for key, payload in ALERT_RULE_DEFAULTS.items():
+        AlertRule.objects.update_or_create(
+            company=company,
+            key=key,
+            defaults={
+                "name": payload["name"],
+                "severity": payload["severity"],
+                "kpi_key": payload["kpi_key"],
+                "method": payload["method"],
+                "params": payload["params"],
+                "cooldown_hours": payload["cooldown_hours"],
+                "is_active": True,
+            },
+        )
+
+
+def _get_fact_value(company: Company, kpi_key: str, day: date) -> Decimal | None:
+    fact = KPIFactDaily.objects.filter(
+        company=company, kpi_key=kpi_key, date=day
+    ).first()
+    return fact.value if fact else None
+
+
+def _rolling_average(company: Company, kpi_key: str, day: date, window_days: int) -> Decimal | None:
+    if window_days <= 0:
+        return None
+    start = day - timedelta(days=window_days)
+    end = day - timedelta(days=1)
+    return (
+        KPIFactDaily.objects.filter(
+            company=company, kpi_key=kpi_key, date__gte=start, date__lte=end
+        ).aggregate(avg=Avg("value"))["avg"]
+    )
+
+
+def _get_contributors(company: Company, day: date, kpi_key: str) -> list[dict[str, str]]:
+    if not kpi_key:
+        return []
+    contributors = (
+        KPIContributionDaily.objects.filter(company=company, date=day, kpi_key=kpi_key)
+        .order_by("-amount")[:5]
+        .values("dimension", "dimension_id", "amount")
+    )
+    return [
+        {
+            "dimension": item["dimension"],
+            "dimension_id": item["dimension_id"],
+            "amount": str(item["amount"]),
+        }
+        for item in contributors
+    ]
+
+
+def _build_alert_event(
+    company: Company,
+    rule: AlertRule,
+    day: date,
+    today_value: Decimal,
+    baseline_avg: Decimal,
+    contributors: list[dict[str, str]],
+    message: str,
+) -> AlertEvent:
+    delta_percent = (
+        ((today_value - baseline_avg) / baseline_avg) * Decimal("100")
+        if baseline_avg
+        else None
+    )
+    evidence = {
+        "today_value": str(today_value),
+        "baseline_avg": str(baseline_avg),
+        "delta_percent": str(delta_percent.quantize(Decimal("0.01")))
+        if delta_percent is not None
+        else None,
+        "contributors": contributors,
+    }
+    return AlertEvent.objects.create(
+        company=company,
+        rule=rule,
+        event_date=day,
+        title=rule.name,
+        message=message,
+        evidence=evidence,
+        recommended_actions=ALERT_RECOMMENDATIONS.get(rule.key, []),
+    )
 
 @shared_task
 def build_kpis_daily(company_id: int, target_date: str | date) -> dict[str, str]:
@@ -269,7 +408,6 @@ def build_yesterday_kpis() -> dict[str, str]:
         results[str(company_id)] = "ok"
     return results
 
-
 @shared_task
 def backfill_last_30_days() -> dict[str, str]:
     today = timezone.localdate()
@@ -280,3 +418,104 @@ def backfill_last_30_days() -> dict[str, str]:
             "status"
         ]
     return results
+
+
+@shared_task
+def detect_anomalies(company_id: int, target_date: str | date) -> int:
+    company = Company.objects.get(id=company_id)
+    day = _coerce_date(target_date)
+
+    _ensure_alert_rules(company)
+    created_events = 0
+
+    for rule in AlertRule.objects.filter(company=company, is_active=True):
+        if AlertEvent.objects.filter(company=company, rule=rule, event_date=day).exists():
+            continue
+
+        cooldown_start = timezone.now() - timedelta(hours=rule.cooldown_hours)
+        if AlertEvent.objects.filter(
+            company=company, rule=rule, created_at__gte=cooldown_start
+        ).exists():
+            continue
+
+        if rule.key == "expense_spike":
+            params = rule.params or {}
+            window_days = int(params.get("window_days", 14))
+            multiplier = Decimal(str(params.get("multiplier", "1.8")))
+            min_value = Decimal(str(params.get("min_value", "0")))
+
+            today_value = _get_fact_value(company, rule.kpi_key, day)
+            baseline = _rolling_average(company, rule.kpi_key, day, window_days)
+            if today_value is None or baseline is None:
+                continue
+
+            if today_value > baseline * multiplier and today_value > min_value:
+                contributors = _get_contributors(
+                    company, day, params.get("contributors_kpi_key", "")
+                )
+                message = (
+                    f"Expenses today are {today_value} vs baseline {baseline}."
+                )
+                _build_alert_event(
+                    company,
+                    rule,
+                    day,
+                    today_value,
+                    baseline,
+                    contributors,
+                    message,
+                )
+                created_events += 1
+
+        elif rule.key == "absence_spike":
+            params = rule.params or {}
+            window_days = int(params.get("window_days", 14))
+            threshold = Decimal(str(params.get("threshold", "0.05")))
+
+            today_value = _get_fact_value(company, rule.kpi_key, day)
+            baseline = _rolling_average(company, rule.kpi_key, day, window_days)
+            if today_value is None or baseline is None:
+                continue
+
+            if today_value > baseline + threshold:
+                message = (
+                    f"Absence rate today is {today_value} vs baseline {baseline}."
+                )
+                _build_alert_event(
+                    company,
+                    rule,
+                    day,
+                    today_value,
+                    baseline,
+                    [],
+                    message,
+                )
+                created_events += 1
+
+        elif rule.key == "collections_delay_spike":
+            params = rule.params or {}
+            window_days = int(params.get("window_days", 30))
+            multiplier = Decimal(str(params.get("multiplier", "1.5")))
+            min_value = Decimal(str(params.get("min_value", "0")))
+
+            today_value = _get_fact_value(company, rule.kpi_key, day)
+            baseline = _rolling_average(company, rule.kpi_key, day, window_days)
+            if today_value is None or baseline is None:
+                continue
+
+            if today_value > baseline * multiplier and today_value > min_value:
+                message = (
+                    f"Collections aging 90+ today is {today_value} vs baseline {baseline}."
+                )
+                _build_alert_event(
+                    company,
+                    rule,
+                    day,
+                    today_value,
+                    baseline,
+                    [],
+                    message,
+                )
+                created_events += 1
+
+    return created_events

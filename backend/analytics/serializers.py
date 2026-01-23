@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from analytics.models import KPIFactDaily
+from analytics.models import AlertAck, AlertEvent, KPIFactDaily
 
 
 class KPIFactDailySerializer(serializers.ModelSerializer):
@@ -17,3 +17,51 @@ class AnalyticsRebuildSerializer(serializers.Serializer):
         if attrs["start_date"] > attrs["end_date"]:
             raise serializers.ValidationError("start_date must be before end_date")
         return attrs
+
+
+class AlertEventListSerializer(serializers.ModelSerializer):
+    severity = serializers.CharField(source="rule.severity")
+    rule_key = serializers.CharField(source="rule.key")
+
+    class Meta:
+        model = AlertEvent
+        fields = [
+            "id",
+            "event_date",
+            "title",
+            "status",
+            "severity",
+            "rule_key",
+        ]
+
+
+class AlertEventDetailSerializer(serializers.ModelSerializer):
+    severity = serializers.CharField(source="rule.severity")
+    rule_key = serializers.CharField(source="rule.key")
+    rule_name = serializers.CharField(source="rule.name")
+
+    class Meta:
+        model = AlertEvent
+        fields = [
+            "id",
+            "event_date",
+            "title",
+            "message",
+            "status",
+            "severity",
+            "rule_key",
+            "rule_name",
+            "evidence",
+            "recommended_actions",
+            "created_at",
+        ]
+
+
+class AlertAckSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AlertAck
+        fields = ["id", "acked_by", "acked_at", "note"]
+
+
+class AlertAckCreateSerializer(serializers.Serializer):
+    note = serializers.CharField(required=False, allow_blank=True)

@@ -54,6 +54,8 @@ PERMISSION_DEFINITIONS = {
     "analytics.view_finance": "View finance analytics dashboards",
     "analytics.view_hr": "View HR analytics dashboards",
     "analytics.manage_rebuild": "Rebuild analytics KPIs",
+    "analytics.alerts.view": "View analytics alerts",
+    "analytics.alerts.manage": "Acknowledge or resolve analytics alerts",
 }
 
 ROLE_PERMISSION_MAP = {
@@ -83,7 +85,9 @@ ROLE_PERMISSION_MAP = {
         "customers.create",
         "customers.edit",
         "analytics.view_finance",
-    ],                                        
+        "analytics.alerts.view",
+        "analytics.alerts.manage",
+    ],                                                                                  
     "Sales": [
         "customers.view",
     ],

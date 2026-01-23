@@ -93,7 +93,10 @@ export function AppLayout() {
             <Button component={Link} to="/accounting/reports/ar-aging" variant="subtle">
               AR Aging
             </Button>            
-          </Group>                                                                                                                   
+            <Button component={Link} to="/analytics/alerts" variant="subtle">
+              Alerts Center
+            </Button>
+          </Group>                                                                                                                                                                                                                                                
           <Button onClick={handleLogout} variant="light">
             Logout            
           </Button>
