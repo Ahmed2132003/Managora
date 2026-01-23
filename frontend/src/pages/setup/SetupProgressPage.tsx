@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Button,
@@ -77,13 +78,15 @@ export function SetupProgressPage() {
           template_code: templateCode,
         });
         setResponse(result.data);
-      } catch (err: any) {
-        const detail = err?.response?.data?.detail || String(err);
-        const error = err?.response?.data?.error;
+      } catch (err: unknown) {
+        const detail = axios.isAxiosError(err)
+          ? err.response?.data?.detail || err.message
+          : String(err);
+        const error = axios.isAxiosError(err) ? err.response?.data?.error : undefined;
         setResponse({ status: "failed", detail, error });
       } finally {
         setLoading(false);
-      }
+      }      
     };
 
     applyTemplate();
