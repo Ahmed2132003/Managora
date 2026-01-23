@@ -230,3 +230,34 @@ class AlertAck(models.Model):
 
     def __str__(self):
         return f"{self.event_id} acknowledged by {self.acked_by_id}"
+
+
+class CashForecastSnapshot(models.Model):
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="cash_forecast_snapshots",
+    )
+    as_of_date = models.DateField()
+    horizon_days = models.PositiveSmallIntegerField()
+    expected_inflows = models.DecimalField(max_digits=14, decimal_places=2)
+    expected_outflows = models.DecimalField(max_digits=14, decimal_places=2)
+    net_expected = models.DecimalField(max_digits=14, decimal_places=2)
+    details = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "as_of_date", "horizon_days"],
+                name="unique_cash_forecast_snapshot",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["company", "as_of_date"],
+                name="cash_forecast_company_date_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.company.name} - {self.as_of_date} ({self.horizon_days}d)"

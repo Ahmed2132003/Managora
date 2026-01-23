@@ -34,6 +34,7 @@ import { InvoiceDetailsPage } from "../pages/invoices/InvoiceDetailsPage.tsx";
 import { InvoiceFormPage } from "../pages/invoices/InvoiceFormPage";
 import { InvoicesPage } from "../pages/invoices/InvoicesPage";
 import { AlertsCenterPage } from "../pages/analytics/AlertsCenterPage";
+import { CashForecastPage } from "../pages/analytics/CashForecastPage.tsx";
 export const router = createBrowserRouter([     
   {    
     path: "/login",
@@ -81,6 +82,7 @@ export const router = createBrowserRouter([
       { path: "invoices/new", element: <InvoiceFormPage /> },
       { path: "invoices/:id", element: <InvoiceDetailsPage /> },
       { path: "analytics/alerts", element: <AlertsCenterPage /> },
+      { path: "analytics/forecast", element: <CashForecastPage /> },      
     ],
   },                                                                                                                                                                                                         
   {    

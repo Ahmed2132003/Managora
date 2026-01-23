@@ -12,7 +12,9 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from analytics.forecast import build_cash_forecast
 from analytics.models import KPIContributionDaily, KPIDefinition, KPIFactDaily
+from analytics.serializers import CashForecastSnapshotSerializer
 from core.permissions import HasAnyPermission, user_has_permission
 
 SUMMARY_KEYS = {
@@ -264,6 +266,29 @@ class AnalyticsCompareView(AnalyticsAccessMixin, APIView):
         previous_start = previous_end - timedelta(days=days - 1)
         return current_start, current_end, previous_start, previous_end
 
+
+class CashForecastView(APIView):
+    permission_classes = []
+
+    def get_permissions(self):
+        return [HasAnyPermission(["analytics.view_ceo", "analytics.view_finance"])]
+
+    @extend_schema(
+        tags=["Analytics"],
+        summary="Get cash forecast snapshots",
+    )
+    def get(self, request):
+        as_of_param = request.query_params.get("as_of")
+        as_of_date = parse_date(as_of_param) if as_of_param else None
+        if as_of_param and not as_of_date:
+            return Response(
+                {"detail": "Invalid as_of date format."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        snapshots = build_cash_forecast(request.user.company_id, as_of_date)
+        serializer = CashForecastSnapshotSerializer(snapshots, many=True)
+        return Response(serializer.data)
 
 class AnalyticsBreakdownView(AnalyticsAccessMixin, APIView):
     @extend_schema(

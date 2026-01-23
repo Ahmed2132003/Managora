@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from analytics.models import AlertAck, AlertEvent, KPIFactDaily
+from analytics.models import AlertAck, AlertEvent, CashForecastSnapshot, KPIFactDaily
 
 
 class KPIFactDailySerializer(serializers.ModelSerializer):
@@ -65,3 +65,16 @@ class AlertAckSerializer(serializers.ModelSerializer):
 
 class AlertAckCreateSerializer(serializers.Serializer):
     note = serializers.CharField(required=False, allow_blank=True)
+
+
+class CashForecastSnapshotSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CashForecastSnapshot
+        fields = [
+            "as_of_date",
+            "horizon_days",
+            "expected_inflows",
+            "expected_outflows",
+            "net_expected",
+            "details",
+        ]

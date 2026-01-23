@@ -73,5 +73,6 @@ export const endpoints = {
     alert: (id: number) => `/api/analytics/alerts/${id}/`,
     alertAck: (id: number) => `/api/analytics/alerts/${id}/ack/`,
     alertResolve: (id: number) => `/api/analytics/alerts/${id}/resolve/`,
+    cashForecast: "/api/analytics/forecast/cash/",
   },
 };

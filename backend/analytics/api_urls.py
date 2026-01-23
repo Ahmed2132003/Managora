@@ -6,6 +6,7 @@ from analytics.api import (
     AnalyticsExportView,
     AnalyticsKPIView,
     AnalyticsSummaryView,
+    CashForecastView,
 )
 from analytics.views import (
     AlertEventAcknowledgeView,
@@ -33,6 +34,11 @@ urlpatterns = [
         name="analytics-rebuild",
     ),
     path("analytics/alerts/", AlertEventListView.as_view(), name="analytics-alerts"),
+    path(
+        "analytics/forecast/cash/",
+        CashForecastView.as_view(),
+        name="analytics-cash-forecast",
+    ),    
     path(
         "analytics/alerts/<int:pk>/",
         AlertEventDetailView.as_view(),
