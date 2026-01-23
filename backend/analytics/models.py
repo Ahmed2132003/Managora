@@ -206,7 +206,7 @@ class AlertEvent(models.Model):
         indexes = [
             models.Index(
                 fields=["company", "status", "-event_date"],
-                name="alert_event_company_status_date_idx",
+                name="alert_event_company",
             ),
         ]
 
