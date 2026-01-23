@@ -35,6 +35,9 @@ import { InvoiceFormPage } from "../pages/invoices/InvoiceFormPage";
 import { InvoicesPage } from "../pages/invoices/InvoicesPage";
 import { AlertsCenterPage } from "../pages/analytics/AlertsCenterPage";
 import { CashForecastPage } from "../pages/analytics/CashForecastPage.tsx";
+import { CEODashboardPage } from "../pages/analytics/CEODashboardPage.tsx";
+import { FinanceDashboardPage } from "../pages/analytics/FinanceDashboardPage.tsx";
+import { HRDashboardPage } from "../pages/analytics/HRDashboardPage.tsx";
 export const router = createBrowserRouter([     
   {    
     path: "/login",
@@ -83,8 +86,11 @@ export const router = createBrowserRouter([
       { path: "invoices/:id", element: <InvoiceDetailsPage /> },
       { path: "analytics/alerts", element: <AlertsCenterPage /> },
       { path: "analytics/forecast", element: <CashForecastPage /> },      
+      { path: "analytics/ceo", element: <CEODashboardPage /> },
+      { path: "analytics/finance", element: <FinanceDashboardPage /> },
+      { path: "analytics/hr", element: <HRDashboardPage /> },
     ],
-  },                                                                                                                                                                                                         
+  },                                                                                                                                  
   {    
     path: "*",
     element: <Navigate to="/login" replace />,

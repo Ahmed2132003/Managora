@@ -40,7 +40,7 @@ export type CashForecastSnapshot = {
 
 export function useCashForecast(asOf?: string) {
   return useQuery({
-    queryKey: ["cash-forecast", asOf],
+    queryKey: ["analyticsForecast", asOf],    
     queryFn: async () => {
       const params = new URLSearchParams();
       if (asOf) {

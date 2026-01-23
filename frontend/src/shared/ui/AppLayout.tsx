@@ -93,9 +93,18 @@ export function AppLayout() {
             <Button component={Link} to="/accounting/reports/ar-aging" variant="subtle">
               AR Aging
             </Button>            
+            <Button component={Link} to="/analytics/ceo" variant="subtle">
+              CEO Dashboard
+            </Button>
+            <Button component={Link} to="/analytics/finance" variant="subtle">
+              Finance Dashboard
+            </Button>
+            <Button component={Link} to="/analytics/hr" variant="subtle">
+              HR Dashboard
+            </Button>
             <Button component={Link} to="/analytics/alerts" variant="subtle">
               Alerts Center
-            </Button>
+            </Button>            
             <Button component={Link} to="/analytics/forecast" variant="subtle">
               Cash Forecast
             </Button>            

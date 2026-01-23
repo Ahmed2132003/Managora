@@ -143,3 +143,39 @@ class AlertAPITests(APITestCase):
         RolePermission.objects.filter(role=self.role, permission=self.permission_view).delete()
         res = self.client.get(list_url)
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_alerts_list_for_company_only(self):
+        other_company = Company.objects.create(name="Other Alert Co")
+        other_rule = AlertRule.objects.create(
+            company=other_company,
+            key="expense_spike",
+            name="Expense Spike",
+            is_active=True,
+            severity=AlertRule.Severity.HIGH,
+            kpi_key="expenses_daily",
+            method=AlertRule.Method.ROLLING_AVG,
+            params={"window_days": 14, "multiplier": 1.8, "min_value": "5000"},
+            cooldown_hours=24,
+            created_by=self.user,
+        )
+        AlertEvent.objects.create(
+            company=other_company,
+            rule=other_rule,
+            event_date=date(2024, 3, 2),
+            title="Other Spike",
+            message="Other company spike",
+            evidence={
+                "today_value": "9000.00",
+                "baseline_avg": "200.00",
+                "delta_percent": "4300.00",
+                "contributors": [],
+            },
+            recommended_actions=["Review expenses"],
+        )
+
+        self.auth()
+        list_url = reverse("analytics-alerts")
+        res = self.client.get(list_url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]["id"], self.event.id)

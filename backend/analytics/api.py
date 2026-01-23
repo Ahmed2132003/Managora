@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 from analytics.forecast import build_cash_forecast
 from analytics.models import KPIContributionDaily, KPIDefinition, KPIFactDaily
 from analytics.serializers import CashForecastSnapshotSerializer
+from analytics.throttles import AnalyticsRateThrottle
 from core.permissions import HasAnyPermission, user_has_permission
 
 SUMMARY_KEYS = {
@@ -73,6 +74,7 @@ class AnalyticsAccessMixin:
 
 
 class AnalyticsSummaryView(AnalyticsAccessMixin, APIView):
+    throttle_classes = [AnalyticsRateThrottle]    
     @extend_schema(
         tags=["Analytics"],
         summary="Get summary cards",
@@ -153,6 +155,7 @@ class AnalyticsSummaryView(AnalyticsAccessMixin, APIView):
 
 
 class AnalyticsKPIView(AnalyticsAccessMixin, APIView):
+    throttle_classes = [AnalyticsRateThrottle]    
     @extend_schema(
         tags=["Analytics"],
         summary="Get KPI timeseries",
@@ -198,6 +201,7 @@ class AnalyticsKPIView(AnalyticsAccessMixin, APIView):
 
 
 class AnalyticsCompareView(AnalyticsAccessMixin, APIView):
+    throttle_classes = [AnalyticsRateThrottle]    
     @extend_schema(
         tags=["Analytics"],
         summary="Compare KPI over period",
@@ -269,7 +273,8 @@ class AnalyticsCompareView(AnalyticsAccessMixin, APIView):
 
 class CashForecastView(APIView):
     permission_classes = []
-
+    throttle_classes = [AnalyticsRateThrottle]
+    
     def get_permissions(self):
         return [HasAnyPermission(["analytics.view_ceo", "analytics.view_finance"])]
 
@@ -291,6 +296,7 @@ class CashForecastView(APIView):
         return Response(serializer.data)
 
 class AnalyticsBreakdownView(AnalyticsAccessMixin, APIView):
+    throttle_classes = [AnalyticsRateThrottle]    
     @extend_schema(
         tags=["Analytics"],
         summary="Get KPI breakdown",
@@ -342,6 +348,7 @@ class AnalyticsBreakdownView(AnalyticsAccessMixin, APIView):
 
 
 class AnalyticsExportView(AnalyticsAccessMixin, APIView):
+    throttle_classes = [AnalyticsRateThrottle]    
     @extend_schema(
         tags=["Analytics"],
         summary="Export KPI data",

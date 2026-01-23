@@ -19,12 +19,14 @@ from analytics.serializers import (
     KPIFactDailySerializer,
 )
 from analytics.tasks import build_analytics_range
+from analytics.throttles import AnalyticsRateThrottle
 from core.permissions import HasAnyPermission, HasPermission, user_has_permission
 
 
 class KPIFactDailyListView(ListAPIView):
     serializer_class = KPIFactDailySerializer
     permission_classes = []
+    throttle_classes = [AnalyticsRateThrottle]
     
     @extend_schema(
         tags=["Analytics"],
@@ -82,9 +84,9 @@ class KPIFactDailyListView(ListAPIView):
 
         return queryset.order_by("-date", "kpi_key")
 
-
 class AnalyticsRebuildView(APIView):
     permission_classes = []
+    throttle_classes = [AnalyticsRateThrottle]
     
     @extend_schema(
         tags=["Analytics"],
@@ -117,6 +119,7 @@ class AnalyticsRebuildView(APIView):
 class AlertEventListView(APIView):
     permission_classes = []
 
+    throttle_classes = [AnalyticsRateThrottle]
     @extend_schema(
         tags=["Analytics"],
         summary="List alerts",
@@ -162,6 +165,7 @@ class AlertEventListView(APIView):
 class AlertEventDetailView(APIView):
     permission_classes = []
 
+    throttle_classes = [AnalyticsRateThrottle]
     @extend_schema(
         tags=["Analytics"],
         summary="Get alert details",
@@ -186,6 +190,7 @@ class AlertEventDetailView(APIView):
 class AlertEventAcknowledgeView(APIView):
     permission_classes = []
 
+    throttle_classes = [AnalyticsRateThrottle]
     @extend_schema(
         tags=["Analytics"],
         summary="Acknowledge alert",
@@ -225,6 +230,7 @@ class AlertEventAcknowledgeView(APIView):
 class AlertEventResolveView(APIView):
     permission_classes = []
 
+    throttle_classes = [AnalyticsRateThrottle]
     @extend_schema(
         tags=["Analytics"],
         summary="Resolve alert",

@@ -156,6 +156,42 @@ class AnalyticsAPITests(APITestCase):
         self.assertEqual(points[0]["date"], "2024-02-07")
         self.assertEqual(points[1]["date"], "2024-02-09")
 
+    def test_kpi_timeseries_range(self):
+        KPIFactDaily.objects.create(
+            company=self.company,
+            date=date(2024, 2, 1),
+            kpi_key="expenses_daily",
+            value=Decimal("10.00"),
+        )
+        KPIFactDaily.objects.create(
+            company=self.company,
+            date=date(2024, 2, 5),
+            kpi_key="expenses_daily",
+            value=Decimal("20.00"),
+        )
+        KPIFactDaily.objects.create(
+            company=self.company,
+            date=date(2024, 2, 20),
+            kpi_key="expenses_daily",
+            value=Decimal("30.00"),
+        )
+
+        self.auth()
+        url = reverse("analytics-kpis")
+        res = self.client.get(
+            url,
+            {
+                "keys": "expenses_daily",
+                "start": "2024-02-01",
+                "end": "2024-02-10",
+            },
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        points = res.data[0]["points"]
+        self.assertEqual(len(points), 2)
+        self.assertEqual(points[0]["date"], "2024-02-01")
+        self.assertEqual(points[1]["date"], "2024-02-05")
+        
     def test_breakdown_returns_top_n(self):
         target_date = date(2024, 2, 15)
         KPIDefinition.objects.create(
@@ -229,3 +265,37 @@ class AnalyticsAPITests(APITestCase):
             },
         )
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class AnalyticsDashboardPermissionTests(APITestCase):
+    def setUp(self):
+        self.company = Company.objects.create(name="CEO Co")
+        self.user = User.objects.create_user(
+            username="ceo-viewer",
+            password="pass12345",
+            company=self.company,
+        )
+        self.role = Role.objects.create(company=self.company, name="CEO")
+        UserRole.objects.create(user=self.user, role=self.role)
+
+    def auth(self):
+        url = reverse("token_obtain_pair")
+        res = self.client.post(
+            url, {"username": "ceo-viewer", "password": "pass12345"}, format="json"
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {res.data['access']}")
+
+    def test_ceo_dashboard_permissions(self):
+        self.auth()
+        url = reverse("analytics-summary")
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+        permission = Permission.objects.create(
+            code="analytics.view_ceo", name="View CEO Analytics"
+        )
+        RolePermission.objects.create(role=self.role, permission=permission)
+
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)

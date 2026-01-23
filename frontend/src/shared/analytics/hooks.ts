@@ -40,7 +40,7 @@ export type AlertsFilters = {
 
 export function useAlerts(filters: AlertsFilters) {
   return useQuery({
-    queryKey: ["alerts", filters],
+    queryKey: ["analyticsAlerts", filters],    
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.status) {
