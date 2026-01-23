@@ -15,13 +15,12 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { isForbiddenError } from "../../shared/api/errors";
 import {
-  AlertSeverity,
-  AlertStatus,
   useAckAlert,
   useAlert,
   useAlerts,
   useResolveAlert,
 } from "../../shared/analytics/hooks";
+import type { AlertSeverity, AlertStatus } from "../../shared/analytics/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 
 const severityColor: Record<AlertSeverity, string> = {
