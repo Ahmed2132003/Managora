@@ -5,7 +5,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from core.api_views.auth import LoginView
 from core.api_views.me import MeView
 from core.api_views.roles import RoleListView
-from backend.core.api_views.setup_serializers import ApplySetupTemplateView, SetupTemplateListView
+from backend.core.serializers.setup_serializers import ApplySetupTemplateView, SetupTemplateListView
 from core.api_views.users import UsersViewSet
 
 router = DefaultRouter()
