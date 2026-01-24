@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Button,
   Group,
@@ -407,8 +407,20 @@ export function UsersPage() {
   const location = useLocation();
   const { data, isLoading, isError } = useMe();
 
-  const [language, setLanguage] = useState<Language>("ar");
-  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [language, setLanguage] = useState<Language>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-language")
+        : null;
+    return stored === "en" || stored === "ar" ? stored : "ar";
+  });
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-theme")
+        : null;
+    return stored === "light" || stored === "dark" ? stored : "light";
+  });  
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
   const userPermissions = useMemo(
@@ -422,6 +434,20 @@ export function UsersPage() {
   const canEdit = useCan("users.edit");
   const canDelete = useCan("users.delete");
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-language", language);
+  }, [language]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-theme", theme);
+  }, [theme]);
+  
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);

@@ -90,6 +90,7 @@
 
 .users-table {
   width: 100%;
+  min-width: 720px;
   border-collapse: collapse;
   font-size: 0.95rem;
 }
@@ -176,5 +177,14 @@
   .primary-button {
     width: 100%;
     text-align: center;
+  }
+
+  .users-table {
+    min-width: 640px;
+  }
+
+  .table-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

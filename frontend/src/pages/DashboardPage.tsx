@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { clearTokens } from "../shared/auth/tokens";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMe } from "../shared/auth/useMe.ts";
@@ -257,14 +257,40 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { data, isLoading, isError } = useMe();
-  const [language, setLanguage] = useState<Language>("ar");
-  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [language, setLanguage] = useState<Language>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-language")
+        : null;
+    return stored === "en" || stored === "ar" ? stored : "ar";
+  });
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-theme")
+        : null;
+    return stored === "light" || stored === "dark" ? stored : "light";
+  });  
   const [searchTerm, setSearchTerm] = useState("");
   const content = useMemo(() => contentMap[language], [language]);
   const userPermissions = data?.permissions ?? [];
   const userName =
     data?.user.first_name || data?.user.username || content.userFallback;
   const isArabic = language === "ar";  
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-language", language);
+  }, [language]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-theme", theme);
+  }, [theme]);  
   const range = useMemo(() => {
     const end = new Date();
     const start = new Date();
