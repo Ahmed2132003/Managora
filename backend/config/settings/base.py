@@ -110,7 +110,7 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_THROTTLE_RATES": {
         "analytics": "120/min",
-        "login": "5/min",
+        "login": "1000/min",        
         "copilot": "30/min",
         "export": "30/min",
     },

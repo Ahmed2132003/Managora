@@ -22,7 +22,7 @@ def set_audit_context(user=None, ip_address: str | None = None, user_agent: str 
     _state.audit_context = AuditContext(
         user=user,
         ip_address=ip_address,
-        user_agent=user_agent,
+        user_agent=user_agent or "",        
         timestamp=timezone.now().isoformat(),
     )
 
