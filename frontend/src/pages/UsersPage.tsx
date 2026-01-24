@@ -1,19 +1,13 @@
 import { useMemo, useState } from "react";
 import {
-  Badge,
   Button,
-  Card,
   Group,
-  MultiSelect,
   Modal,
-  Select,
+  MultiSelect,
+  PasswordInput,
   Stack,
   Switch,
-  Table,
-  Text,
   TextInput,
-  PasswordInput,
-  Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,11 +17,16 @@ import {
   useForm,
   type ControllerRenderProps,
 } from "react-hook-form";
+import { useLocation, useNavigate } from "react-router-dom";
 import { z } from "zod";
 
 import { endpoints } from "../shared/api/endpoints";
 import { http } from "../shared/api/http";
-import { useCan } from "../shared/auth/useCan";
+import { hasPermission, useCan } from "../shared/auth/useCan";
+import { clearTokens } from "../shared/auth/tokens";
+import { useMe } from "../shared/auth/useMe";
+import "./DashboardPage.css";
+import "./UsersPage.css";
 
 /* ================= Types ================= */
 
@@ -46,26 +45,330 @@ type User = {
   date_joined: string;
 };
 
+type Language = "en" | "ar";
+
+type ThemeMode = "light" | "dark";
+
+type Content = {
+  brand: string;
+  subtitle: string;
+  searchPlaceholder: string;
+  languageLabel: string;
+  themeLabel: string;
+  navigationLabel: string;
+  logoutLabel: string;
+  pageTitle: string;
+  pageSubtitle: string;
+  createUser: string;
+  filtersTitle: string;
+  filtersSubtitle: string;
+  roleFilter: string;
+  rolePlaceholder: string;
+  statusFilter: string;
+  statusPlaceholder: string;
+  clearFilters: string;
+  stats: {
+    totalUsers: string;
+    activeUsers: string;
+    inactiveUsers: string;
+    totalRoles: string;
+  };
+  table: {
+    title: string;
+    subtitle: string;
+    username: string;
+    email: string;
+    roles: string;
+    active: string;
+    created: string;
+    actions: string;
+    emptyTitle: string;
+    emptySubtitle: string;
+    loading: string;
+  };
+  status: {
+    active: string;
+    inactive: string;
+  };
+  nav: {
+    dashboard: string;
+    users: string;
+    attendanceSelf: string;
+    leaveBalance: string;
+    leaveRequest: string;
+    leaveMyRequests: string;
+    employees: string;
+    departments: string;
+    jobTitles: string;
+    hrAttendance: string;
+    leaveInbox: string;
+    policies: string;
+    hrActions: string;
+    payroll: string;
+    accountingSetup: string;
+    journalEntries: string;
+    expenses: string;
+    collections: string;
+    trialBalance: string;
+    generalLedger: string;
+    profitLoss: string;
+    balanceSheet: string;
+    agingReport: string;
+    customers: string;
+    newCustomer: string;
+    invoices: string;
+    newInvoice: string;
+    alertsCenter: string;
+    cashForecast: string;
+    ceoDashboard: string;
+    financeDashboard: string;
+    hrDashboard: string;
+    copilot: string;
+    auditLogs: string;
+    setupTemplates: string;
+    setupProgress: string;
+  };
+  form: {
+    createTitle: string;
+    editTitle: string;
+    username: string;
+    email: string;
+    password: string;
+    passwordOptional: string;
+    roles: string;
+    rolesPlaceholder: string;
+    active: string;
+    create: string;
+    save: string;
+    confirmDelete: (name: string) => string;
+  };
+};
+
+const contentMap: Record<Language, Content> = {
+  en: {
+    brand: "managora",
+    subtitle: "A smart dashboard that blends motion, clarity, and insight.",
+    searchPlaceholder: "Search users, emails, roles...",
+    languageLabel: "Language",
+    themeLabel: "Theme",
+    navigationLabel: "Navigation",
+    logoutLabel: "Logout",
+    pageTitle: "Users",
+    pageSubtitle: "Manage roles, access, and member activity.",
+    createUser: "Create user",
+    filtersTitle: "User filters",
+    filtersSubtitle: "Narrow down by role or status",
+    roleFilter: "Role",
+    rolePlaceholder: "All roles",
+    statusFilter: "Status",
+    statusPlaceholder: "All statuses",
+    clearFilters: "Clear filters",
+    stats: {
+      totalUsers: "Total users",
+      activeUsers: "Active users",
+      inactiveUsers: "Inactive users",
+      totalRoles: "Roles available",
+    },
+    table: {
+      title: "Team directory",
+      subtitle: "Live user data and permissions",
+      username: "Username",
+      email: "Email",
+      roles: "Roles",
+      active: "Status",
+      created: "Created",
+      actions: "Actions",
+      emptyTitle: "No users yet",
+      emptySubtitle: "Add team members to start collaborating.",
+      loading: "Loading users...",
+    },
+    status: {
+      active: "Active",
+      inactive: "Inactive",
+    },
+    nav: {
+      dashboard: "Dashboard",
+      users: "Users",
+      attendanceSelf: "My Attendance",
+      leaveBalance: "Leave Balance",
+      leaveRequest: "Leave Request",
+      leaveMyRequests: "My Leave Requests",
+      employees: "Employees",
+      departments: "Departments",
+      jobTitles: "Job Titles",
+      hrAttendance: "HR Attendance",
+      leaveInbox: "Leave Inbox",
+      policies: "Policies",
+      hrActions: "HR Actions",
+      payroll: "Payroll",
+      accountingSetup: "Accounting Setup",
+      journalEntries: "Journal Entries",
+      expenses: "Expenses",
+      collections: "Collections",
+      trialBalance: "Trial Balance",
+      generalLedger: "General Ledger",
+      profitLoss: "Profit & Loss",
+      balanceSheet: "Balance Sheet",
+      agingReport: "AR Aging",
+      customers: "Customers",
+      newCustomer: "New Customer",
+      invoices: "Invoices",
+      newInvoice: "New Invoice",
+      alertsCenter: "Alerts Center",
+      cashForecast: "Cash Forecast",
+      ceoDashboard: "CEO Dashboard",
+      financeDashboard: "Finance Dashboard",
+      hrDashboard: "HR Dashboard",
+      copilot: "Copilot",
+      auditLogs: "Audit Logs",
+      setupTemplates: "Setup Templates",
+      setupProgress: "Setup Progress",
+    },
+    form: {
+      createTitle: "Create user",
+      editTitle: "Edit user",
+      username: "Username",
+      email: "Email",
+      password: "Password",
+      passwordOptional: "New password (optional)",
+      roles: "Roles",
+      rolesPlaceholder: "Select roles",
+      active: "Active",
+      create: "Create",
+      save: "Save",
+      confirmDelete: (name) => `Delete user ${name}?`,
+    },
+  },
+  ar: {
+    brand: "ماناجورا",
+    subtitle: "لوحة ذكية تجمع الحركة والوضوح والرؤية التحليلية.",
+    searchPlaceholder: "ابحث عن المستخدمين أو البريد أو الأدوار...",
+    languageLabel: "اللغة",
+    themeLabel: "المظهر",
+    navigationLabel: "التنقل",
+    logoutLabel: "تسجيل الخروج",
+    pageTitle: "المستخدمون",
+    pageSubtitle: "إدارة الأدوار والصلاحيات ونشاط الفريق.",
+    createUser: "إضافة مستخدم",
+    filtersTitle: "تصفية المستخدمين",
+    filtersSubtitle: "تحديد الدور أو الحالة",
+    roleFilter: "الدور",
+    rolePlaceholder: "كل الأدوار",
+    statusFilter: "الحالة",
+    statusPlaceholder: "كل الحالات",
+    clearFilters: "مسح الفلاتر",
+    stats: {
+      totalUsers: "إجمالي المستخدمين",
+      activeUsers: "المستخدمون النشطون",
+      inactiveUsers: "المستخدمون غير النشطين",
+      totalRoles: "عدد الأدوار",
+    },
+    table: {
+      title: "دليل الفريق",
+      subtitle: "بيانات المستخدمين والصلاحيات مباشرة",
+      username: "اسم المستخدم",
+      email: "البريد الإلكتروني",
+      roles: "الأدوار",
+      active: "الحالة",
+      created: "تاريخ الإنشاء",
+      actions: "إجراءات",
+      emptyTitle: "لا يوجد مستخدمون",
+      emptySubtitle: "أضف أعضاء الفريق لبدء العمل.",
+      loading: "جارٍ تحميل المستخدمين...",
+    },
+    status: {
+      active: "نشط",
+      inactive: "غير نشط",
+    },
+    nav: {
+      dashboard: "لوحة التحكم",
+      users: "المستخدمون",
+      attendanceSelf: "حضوري",
+      leaveBalance: "رصيد الإجازات",
+      leaveRequest: "طلب إجازة",
+      leaveMyRequests: "طلباتي",
+      employees: "الموظفون",
+      departments: "الأقسام",
+      jobTitles: "المسميات الوظيفية",
+      hrAttendance: "حضور الموارد البشرية",
+      leaveInbox: "وارد الإجازات",
+      policies: "السياسات",
+      hrActions: "إجراءات الموارد البشرية",
+      payroll: "الرواتب",
+      accountingSetup: "إعداد المحاسبة",
+      journalEntries: "قيود اليومية",
+      expenses: "المصروفات",
+      collections: "التحصيلات",
+      trialBalance: "ميزان المراجعة",
+      generalLedger: "دفتر الأستاذ",
+      profitLoss: "الأرباح والخسائر",
+      balanceSheet: "الميزانية العمومية",
+      agingReport: "أعمار الديون",
+      customers: "العملاء",
+      newCustomer: "عميل جديد",
+      invoices: "الفواتير",
+      newInvoice: "فاتورة جديدة",
+      alertsCenter: "مركز التنبيهات",
+      cashForecast: "توقعات النقد",
+      ceoDashboard: "لوحة CEO",
+      financeDashboard: "لوحة المالية",
+      hrDashboard: "لوحة الموارد البشرية",
+      copilot: "المساعد",
+      auditLogs: "سجل التدقيق",
+      setupTemplates: "قوالب الإعداد",
+      setupProgress: "تقدم الإعداد",
+    },
+    form: {
+      createTitle: "إضافة مستخدم",
+      editTitle: "تعديل المستخدم",
+      username: "اسم المستخدم",
+      email: "البريد الإلكتروني",
+      password: "كلمة المرور",
+      passwordOptional: "كلمة مرور جديدة (اختياري)",
+      roles: "الأدوار",
+      rolesPlaceholder: "اختر الأدوار",
+      active: "نشط",
+      create: "إضافة",
+      save: "حفظ",
+      confirmDelete: (name) => `حذف المستخدم ${name}?`,
+    },
+  },
+};
+
 /* ================= Schemas ================= */
 
 const createSchema = z.object({
-  username: z.string().min(1, "اسم المستخدم مطلوب"),
-  email: z.string().email("البريد الإلكتروني غير صحيح").optional().or(z.literal("")),
-  password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
+  username: z
+    .string()
+    .min(1, "Username is required / اسم المستخدم مطلوب"),
+  email: z
+    .string()
+    .email("Invalid email / البريد الإلكتروني غير صحيح")
+    .optional()
+    .or(z.literal("")),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters / كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
   is_active: z.boolean(),
-  // default يجعل الـ input ممكن يبقى undefined → طبيعي
   role_ids: z.array(z.string()).default([]),
 });
 
 const editSchema = z.object({
   id: z.number().int(),
-  username: z.string().min(1, "اسم المستخدم مطلوب"),
-  email: z.string().email("البريد الإلكتروني غير صحيح").optional().or(z.literal("")),
+  username: z
+    .string()
+    .min(1, "Username is required / اسم المستخدم مطلوب"),
+  email: z
+    .string()
+    .email("Invalid email / البريد الإلكتروني غير صحيح")
+    .optional()
+    .or(z.literal("")),
   password: z
     .string()
     .optional()
     .refine((v) => !v || v.length >= 8, {
-      message: "كلمة المرور يجب أن تكون 8 أحرف على الأقل",
+      message:
+        "Password must be at least 8 characters / كلمة المرور يجب أن تكون 8 أحرف على الأقل",
     }),
   is_active: z.boolean(),
   role_ids: z.array(z.string()).default([]),
@@ -100,6 +403,17 @@ const defaultEditValues: EditFormValues = {
 
 export function UsersPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { data, isLoading, isError } = useMe();
+
+  const [language, setLanguage] = useState<Language>("ar");
+  const [theme, setTheme] = useState<ThemeMode>("light");
+  const content = useMemo(() => contentMap[language], [language]);
+  const isArabic = language === "ar";
+  const userPermissions = data?.permissions ?? [];
+  const userName =
+    data?.user.first_name || data?.user.username || content.brand;
 
   const canCreate = useCan("users.create");
   const canEdit = useCan("users.edit");
@@ -166,13 +480,20 @@ export function UsersPage() {
       return res.data;
     },
     onSuccess: () => {
-      notifications.show({ title: "User created", message: "تم إنشاء المستخدم بنجاح" });
+      notifications.show({
+        title: "User created",
+        message: "تم إنشاء المستخدم بنجاح",
+      });
       setCreateOpened(false);
       createForm.reset(defaultCreateValues);
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (err: unknown) => {
-      notifications.show({ title: "Create failed", message: String(err), color: "red" });
+      notifications.show({
+        title: "Create failed",
+        message: String(err),
+        color: "red",
+      });
     },
   });
 
@@ -197,7 +518,11 @@ export function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (err: unknown) => {
-      notifications.show({ title: "Update failed", message: String(err), color: "red" });
+      notifications.show({
+        title: "Update failed",
+        message: String(err),
+        color: "red",
+      });
     },
   });
 
@@ -210,14 +535,22 @@ export function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (err: unknown) => {
-      notifications.show({ title: "Delete failed", message: String(err), color: "red" });
+      notifications.show({
+        title: "Delete failed",
+        message: String(err),
+        color: "red",
+      });
     },
   });
 
   /* ================= Helpers ================= */
 
   const roleOptions = useMemo(
-    () => (rolesQuery.data ?? []).map((r) => ({ value: String(r.id), label: r.name })),
+    () =>
+      (rolesQuery.data ?? []).map((role) => ({
+        value: String(role.id),
+        label: role.name,
+      })),
     [rolesQuery.data]
   );
 
@@ -228,136 +561,550 @@ export function UsersPage() {
       email: user.email ?? "",
       password: "",
       is_active: user.is_active,
-      role_ids: (user.roles ?? []).map((r) => String(r.id)),
+      role_ids: (user.roles ?? []).map((role) => String(role.id)),
     });
     setEditOpened(true);
   }
 
   function handleDelete(user: User) {
-    if (!window.confirm(`حذف المستخدم ${user.username}?`)) return;
+    if (!window.confirm(content.form.confirmDelete(user.username))) return;
     deleteMutation.mutate(user.id);
   }
 
+  function handleLogout() {
+    clearTokens();
+    navigate("/login", { replace: true });
+  }
+
   const users = usersQuery.data ?? [];
+  const activeUsers = users.filter((user) => user.is_active).length;
+  const inactiveUsers = users.length - activeUsers;
+
+  const navLinks = useMemo(
+    () => [
+      { path: "/dashboard", label: content.nav.dashboard, icon: "🏠" },
+      {
+        path: "/users",
+        label: content.nav.users,
+        icon: "👥",
+        permissions: ["users.view"],
+      },
+      {
+        path: "/attendance/self",
+        label: content.nav.attendanceSelf,
+        icon: "🕒",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/leaves/balance",
+        label: content.nav.leaveBalance,
+        icon: "📅",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/leaves/request",
+        label: content.nav.leaveRequest,
+        icon: "📝",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/leaves/my",
+        label: content.nav.leaveMyRequests,
+        icon: "📌",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/hr/employees",
+        label: content.nav.employees,
+        icon: "🧑‍💼",
+        permissions: ["employees.*", "hr.employees.view"],
+      },
+      {
+        path: "/hr/departments",
+        label: content.nav.departments,
+        icon: "🏢",
+        permissions: ["hr.departments.view"],
+      },
+      {
+        path: "/hr/job-titles",
+        label: content.nav.jobTitles,
+        icon: "🧩",
+        permissions: ["hr.job_titles.view"],
+      },
+      {
+        path: "/hr/attendance",
+        label: content.nav.hrAttendance,
+        icon: "📍",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/hr/leaves/inbox",
+        label: content.nav.leaveInbox,
+        icon: "📥",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/hr/policies",
+        label: content.nav.policies,
+        icon: "📚",
+        permissions: ["employees.*"],
+      },
+      {
+        path: "/hr/actions",
+        label: content.nav.hrActions,
+        icon: "✅",
+        permissions: ["approvals.*"],
+      },
+      {
+        path: "/payroll",
+        label: content.nav.payroll,
+        icon: "💸",
+        permissions: ["hr.payroll.view", "hr.payroll.*"],
+      },
+      {
+        path: "/accounting/setup",
+        label: content.nav.accountingSetup,
+        icon: "⚙️",
+        permissions: ["accounting.manage_coa", "accounting.*"],
+      },
+      {
+        path: "/accounting/journal-entries",
+        label: content.nav.journalEntries,
+        icon: "📒",
+        permissions: ["accounting.journal.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/expenses",
+        label: content.nav.expenses,
+        icon: "🧾",
+        permissions: ["expenses.view", "expenses.*"],
+      },
+      {
+        path: "/collections",
+        label: content.nav.collections,
+        icon: "💼",
+        permissions: ["accounting.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/trial-balance",
+        label: content.nav.trialBalance,
+        icon: "📈",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/general-ledger",
+        label: content.nav.generalLedger,
+        icon: "📊",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/pnl",
+        label: content.nav.profitLoss,
+        icon: "📉",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/balance-sheet",
+        label: content.nav.balanceSheet,
+        icon: "🧮",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/ar-aging",
+        label: content.nav.agingReport,
+        icon: "⏳",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/customers",
+        label: content.nav.customers,
+        icon: "🤝",
+        permissions: ["customers.view", "customers.*"],
+      },
+      {
+        path: "/customers/new",
+        label: content.nav.newCustomer,
+        icon: "➕",
+        permissions: ["customers.create", "customers.*"],
+      },
+      {
+        path: "/invoices",
+        label: content.nav.invoices,
+        icon: "📄",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/invoices/new",
+        label: content.nav.newInvoice,
+        icon: "🧾",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/analytics/alerts",
+        label: content.nav.alertsCenter,
+        icon: "🚨",
+        permissions: ["analytics.alerts.view", "analytics.alerts.manage"],
+      },
+      {
+        path: "/analytics/cash-forecast",
+        label: content.nav.cashForecast,
+        icon: "💡",
+      },
+      { path: "/analytics/ceo", label: content.nav.ceoDashboard, icon: "📌" },
+      {
+        path: "/analytics/finance",
+        label: content.nav.financeDashboard,
+        icon: "💹",
+      },
+      { path: "/analytics/hr", label: content.nav.hrDashboard, icon: "🧑‍💻" },
+      { path: "/copilot", label: content.nav.copilot, icon: "🤖" },
+      {
+        path: "/admin/audit-logs",
+        label: content.nav.auditLogs,
+        icon: "🛡️",
+        permissions: ["audit.view"],
+      },
+      { path: "/setup/templates", label: content.nav.setupTemplates, icon: "🧱" },
+      { path: "/setup/progress", label: content.nav.setupProgress, icon: "🚀" },
+    ],
+    [content.nav]
+  );
+
+  const visibleNavLinks = useMemo(() => {
+    return navLinks.filter((link) => {
+      if (!link.permissions || link.permissions.length === 0) {
+        return true;
+      }
+      return link.permissions.some((permission) =>
+        hasPermission(userPermissions, permission)
+      );
+    });
+  }, [navLinks, userPermissions]);
 
   /* ================= UI ================= */
 
   return (
-    <Stack gap="lg" mt="md">
-      <Group justify="space-between">
-        <Title order={3}>Users</Title>
-        {canCreate && (
-          <Button
-            onClick={() => {
-              createForm.reset(defaultCreateValues);
-              setCreateOpened(true);
-            }}
-          >
-            Create user
-          </Button>
-        )}
-      </Group>
+    <div
+      className="dashboard-page users-page"
+      data-theme={theme}
+      dir={isArabic ? "rtl" : "ltr"}
+      lang={language}
+    >
+      <div className="dashboard-page__glow" aria-hidden="true" />
+      <header className="dashboard-topbar">
+        <div className="dashboard-brand">
+          <img src="/managora-logo.svg" alt="Managora logo" />
+          <div>
+            <span className="dashboard-brand__title">{content.brand}</span>
+            <span className="dashboard-brand__subtitle">
+              {content.subtitle}
+            </span>
+          </div>
+        </div>
+        <div className="dashboard-search">
+          <span aria-hidden="true">⌕</span>
+          <input
+            type="text"
+            placeholder={content.searchPlaceholder}
+            aria-label={content.searchPlaceholder}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+      </header>
 
-      <Card withBorder>
-        <Stack gap="md">
-          <Group grow align="flex-end">
-            <TextInput
-              label="Search"
-              placeholder="username أو email"
-              value={search}
-              onChange={(e) => setSearch(e.currentTarget.value)}
-            />
-            <Select
-              label="Role"
-              placeholder="كل الأدوار"
-              data={roleOptions}
-              value={roleFilter}
-              onChange={setRoleFilter}
-              clearable
-            />
-            <Select
-              label="Active"
-              placeholder="الكل"
-              data={[
-                { value: "true", label: "Active" },
-                { value: "false", label: "Inactive" },
-              ]}
-              value={activeFilter}
-              onChange={setActiveFilter}
-              clearable
-            />
-          </Group>
+      <div className="dashboard-shell">
+        <aside className="dashboard-sidebar">
+          <div className="sidebar-card">
+            <p>{content.pageTitle}</p>
+            <strong>{userName}</strong>
+            {isLoading && (
+              <span className="sidebar-note">...loading profile</span>
+            )}
+            {isError && (
+              <span className="sidebar-note sidebar-note--error">
+                {isArabic
+                  ? "تعذر تحميل بيانات الحساب."
+                  : "Unable to load account data."}
+              </span>
+            )}
+          </div>
+          <nav className="sidebar-nav" aria-label={content.navigationLabel}>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() =>
+                setLanguage((prev) => (prev === "en" ? "ar" : "en"))
+              }
+            >
+              <span className="nav-icon" aria-hidden="true">
+                🌐
+              </span>
+              {content.languageLabel} • {isArabic ? "EN" : "AR"}
+            </button>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() =>
+                setTheme((prev) => (prev === "light" ? "dark" : "light"))
+              }
+            >
+              <span className="nav-icon" aria-hidden="true">
+                {theme === "light" ? "🌙" : "☀️"}
+              </span>
+              {content.themeLabel} • {theme === "light" ? "Dark" : "Light"}
+            </button>
+            <div className="sidebar-links">
+              <span className="sidebar-links__title">
+                {content.navigationLabel}
+              </span>
+              {visibleNavLinks.map((link) => (
+                <button
+                  key={link.path}
+                  type="button"
+                  className={`nav-item${
+                    location.pathname === link.path ? " nav-item--active" : ""
+                  }`}
+                  onClick={() => navigate(link.path)}
+                >
+                  <span className="nav-icon" aria-hidden="true">
+                    {link.icon}
+                  </span>
+                  {link.label}
+                </button>
+              ))}
+            </div>
+          </nav>
+          <div className="sidebar-footer">
+            <button type="button" className="pill-button" onClick={handleLogout}>
+              {content.logoutLabel}
+            </button>
+          </div>
+        </aside>
 
-          {usersQuery.isLoading && <Text c="dimmed">جارٍ تحميل المستخدمين...</Text>}
-          {usersQuery.isError && <Text c="red">حصل خطأ أثناء تحميل المستخدمين.</Text>}
-          {!usersQuery.isLoading && users.length === 0 && (
-            <Text c="dimmed">لا يوجد مستخدمون حتى الآن.</Text>
-          )}
+        <main className="dashboard-main">
+          <section className="hero-panel users-hero">
+            <div className="users-hero__header">
+              <div className="hero-panel__intro">
+                <h1>{content.pageTitle}</h1>
+                <p>{content.pageSubtitle}</p>
+              </div>
+              {canCreate && (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    createForm.reset(defaultCreateValues);
+                    setCreateOpened(true);
+                  }}
+                >
+                  {content.createUser}
+                </button>
+              )}
+            </div>
 
-          {users.length > 0 && (
-            <Table striped highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Username</Table.Th>
-                  <Table.Th>Email</Table.Th>
-                  <Table.Th>Roles</Table.Th>
-                  <Table.Th>Active</Table.Th>
-                  <Table.Th>Created</Table.Th>
-                  <Table.Th>Actions</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {users.map((u) => (
-                  <Table.Tr key={u.id}>
-                    <Table.Td>{u.username}</Table.Td>
-                    <Table.Td>{u.email || "-"}</Table.Td>
-                    <Table.Td>
-                      <Group gap="xs">
-                        {u.roles.length === 0 ? (
-                          <Text size="sm" c="dimmed">
-                            -
-                          </Text>
-                        ) : (
-                          u.roles.map((r) => (
-                            <Badge key={r.id} variant="light">
-                              {r.name}
-                            </Badge>
-                          ))
-                        )}
-                      </Group>
-                    </Table.Td>
-                    <Table.Td>
-                      <Badge color={u.is_active ? "green" : "red"} variant="light">
-                        {u.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>{new Date(u.date_joined).toLocaleDateString("en-GB")}</Table.Td>
-                    <Table.Td>
-                      <Group gap="xs">
-                        {canEdit && (
-                          <Button size="xs" variant="light" onClick={() => openEdit(u)}>
-                            Edit
-                          </Button>
-                        )}
-                        {canDelete && (
-                          <Button size="xs" color="red" variant="light" onClick={() => handleDelete(u)}>
-                            Delete
-                          </Button>
-                        )}
-                      </Group>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          )}
-        </Stack>
-      </Card>
+            <div className="hero-panel__stats">
+              {[
+                {
+                  label: content.stats.totalUsers,
+                  value: users.length,
+                },
+                {
+                  label: content.stats.activeUsers,
+                  value: activeUsers,
+                },
+                {
+                  label: content.stats.inactiveUsers,
+                  value: inactiveUsers,
+                },
+                {
+                  label: content.stats.totalRoles,
+                  value: roleOptions.length,
+                },
+              ].map((stat) => (
+                <div key={stat.label} className="stat-card">
+                  <div className="stat-card__top">
+                    <span>{stat.label}</span>
+                    <span className="stat-card__change">{content.pageTitle}</span>
+                  </div>
+                  <strong>{stat.value}</strong>
+                  <div className="stat-card__spark" aria-hidden="true" />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel users-panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.filtersTitle}</h2>
+                <p>{content.filtersSubtitle}</p>
+              </div>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  setRoleFilter(null);
+                  setActiveFilter(null);
+                }}
+              >
+                {content.clearFilters}
+              </button>
+            </div>
+
+            <div className="users-filters">
+              <label className="filter-field">
+                <span>{content.roleFilter}</span>
+                <select
+                  value={roleFilter ?? ""}
+                  onChange={(event) =>
+                    setRoleFilter(event.target.value || null)
+                  }
+                >
+                  <option value="">{content.rolePlaceholder}</option>
+                  {roleOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-field">
+                <span>{content.statusFilter}</span>
+                <select
+                  value={activeFilter ?? ""}
+                  onChange={(event) =>
+                    setActiveFilter(event.target.value || null)
+                  }
+                >
+                  <option value="">{content.statusPlaceholder}</option>
+                  <option value="true">{content.status.active}</option>
+                  <option value="false">{content.status.inactive}</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section className="panel users-panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.table.title}</h2>
+                <p>{content.table.subtitle}</p>
+              </div>
+              <span className="pill pill--accent">{users.length}</span>
+            </div>
+
+            {usersQuery.isLoading && (
+              <div className="users-state users-state--loading">
+                {content.table.loading}
+              </div>
+            )}
+            {usersQuery.isError && (
+              <div className="users-state users-state--error">
+                {isArabic
+                  ? "حصل خطأ أثناء تحميل المستخدمين."
+                  : "Something went wrong while loading users."}
+              </div>
+            )}
+            {!usersQuery.isLoading && users.length === 0 && (
+              <div className="users-state">
+                <strong>{content.table.emptyTitle}</strong>
+                <span>{content.table.emptySubtitle}</span>
+              </div>
+            )}
+
+            {users.length > 0 && (
+              <div className="users-table-wrapper">
+                <table className="users-table">
+                  <thead>
+                    <tr>
+                      <th>{content.table.username}</th>
+                      <th>{content.table.email}</th>
+                      <th>{content.table.roles}</th>
+                      <th>{content.table.active}</th>
+                      <th>{content.table.created}</th>
+                      <th>{content.table.actions}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((user) => (
+                      <tr key={user.id}>
+                        <td>
+                          <div className="user-cell">
+                            <strong>{user.username}</strong>
+                            <span>{user.email || "-"}</span>
+                          </div>
+                        </td>
+                        <td>{user.email || "-"}</td>
+                        <td>
+                          <div className="role-list">
+                            {user.roles.length === 0 ? (
+                              <span className="role-pill role-pill--empty">
+                                -
+                              </span>
+                            ) : (
+                              user.roles.map((role) => (
+                                <span key={role.id} className="role-pill">
+                                  {role.name}
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span
+                            className={`status-pill${
+                              user.is_active ? " status-pill--active" : ""
+                            }`}
+                          >
+                            {user.is_active
+                              ? content.status.active
+                              : content.status.inactive}
+                          </span>
+                        </td>
+                        <td>
+                          {new Date(user.date_joined).toLocaleDateString(
+                            isArabic ? "ar-EG" : "en-GB"
+                          )}
+                        </td>
+                        <td>
+                          <div className="table-actions">
+                            {canEdit && (
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={() => openEdit(user)}
+                              >
+                                {isArabic ? "تعديل" : "Edit"}
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                type="button"
+                                className="ghost-button ghost-button--danger"
+                                onClick={() => handleDelete(user)}
+                              >
+                                {isArabic ? "حذف" : "Delete"}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </main>
+      </div>
+
+      <footer className="dashboard-footer">{content.subtitle}</footer>
 
       {/* Create Modal */}
       <Modal
         opened={createOpened}
-        title="Create user"
+        title={content.form.createTitle}
         centered
         onClose={() => {
           setCreateOpened(false);
@@ -365,22 +1112,24 @@ export function UsersPage() {
         }}
       >
         <form
-          onSubmit={createForm.handleSubmit((values: CreateFormValues) => createMutation.mutate(values))}
+          onSubmit={createForm.handleSubmit((values: CreateFormValues) =>
+            createMutation.mutate(values)
+          )}
         >
           <Stack gap="md">
             <TextInput
-              label="Username"
+              label={content.form.username}
               {...createForm.register("username")}
               error={createForm.formState.errors.username?.message}
               required
             />
             <TextInput
-              label="Email"
+              label={content.form.email}
               {...createForm.register("email")}
               error={createForm.formState.errors.email?.message}
             />
             <PasswordInput
-              label="Password"
+              label={content.form.password}
               {...createForm.register("password")}
               error={createForm.formState.errors.password?.message}
               required
@@ -389,10 +1138,14 @@ export function UsersPage() {
             <Controller
               control={createForm.control}
               name="role_ids"
-              render={({ field }: { field: ControllerRenderProps<CreateFormValues, "role_ids"> }) => (
+              render={({
+                field,
+              }: {
+                field: ControllerRenderProps<CreateFormValues, "role_ids">;
+              }) => (
                 <MultiSelect
-                  label="Roles"
-                  placeholder="اختر الأدوار"
+                  label={content.form.roles}
+                  placeholder={content.form.rolesPlaceholder}
                   data={roleOptions}
                   value={field.value ?? []}
                   onChange={field.onChange}
@@ -403,18 +1156,22 @@ export function UsersPage() {
             <Controller
               control={createForm.control}
               name="is_active"
-              render={({ field }: { field: ControllerRenderProps<CreateFormValues, "is_active"> }) => (
+              render={({
+                field,
+              }: {
+                field: ControllerRenderProps<CreateFormValues, "is_active">;
+              }) => (
                 <Switch
-                  label="Active"
+                  label={content.form.active}
                   checked={field.value}
-                  onChange={(e) => field.onChange(e.currentTarget.checked)}
+                  onChange={(event) => field.onChange(event.currentTarget.checked)}
                 />
               )}
             />
 
             <Group justify="flex-end">
               <Button type="submit" loading={createMutation.isPending}>
-                Create
+                {content.form.create}
               </Button>
             </Group>
           </Stack>
@@ -424,7 +1181,7 @@ export function UsersPage() {
       {/* Edit Modal */}
       <Modal
         opened={editOpened}
-        title="Edit user"
+        title={content.form.editTitle}
         centered
         onClose={() => {
           setEditOpened(false);
@@ -432,22 +1189,24 @@ export function UsersPage() {
         }}
       >
         <form
-          onSubmit={editForm.handleSubmit((values: EditFormValues) => updateMutation.mutate(values))}
+          onSubmit={editForm.handleSubmit((values: EditFormValues) =>
+            updateMutation.mutate(values)
+          )}
         >
           <Stack gap="md">
             <TextInput
-              label="Username"
+              label={content.form.username}
               {...editForm.register("username")}
               error={editForm.formState.errors.username?.message}
               required
             />
             <TextInput
-              label="Email"
+              label={content.form.email}
               {...editForm.register("email")}
               error={editForm.formState.errors.email?.message}
             />
             <PasswordInput
-              label="New password (optional)"
+              label={content.form.passwordOptional}
               {...editForm.register("password")}
               error={editForm.formState.errors.password?.message}
             />
@@ -455,10 +1214,14 @@ export function UsersPage() {
             <Controller
               control={editForm.control}
               name="role_ids"
-              render={({ field }: { field: ControllerRenderProps<EditFormValues, "role_ids"> }) => (
+              render={({
+                field,
+              }: {
+                field: ControllerRenderProps<EditFormValues, "role_ids">;
+              }) => (
                 <MultiSelect
-                  label="Roles"
-                  placeholder="اختر الأدوار"
+                  label={content.form.roles}
+                  placeholder={content.form.rolesPlaceholder}
                   data={roleOptions}
                   value={field.value ?? []}
                   onChange={field.onChange}
@@ -469,23 +1232,27 @@ export function UsersPage() {
             <Controller
               control={editForm.control}
               name="is_active"
-              render={({ field }: { field: ControllerRenderProps<EditFormValues, "is_active"> }) => (
+              render={({
+                field,
+              }: {
+                field: ControllerRenderProps<EditFormValues, "is_active">;
+              }) => (
                 <Switch
-                  label="Active"
+                  label={content.form.active}
                   checked={field.value}
-                  onChange={(e) => field.onChange(e.currentTarget.checked)}
+                  onChange={(event) => field.onChange(event.currentTarget.checked)}
                 />
               )}
             />
 
             <Group justify="flex-end">
               <Button type="submit" loading={updateMutation.isPending}>
-                Save
+                {content.form.save}
               </Button>
             </Group>
           </Stack>
         </form>
       </Modal>
-    </Stack>
+    </div>
   );
 }
