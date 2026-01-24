@@ -1,6 +1,8 @@
 import json
+import logging
 from pathlib import Path
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils.dateparse import parse_time
 
@@ -13,6 +15,7 @@ from hr.models import PolicyRule, Shift, WorkSite
 
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
+logger = logging.getLogger(__name__)
 
 MAPPING_KEY_MAP = {
     "payroll_expense": AccountMapping.Key.PAYROLL_SALARIES_EXPENSE,
@@ -179,6 +182,19 @@ def _resolve_account_defaults(account_code, mapped_key, template_accounts, chart
     }
 
 
+def _get_or_create_default_chart(company, template_name=None):
+    chart_name = template_name or "Default Chart of Accounts"
+    chart, _ = ChartOfAccounts.objects.get_or_create(
+        company=company,
+        is_default=True,
+        defaults={"name": chart_name},
+    )
+    if chart.name != chart_name:
+        chart.name = chart_name
+        chart.save(update_fields=["name"])
+    return chart
+
+
 def apply_accounting(company, accounting_data):
     template_key = accounting_data.get("chart_of_accounts_template")
     template_accounts = {}
@@ -188,12 +204,16 @@ def apply_accounting(company, accounting_data):
             seed_coa_template(company=company, template_key=template_key)
         except ValueError:
             template_accounts = {}
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to seed chart of accounts template %s", template_key)
         template = TEMPLATES.get(template_key, {})
         template_accounts = {
             account["code"]: account for account in template.get("accounts", [])
         }
         chart = ChartOfAccounts.objects.filter(company=company, is_default=True).first()        
-        
+        if not chart:
+            chart = _get_or_create_default_chart(company, template.get("name"))
+                    
     mappings = accounting_data.get("mappings", {})
     if not mappings:
         return
@@ -233,14 +253,39 @@ def apply_accounting(company, accounting_data):
             if account:
                 accounts_by_code[account_code] = account
         if required and not account:
-            raise ValueError(f"Required mapping {mapped_key} missing account {account_code}.")
-                  
-        AccountMapping.objects.update_or_create(
-            company=company,
-            key=mapped_key,
-            defaults={"account": account, "required": required},
-        )
+            fallback_code = account_code or f"{mapped_key.value}-auto"
+            account, _ = Account.objects.get_or_create(
+                company=company,
+                code=fallback_code,
+                defaults=_resolve_account_defaults(
+                    fallback_code,
+                    mapped_key,
+                    template_accounts,
+                    chart,
+                ),
+            )
+            if account:
+                accounts_by_code[fallback_code] = account
+        if required and not account:
+            logger.error(
+                "Skipping required mapping %s due to missing account for company %s.",
+                mapped_key,
+                company.id,
+            )
+            required = False
 
+        try:
+            AccountMapping.objects.update_or_create(
+                company=company,
+                key=mapped_key,
+                defaults={"account": account, "required": required},
+            )
+        except ValidationError:  # noqa: BLE001
+            logger.exception(
+                "Failed to apply account mapping %s for company %s.",
+                mapped_key,
+                company.id,
+            )
 
 def apply_template_bundle(company, bundle):
     state, _ = CompanySetupState.objects.get_or_create(company=company)
