@@ -4,8 +4,9 @@ from pathlib import Path
 from django.db import transaction
 from django.utils.dateparse import parse_time
 
-from accounting.models import Account, AccountMapping
-from accounting.services.seed import seed_coa_template
+from accounting.models import Account, AccountMapping, ChartOfAccounts
+from accounting.services.seed import TEMPLATES, seed_coa_template
+
 from core.models import CompanySetupState, Permission, Role, RolePermission
 from core.permissions import PERMISSION_DEFINITIONS
 from hr.models import PolicyRule, Shift, WorkSite
@@ -152,8 +153,13 @@ def apply_policies(company, policies_data):
 
 def apply_accounting(company, accounting_data):
     template_key = accounting_data.get("chart_of_accounts_template")
+    template_accounts = {}
     if template_key:
         seed_coa_template(company=company, template_key=template_key)
+        template = TEMPLATES.get(template_key, {})
+        template_accounts = {
+            account["code"]: account for account in template.get("accounts", [])
+        }
 
     mappings = accounting_data.get("mappings", {})
     if not mappings:
@@ -162,12 +168,34 @@ def apply_accounting(company, accounting_data):
     account_codes = set(mappings.values())
     accounts = Account.objects.filter(company=company, code__in=account_codes)
     accounts_by_code = {account.code: account for account in accounts}
+    missing_codes = account_codes.difference(accounts_by_code.keys())
+    if missing_codes:
+        chart = (
+            None
+            if not template_key
+            else ChartOfAccounts.objects.filter(company=company, is_default=True).first()
+        )
+        for code in missing_codes:
+            template_account = template_accounts.get(code)
+            if not template_account:
+                continue
+            account, _ = Account.objects.get_or_create(
+                company=company,
+                code=code,
+                defaults={
+                    "name": template_account["name"],
+                    "type": template_account["type"],
+                    "chart": chart,
+                    "is_active": True,
+                },
+            )
+            accounts_by_code[code] = account
 
     for mapping_key, account_code in mappings.items():
         mapped_key = MAPPING_KEY_MAP.get(mapping_key)
         if not mapped_key:
             continue
-        account = accounts_by_code.get(account_code)
+        account = accounts_by_code.get(account_code)        
         required = mapped_key in AccountMapping.REQUIRED_KEYS
         if required and not account:
             raise ValueError(f"Required mapping {mapped_key} missing account {account_code}.")
