@@ -4,7 +4,6 @@ from pathlib import Path
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.utils.dateparse import parse_time
 
 from accounting.models import Account, AccountMapping, ChartOfAccounts
 from accounting.services.seed import TEMPLATES, seed_coa_template
@@ -34,34 +33,22 @@ FALLBACK_ACCOUNT_TYPES = {
     AccountMapping.Key.SALES_REVENUE: Account.Type.INCOME,
 }
 
-# -------------------------------------------------------------------
-# Built-in fallback template bundles (used if JSON file is missing)
-# This fixes tests that require template_code="services_small"
-# and expect Accountant role + at least one WorkSite + one Shift.
-# -------------------------------------------------------------------
+# ✅ Fallback bundle (لو JSON مش موجود) + لازم Accountant/WorkSite/Shift للتست
 BUILTIN_TEMPLATE_BUNDLES = {
     "services_small": {
         "roles": [
-            # These can be minimal; tests only assert role name exists.
             {"name": "Admin", "permissions": ["*"]},
             {"name": "HR", "permissions": ["*"]},
             {"name": "Accountant", "permissions": ["*"]},
-            {"name": "Manager", "permissions": []},
-            {"name": "Sales", "permissions": []},
         ],
         "attendance": {
             "worksites": [
-                {
-                    "name": "HQ",
-                    "lat": 30.0444,
-                    "lng": 31.2357,
-                    "radius_meters": 200,
-                }
+                {"name": "HQ", "lat": 30.0444, "lng": 31.2357, "radius_meters": 200}
             ],
             "shifts": [
                 {
                     "name": "Morning",
-                    "start_time": "09:00",
+                    "start_time": "09:00",  # ✅ strings (NOT datetime.time)
                     "end_time": "17:00",
                     "grace_minutes": 15,
                 }
@@ -74,16 +61,11 @@ BUILTIN_TEMPLATE_BUNDLES = {
 
 
 def load_template_bundle(code):
-    """
-    Loads template bundle from JSON file if present.
-    If not present, falls back to built-in bundles (esp. services_small).
-    """
     path = TEMPLATE_DIR / f"{code}.json"
     if path.exists():
         with path.open(encoding="utf-8") as handle:
             return json.load(handle)
 
-    # Fallback: use built-in bundle to avoid 400 when JSON is missing
     builtin = BUILTIN_TEMPLATE_BUNDLES.get(code)
     if builtin:
         return builtin
@@ -100,37 +82,55 @@ def build_template_overview(bundle):
     }
 
 
-def _ensure_permissions(permission_codes):
+def _permission_has_company_field() -> bool:
+    return any(f.name == "company" for f in Permission._meta.fields)
+
+
+def _ensure_permissions(company, permission_codes):
     permission_objects = {}
+    has_company = _permission_has_company_field()
+
     for code in permission_codes:
         name = PERMISSION_DEFINITIONS.get(code, code)
-        permission, _ = Permission.objects.get_or_create(code=code, defaults={"name": name})
-        if permission.name != name:
+
+        lookup = {"code": code}
+        if has_company:
+            lookup["company"] = company
+
+        permission, _ = Permission.objects.get_or_create(
+            **lookup,
+            defaults={"name": name},
+        )
+
+        if getattr(permission, "name", None) != name:
             permission.name = name
             permission.save(update_fields=["name"])
+
         permission_objects[code] = permission
+
     return permission_objects
 
 
 def apply_roles(company, roles_data):
     all_permission_codes = set(PERMISSION_DEFINITIONS.keys())
     template_codes = set()
+
     for role in roles_data:
         permissions = role.get("permissions", [])
         if "*" in permissions:
             template_codes.update(all_permission_codes)
         else:
             template_codes.update(permissions)
-    permission_objects = _ensure_permissions(template_codes)
+
+    permission_objects = _ensure_permissions(company, template_codes)
 
     for role_data in roles_data:
-        role, _ = Role.objects.get_or_create(
-            company=company,
-            name=role_data["name"],
-        )
+        role, _ = Role.objects.get_or_create(company=company, name=role_data["name"])
+
         requested_permissions = role_data.get("permissions", [])
         if "*" in requested_permissions:
             requested_permissions = list(all_permission_codes)
+
         for code in requested_permissions:
             permission = permission_objects.get(code)
             if permission:
@@ -149,14 +149,17 @@ def apply_attendance(company, attendance_data):
                 "is_active": True,
             },
         )
+
+    # ✅ هنا الإصلاح: ممنوع parse_time (بيرجع datetime.time)
+    # نخلي start_time/end_time strings عشان مايحصلش JSON serialization error
     for shift in attendance_data.get("shifts", []):
         Shift.objects.update_or_create(
             company=company,
             name=shift["name"],
             defaults={
-                "start_time": parse_time(shift["start_time"]),
-                "end_time": parse_time(shift["end_time"]),
-                "grace_minutes": shift["grace_minutes"],
+                "start_time": shift["start_time"],  # ✅ string
+                "end_time": shift["end_time"],      # ✅ string
+                "grace_minutes": shift.get("grace_minutes", 0),
                 "is_active": True,
             },
         )
@@ -255,9 +258,7 @@ def apply_accounting(company, accounting_data):
         except Exception:  # noqa: BLE001
             logger.exception("Failed to seed chart of accounts template %s", template_key)
         template = TEMPLATES.get(template_key, {})
-        template_accounts = {
-            account["code"]: account for account in template.get("accounts", [])
-        }
+        template_accounts = {account["code"]: account for account in template.get("accounts", [])}
         chart = ChartOfAccounts.objects.filter(company=company, is_default=True).first()
         if not chart:
             chart = _get_or_create_default_chart(company, template.get("name"))
@@ -281,46 +282,19 @@ def apply_accounting(company, accounting_data):
 
     for mapping_key, account_code in mappings.items():
         mapped_key = MAPPING_KEY_MAP.get(mapping_key)
-        if not mapped_key:
+        if not mapped_key or not account_code:
             continue
-        if not account_code:
-            continue
+
         account = accounts_by_code.get(account_code)
         required = mapped_key in AccountMapping.REQUIRED_KEYS
-        if not account and account_code:
+
+        if not account:
             account, _ = Account.objects.get_or_create(
                 company=company,
                 code=account_code,
-                defaults=_resolve_account_defaults(
-                    account_code,
-                    mapped_key,
-                    template_accounts,
-                    chart,
-                ),
+                defaults=_resolve_account_defaults(account_code, mapped_key, template_accounts, chart),
             )
-            if account:
-                accounts_by_code[account_code] = account
-        if required and not account:
-            fallback_code = account_code or f"{mapped_key.value}-auto"
-            account, _ = Account.objects.get_or_create(
-                company=company,
-                code=fallback_code,
-                defaults=_resolve_account_defaults(
-                    fallback_code,
-                    mapped_key,
-                    template_accounts,
-                    chart,
-                ),
-            )
-            if account:
-                accounts_by_code[fallback_code] = account
-        if required and not account:
-            logger.error(
-                "Skipping required mapping %s due to missing account for company %s.",
-                mapped_key,
-                company.id,
-            )
-            required = False
+            accounts_by_code[account_code] = account
 
         try:
             AccountMapping.objects.update_or_create(
@@ -328,12 +302,8 @@ def apply_accounting(company, accounting_data):
                 key=mapped_key,
                 defaults={"account": account, "required": required},
             )
-        except ValidationError:  # noqa: BLE001
-            logger.exception(
-                "Failed to apply account mapping %s for company %s.",
-                mapped_key,
-                company.id,
-            )
+        except ValidationError:
+            logger.exception("Failed to apply account mapping %s for company %s.", mapped_key, company.id)
 
 
 def apply_template_bundle(company, bundle):
@@ -360,9 +330,7 @@ def apply_template_bundle(company, bundle):
             try:
                 apply_accounting(company, bundle["accounting"])
             except Exception:  # noqa: BLE001
-                logger.exception(
-                    "Failed to apply accounting template for company %s.", company.id
-                )
+                logger.exception("Failed to apply accounting template for company %s.", company.id)
             else:
                 state.coa_applied = True
                 update_fields.append("coa_applied")
