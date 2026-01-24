@@ -1,4 +1,5 @@
 import axios from "axios";
+import { notifications } from "@mantine/notifications";
 import { env } from "../config/env";
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "../auth/tokens";
 import { endpoints } from "./endpoints";
@@ -34,9 +35,17 @@ http.interceptors.response.use(
     const status = error.response?.status;
     const refreshToken = getRefreshToken();
 
+    if (!error.response && !originalRequest?._networkNotified) {
+      originalRequest._networkNotified = true;
+      notifications.show({
+        title: "Network error",
+        message: "تعذر الاتصال بالخادم. حاول مرة أخرى.",
+        color: "red",
+      });
+    }
+
     if (status === 401 && refreshToken && !originalRequest?._retry) {
       originalRequest._retry = true;
-
       try {
         const refreshResponse = await refreshClient.post(endpoints.auth.refresh, {
           refresh: refreshToken,

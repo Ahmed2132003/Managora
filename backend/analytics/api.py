@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Avg, Sum
 from django.http import HttpResponse
 from django.utils import timezone
@@ -89,15 +91,20 @@ class AnalyticsSummaryView(AnalyticsAccessMixin, APIView):
         start_date = end_date - timedelta(days=days - 1)
 
         company = request.user.company
+        allowed_keys = self._allowed_keys()
+        allowed_cache_key = "all" if allowed_keys is None else ",".join(sorted(allowed_keys))
+        cache_key = f"analytics:summary:{company.id}:{range_param}:{allowed_cache_key}"
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached)
         base_queryset = KPIFactDaily.objects.filter(
             company=company,
             date__gte=start_date,
             date__lte=end_date,
         )
-        allowed_keys = self._allowed_keys()
         if allowed_keys is not None:
             base_queryset = base_queryset.filter(kpi_key__in=allowed_keys)
-
+            
         revenue_total = self._sum_for(base_queryset, SUMMARY_KEYS["revenue_total"])
         expenses_total = self._sum_for(base_queryset, SUMMARY_KEYS["expenses_total"])
         absence_rate_avg = self._avg_for(
@@ -114,17 +121,17 @@ class AnalyticsSummaryView(AnalyticsAccessMixin, APIView):
             else None
         )
 
-        return Response(
-            {
-                "revenue_total": _serialize_decimal(revenue_total),
-                "expenses_total": _serialize_decimal(expenses_total),
-                "net_profit_est": _serialize_decimal(net_profit_est),
-                "absence_rate_avg": _serialize_decimal(absence_rate_avg),
-                "lateness_rate_avg": _serialize_decimal(lateness_rate_avg),
-                "cash_balance_latest": _serialize_decimal(cash_balance_latest),
-            }
-        )
-
+        payload = {
+            "revenue_total": _serialize_decimal(revenue_total),
+            "expenses_total": _serialize_decimal(expenses_total),
+            "net_profit_est": _serialize_decimal(net_profit_est),
+            "absence_rate_avg": _serialize_decimal(absence_rate_avg),
+            "lateness_rate_avg": _serialize_decimal(lateness_rate_avg),
+            "cash_balance_latest": _serialize_decimal(cash_balance_latest),
+        }
+        cache.set(cache_key, payload, timeout=settings.CACHE_TTL)
+        return Response(payload)
+    
     @staticmethod
     def _parse_range_days(range_param: str) -> int:
         if not range_param:
@@ -185,10 +192,18 @@ class AnalyticsKPIView(AnalyticsAccessMixin, APIView):
         if allowed_keys is not None:
             keys = [key for key in keys if key in allowed_keys]
 
+        cache_key = (
+            f"analytics:kpi:{request.user.company_id}:{','.join(keys)}:"
+            f"{start_date.isoformat()}:{end_date.isoformat()}"
+        )
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached)
+
         facts = KPIFactDaily.objects.filter(
             company=request.user.company,
             date__gte=start_date,
-            date__lte=end_date,
+            date__lte=end_date,            
             kpi_key__in=keys,
         ).order_by("date")
 
@@ -198,10 +213,9 @@ class AnalyticsKPIView(AnalyticsAccessMixin, APIView):
                 {"date": fact.date.isoformat(), "value": _serialize_decimal(fact.value)}
             )
 
-        return Response(
-            [{"key": key, "points": points_by_key.get(key, [])} for key in keys]
-        )
-
+        payload = [{"key": key, "points": points_by_key.get(key, [])} for key in keys]
+        cache.set(cache_key, payload, timeout=settings.CACHE_TTL)
+        return Response(payload)
 
 class AnalyticsCompareView(AnalyticsAccessMixin, APIView):
     throttle_classes = [AnalyticsRateThrottle]    
@@ -218,6 +232,7 @@ class AnalyticsCompareView(AnalyticsAccessMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+
         allowed_keys = self._allowed_keys()
         if allowed_keys is not None and kpi_key not in allowed_keys:
             return Response(
@@ -225,10 +240,15 @@ class AnalyticsCompareView(AnalyticsAccessMixin, APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        cache_key = f"analytics:compare:{request.user.company_id}:{kpi_key}:{period}"
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached)
+
         current_start, current_end, previous_start, previous_end = self._period_bounds(
             period
         )
-
+        
         current_total = self._sum_for_period(kpi_key, current_start, current_end)
         previous_total = self._sum_for_period(kpi_key, previous_start, previous_end)
         delta_amount = current_total - previous_total
@@ -238,15 +258,15 @@ class AnalyticsCompareView(AnalyticsAccessMixin, APIView):
             else None
         )
 
-        return Response(
-            {
-                "current_total": _serialize_decimal(current_total),
-                "previous_total": _serialize_decimal(previous_total),
-                "delta_amount": _serialize_decimal(delta_amount),
-                "delta_percent": _serialize_decimal(delta_percent),
-            }
-        )
-
+        payload = {
+            "current_total": _serialize_decimal(current_total),
+            "previous_total": _serialize_decimal(previous_total),
+            "delta_amount": _serialize_decimal(delta_amount),
+            "delta_percent": _serialize_decimal(delta_percent),
+        }
+        cache.set(cache_key, payload, timeout=settings.CACHE_TTL)
+        return Response(payload)
+    
     def _sum_for_period(self, kpi_key: str, start, end) -> Decimal:
         total = (
             KPIFactDaily.objects.filter(

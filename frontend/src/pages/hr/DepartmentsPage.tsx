@@ -6,10 +6,11 @@ import {
   Card,
   Group,
   Modal,
+  Skeleton,
   Stack,
   Switch,
   Table,
-  Text,
+  Text,  
   TextInput,
   Title,
 } from "@mantine/core";
@@ -121,55 +122,62 @@ export function DepartmentsPage() {
 
       <Card withBorder radius="md" p="md">
         {departmentsQuery.isLoading ? (
-          <Text c="dimmed">Loading departments...</Text>
+          <Stack gap="sm">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} height={32} radius="sm" />
+            ))}
+          </Stack>
         ) : (
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Name</Table.Th>
-                <Table.Th>Status</Table.Th>
-                <Table.Th>Actions</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {(departmentsQuery.data ?? []).map((department) => (
-                <Table.Tr key={department.id}>
-                  <Table.Td>{department.name}</Table.Td>
-                  <Table.Td>
-                    <Badge color={department.is_active ? "green" : "gray"}>
-                      {department.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <Button
-                        size="xs"
-                        variant="light"
-                        onClick={() => {
-                          setEditing(department);
-                          setOpened(true);
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="light"
-                        color="red"
-                        onClick={() => handleDelete(department.id)}
-                        loading={deleteMutation.isPending}
-                      >
-                        Delete
-                      </Button>
-                    </Group>
-                  </Table.Td>
+          (departmentsQuery.data ?? []).length === 0 ? (
+            <Text c="dimmed">لا توجد أقسام بعد. أضف قسمًا جديدًا للبدء.</Text>
+          ) : (
+            <Table striped highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Name</Table.Th>
+                  <Table.Th>Status</Table.Th>
+                  <Table.Th>Actions</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {(departmentsQuery.data ?? []).map((department) => (
+                  <Table.Tr key={department.id}>
+                    <Table.Td>{department.name}</Table.Td>
+                    <Table.Td>
+                      <Badge color={department.is_active ? "green" : "gray"}>
+                        {department.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs">
+                        <Button
+                          size="xs"
+                          variant="light"
+                          onClick={() => {
+                            setEditing(department);
+                            setOpened(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="light"
+                          color="red"
+                          onClick={() => handleDelete(department.id)}
+                          loading={deleteMutation.isPending}
+                        >
+                          Delete
+                        </Button>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )
         )}
       </Card>
-
       <Modal
         opened={opened}
         onClose={() => {

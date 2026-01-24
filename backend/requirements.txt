@@ -8,3 +8,6 @@ django-cors-headers
 drf-spectacular
 dj-database-url
 reportlab
+django-redis
+redis
+sentry-sdk

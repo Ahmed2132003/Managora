@@ -389,7 +389,15 @@ class ExpenseViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
     }
 
     def get_queryset(self):
-        queryset = Expense.objects.filter(company=self.request.user.company)
+        queryset = (
+            Expense.objects.filter(company=self.request.user.company)
+            .select_related(
+                "paid_from_account",
+                "expense_account",
+                "cost_center",
+                "created_by",
+            )
+        )        
         date_from = parse_date(self.request.query_params.get("date_from") or "")
         date_to = parse_date(self.request.query_params.get("date_to") or "")
         vendor = self.request.query_params.get("vendor")

@@ -10,6 +10,9 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
 DEBUG = os.getenv("DEBUG", "1") == "1"
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
+APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
+BUILD_SHA = os.getenv("BUILD_SHA", os.getenv("COMMIT_SHA", ""))
+APP_ENVIRONMENT = os.getenv("APP_ENVIRONMENT", "dev" if DEBUG else "prod")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -42,6 +45,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "core.middleware.AuditContextMiddleware",
+    "core.middleware.RequestLoggingMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",    
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -107,10 +111,12 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_PAGINATION_CLASS": "core.pagination.OptionalPagination",
+    "PAGE_SIZE": 20,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_THROTTLE_RATES": {
         "analytics": "120/min",
-        "login": "1000/min",        
+        "login": "1000/min",                      
         "copilot": "30/min",
         "export": "30/min",
     },
@@ -139,6 +145,17 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
+# Caching
+REDIS_URL = os.getenv("REDIS_URL", "")
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache" if REDIS_URL else "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": REDIS_URL or "locmem://",
+        "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"} if REDIS_URL else {},
+    }
+}
+CACHE_TTL = int(os.getenv("CACHE_TTL", "60"))
+
 # Celery
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
@@ -157,3 +174,68 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=3, minute=0, day_of_week="mon"),
     },
 }
+
+# Structured logging
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {"()": "core.logging.JsonFormatter"},
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+        },
+    },
+    "loggers": {
+        "managora.request": {
+            "handlers": ["console"],
+            "level": os.getenv("REQUEST_LOG_LEVEL", "INFO"),
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": os.getenv("DJANGO_REQUEST_LOG_LEVEL", "ERROR"),
+            "propagate": False,
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": os.getenv("LOG_LEVEL", "INFO"),
+    },
+}
+
+# Sentry
+SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+SENTRY_ENVIRONMENT = os.getenv("SENTRY_ENVIRONMENT", APP_ENVIRONMENT)
+SENTRY_SAMPLE_RATE = float(os.getenv("SENTRY_SAMPLE_RATE", "0.1"))
+
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    def _scrub_event(event, hint):
+        request = event.get("request")
+        if request:
+            headers = request.get("headers", {})
+            for key in ["Authorization", "Cookie", "X-Api-Key"]:
+                headers.pop(key, None)
+            request["headers"] = headers
+            event["request"] = request
+        user = event.get("user")
+        if user:
+            for key in ["email", "username"]:
+                user.pop(key, None)
+            event["user"] = user
+        return event
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=SENTRY_ENVIRONMENT,
+        release=BUILD_SHA or None,
+        send_default_pii=False,
+        traces_sample_rate=SENTRY_SAMPLE_RATE,
+        before_send=_scrub_event,
+        integrations=[DjangoIntegration()],
+    )

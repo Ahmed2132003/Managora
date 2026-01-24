@@ -6,10 +6,11 @@ import {
   Card,
   Group,
   Modal,
+  Skeleton,
   Stack,
   Switch,
   Table,
-  Text,
+  Text,  
   TextInput,
   Title,
 } from "@mantine/core";
@@ -121,55 +122,62 @@ export function JobTitlesPage() {
 
       <Card withBorder radius="md" p="md">
         {jobTitlesQuery.isLoading ? (
-          <Text c="dimmed">Loading job titles...</Text>
+          <Stack gap="sm">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} height={32} radius="sm" />
+            ))}
+          </Stack>
         ) : (
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Name</Table.Th>
-                <Table.Th>Status</Table.Th>
-                <Table.Th>Actions</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {(jobTitlesQuery.data ?? []).map((jobTitle) => (
-                <Table.Tr key={jobTitle.id}>
-                  <Table.Td>{jobTitle.name}</Table.Td>
-                  <Table.Td>
-                    <Badge color={jobTitle.is_active ? "green" : "gray"}>
-                      {jobTitle.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <Button
-                        size="xs"
-                        variant="light"
-                        onClick={() => {
-                          setEditing(jobTitle);
-                          setOpened(true);
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="light"
-                        color="red"
-                        onClick={() => handleDelete(jobTitle.id)}
-                        loading={deleteMutation.isPending}
-                      >
-                        Delete
-                      </Button>
-                    </Group>
-                  </Table.Td>
+          (jobTitlesQuery.data ?? []).length === 0 ? (
+            <Text c="dimmed">لا توجد مسميات بعد. أضف مسمى وظيفي جديد.</Text>
+          ) : (
+            <Table striped highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Name</Table.Th>
+                  <Table.Th>Status</Table.Th>
+                  <Table.Th>Actions</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {(jobTitlesQuery.data ?? []).map((jobTitle) => (
+                  <Table.Tr key={jobTitle.id}>
+                    <Table.Td>{jobTitle.name}</Table.Td>
+                    <Table.Td>
+                      <Badge color={jobTitle.is_active ? "green" : "gray"}>
+                        {jobTitle.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs">
+                        <Button
+                          size="xs"
+                          variant="light"
+                          onClick={() => {
+                            setEditing(jobTitle);
+                            setOpened(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="light"
+                          color="red"
+                          onClick={() => handleDelete(jobTitle.id)}
+                          loading={deleteMutation.isPending}
+                        >
+                          Delete
+                        </Button>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )
         )}
       </Card>
-
       <Modal
         opened={opened}
         onClose={() => {
