@@ -8,7 +8,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from analytics.models import KPIContributionDaily, KPIDefinition, KPIFactDaily
-from core.models import Company, Permission, Role, RolePermission, UserRole
+from core.models import Company, ExportLog, Permission, Role, RolePermission, UserRole
 
 User = get_user_model()
 
@@ -266,6 +266,37 @@ class AnalyticsAPITests(APITestCase):
         )
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_export_creates_log(self):
+        export_permission = Permission.objects.create(
+            code="export.analytics", name="Export analytics"
+        )
+        RolePermission.objects.create(role=self.role, permission=export_permission)
+
+        today = timezone.localdate()
+        KPIFactDaily.objects.create(
+            company=self.company,
+            date=today,
+            kpi_key="expenses_daily",
+            value=Decimal("80.00"),
+        )
+
+        self.auth()
+        export_url = reverse("analytics-export")
+        res = self.client.get(
+            export_url,
+            {
+                "kpi": "expenses_daily",
+                "start": today.isoformat(),
+                "end": today.isoformat(),
+                "format": "csv",
+            },
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        log = ExportLog.objects.filter(company=self.company).latest("created_at")
+        self.assertEqual(log.export_type, "analytics.kpi")
+        self.assertEqual(log.row_count, 1)
+        
 
 class AnalyticsDashboardPermissionTests(APITestCase):
     def setUp(self):

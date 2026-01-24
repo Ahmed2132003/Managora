@@ -4,7 +4,8 @@ export const endpoints = {
     refresh: "/api/auth/refresh/",
   },
   me: "/api/me/",
-  users: "/api/users/",
+  auditLogs: "/api/audit/logs/",
+  users: "/api/users/",  
   setup: {
     templates: "/api/setup/templates/",
     applyTemplate: "/api/setup/apply-template/",

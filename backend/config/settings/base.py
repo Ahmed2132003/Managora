@@ -41,7 +41,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
+    "core.middleware.AuditContextMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",    
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -100,7 +101,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # DRF
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "core.authentication.AuditJWTAuthentication",        
     ),
     # مهم: نخلي الافتراضي محمي، ونفتح اللي لازم AllowAny
     "DEFAULT_PERMISSION_CLASSES": (
@@ -109,9 +110,11 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_THROTTLE_RATES": {
         "analytics": "120/min",
+        "login": "5/min",
+        "copilot": "30/min",
+        "export": "30/min",
     },
 }
-
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),

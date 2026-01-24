@@ -42,7 +42,8 @@ import { SetupWizardPage } from "../pages/setup/SetupWizardPage";
 import { SetupTemplatesPage } from "../pages/setup/SetupTemplatesPage";
 import { SetupProgressPage } from "../pages/setup/SetupProgressPage";
 import { CopilotPage } from "../pages/CopilotPage";
-export const router = createBrowserRouter([     
+import { AuditLogsPage } from "../pages/admin/AuditLogsPage";
+export const router = createBrowserRouter([           
   {    
     path: "/login",
     element: <LoginPage />,
@@ -94,7 +95,8 @@ export const router = createBrowserRouter([
       { path: "analytics/finance", element: <FinanceDashboardPage /> },
       { path: "analytics/hr", element: <HRDashboardPage /> },
       { path: "copilot", element: <CopilotPage /> },
-      {        
+      { path: "admin/audit-logs", element: <AuditLogsPage /> },
+      {                     
         path: "setup",
         element: <SetupWizardPage />,
         children: [

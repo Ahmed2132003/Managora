@@ -56,11 +56,15 @@ PERMISSION_DEFINITIONS = {
     "analytics.manage_rebuild": "Rebuild analytics KPIs",
     "analytics.alerts.view": "View analytics alerts",
     "analytics.alerts.manage": "Acknowledge or resolve analytics alerts",
+    "audit.view": "View audit logs",
     "copilot.attendance_report": "Run copilot attendance report",
     "copilot.top_late_employees": "Run copilot late employees report",
     "copilot.payroll_summary": "Run copilot payroll summary report",
     "copilot.top_debtors": "Run copilot debtors report",
     "copilot.profit_change_explain": "Run copilot profit change report",
+    "export.*": "Export data",
+    "export.analytics": "Export analytics data",
+    "export.accounting": "Export accounting reports",
 }
 
 ROLE_PERMISSION_MAP = {
@@ -95,9 +99,11 @@ ROLE_PERMISSION_MAP = {
         "analytics.view_finance",
         "analytics.alerts.view",
         "analytics.alerts.manage",
+        "export.analytics",
+        "export.accounting",
         "copilot.payroll_summary",
         "copilot.top_debtors",
-        "copilot.profit_change_explain",
+        "copilot.profit_change_explain",        
     ],                                                                                                                                                                      
     "Sales": [
         "customers.view",

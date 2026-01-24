@@ -6,6 +6,9 @@ from rest_framework.response import Response
 
 from django.db.models import Q
 
+from django.forms.models import model_to_dict
+
+from core.audit import get_audit_context
 from core.models import AuditLog, Role, User, UserRole
 from core.permissions import PermissionByActionMixin
 from core.serializers.users import (
@@ -68,45 +71,64 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         user = serializer.save(company=self.request.user.company)
         user.set_password(password)
         user.save(update_fields=["password"])
+        audit_context = get_audit_context()
         AuditLog.objects.create(
             company=self.request.user.company,
             actor=self.request.user,
             action="users.create",
             entity="user",
             entity_id=str(user.id),
+            before={},
+            after=model_to_dict(user, fields=["id", "username", "email", "is_active"]),
             payload={
                 "username": user.username,
                 "email": user.email,
                 "is_active": user.is_active,
             },
+            ip_address=audit_context.ip_address if audit_context else None,
+            user_agent=audit_context.user_agent if audit_context else "",
         )
 
     def perform_update(self, serializer):
+        before_data = model_to_dict(
+            serializer.instance,
+            fields=["id", "username", "email", "is_active"],
+        )
         password = serializer.validated_data.pop("password", None)
         user = serializer.save()
         if password:
             user.set_password(password)
             user.save(update_fields=["password"])
+        audit_context = get_audit_context()
         AuditLog.objects.create(
             company=self.request.user.company,
             actor=self.request.user,
             action="users.update",
             entity="user",
             entity_id=str(user.id),
+            before=before_data,
+            after=model_to_dict(user, fields=["id", "username", "email", "is_active"]),
             payload={"updated_fields": list(serializer.validated_data.keys())},
+            ip_address=audit_context.ip_address if audit_context else None,
+            user_agent=audit_context.user_agent if audit_context else "",
         )
 
     def perform_destroy(self, instance):
+        audit_context = get_audit_context()
         AuditLog.objects.create(
             company=self.request.user.company,
             actor=self.request.user,
             action="users.delete",
             entity="user",
             entity_id=str(instance.id),
+            before=model_to_dict(instance, fields=["id", "username", "email", "is_active"]),
+            after={},
             payload={"username": instance.username},
+            ip_address=audit_context.ip_address if audit_context else None,
+            user_agent=audit_context.user_agent if audit_context else "",
         )
         super().perform_destroy(instance)
-        
+                
     @extend_schema(
         tags=["Users"],
         summary="Assign roles to user",

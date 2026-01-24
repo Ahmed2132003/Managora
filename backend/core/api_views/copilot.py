@@ -7,11 +7,13 @@ from core.models import CopilotQueryLog
 from core.permissions import user_has_permission
 from core.serializers.copilot import CopilotQuerySerializer
 from core.services.copilot import get_intent
+from core.throttles import CopilotRateThrottle
 
 
 class CopilotQueryView(APIView):
     permission_classes = [IsAuthenticated]
-
+    throttle_classes = [CopilotRateThrottle]
+    
     def post(self, request):
         serializer = CopilotQuerySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

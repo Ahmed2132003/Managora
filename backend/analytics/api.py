@@ -16,7 +16,10 @@ from analytics.forecast import build_cash_forecast
 from analytics.models import KPIContributionDaily, KPIDefinition, KPIFactDaily
 from analytics.serializers import CashForecastSnapshotSerializer
 from analytics.throttles import AnalyticsRateThrottle
+from core.audit import get_audit_context
+from core.models import ExportLog
 from core.permissions import HasAnyPermission, user_has_permission
+from core.throttles import ExportRateThrottle
 
 SUMMARY_KEYS = {
     "revenue_total": "revenue_daily",
@@ -348,17 +351,22 @@ class AnalyticsBreakdownView(AnalyticsAccessMixin, APIView):
 
 
 class AnalyticsExportView(AnalyticsAccessMixin, APIView):
-    throttle_classes = [AnalyticsRateThrottle]    
+    throttle_classes = [AnalyticsRateThrottle, ExportRateThrottle]
     @extend_schema(
         tags=["Analytics"],
         summary="Export KPI data",
     )
     def get(self, request):
+        if not user_has_permission(request.user, "export.analytics"):
+            return Response(
+                {"detail": "You do not have permission to export data."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         kpi_key = request.query_params.get("kpi")
         start_date = parse_date(request.query_params.get("start"))
         end_date = parse_date(request.query_params.get("end"))
         export_format = request.query_params.get("format", "json").lower()
-
+        
         if not kpi_key or not start_date or not end_date:
             return Response(
                 {"detail": "kpi, start, and end are required."},
@@ -379,14 +387,32 @@ class AnalyticsExportView(AnalyticsAccessMixin, APIView):
             date__lte=end_date,
         ).order_by("date")
 
+        max_rows = 5000
+        facts = facts[:max_rows]
         points = [
             {"date": fact.date.isoformat(), "value": _serialize_decimal(fact.value)}
             for fact in facts
         ]
 
+        audit_context = get_audit_context()
+        ExportLog.objects.create(
+            company=request.user.company,
+            actor=request.user,
+            export_type="analytics.kpi",
+            filters={
+                "kpi": kpi_key,
+                "start": start_date.isoformat(),
+                "end": end_date.isoformat(),
+                "format": export_format,
+            },
+            row_count=len(points),
+            ip_address=audit_context.ip_address if audit_context else None,
+            user_agent=audit_context.user_agent if audit_context else None,
+        )
+
         if export_format == "csv":
             content_lines = ["date,value"] + [
-                f"{point['date']},{point['value']}" for point in points
+                f"{point['date']},{point['value']}" for point in points                
             ]
             content = "\n".join(content_lines)
             response = HttpResponse(content, content_type="text/csv")

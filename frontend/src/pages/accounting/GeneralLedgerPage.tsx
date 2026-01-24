@@ -12,6 +12,7 @@ import {
 } from "@mantine/core";
 import { isForbiddenError } from "../../shared/api/errors";
 import { useAccounts, useGeneralLedger } from "../../shared/accounting/hooks";
+import { useCan } from "../../shared/auth/useCan";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { downloadCsv, formatAmount } from "../../shared/accounting/reporting.ts";
 
@@ -19,6 +20,7 @@ export function GeneralLedgerPage() {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const canExport = useCan("export.accounting");
 
   const accountsQuery = useAccounts();
   const selectedAccountId = accountId ? Number(accountId) : undefined;
@@ -78,15 +80,17 @@ export function GeneralLedgerPage() {
     <Stack gap="lg">
       <Group justify="space-between">
         <Title order={3}>General Ledger</Title>
-        <Button
-          variant="light"
-          onClick={handleExport}
-          disabled={!ledgerQuery.data?.lines.length}
-        >
-          Export CSV
-        </Button>
+        {canExport && (
+          <Button
+            variant="light"
+            onClick={handleExport}
+            disabled={!ledgerQuery.data?.lines.length}
+          >
+            Export CSV
+          </Button>
+        )}
       </Group>
-
+      
       <Card withBorder radius="md" p="md">
         <Group align="end" gap="md" wrap="wrap">
           <Select

@@ -1,0 +1,114 @@
+from __future__ import annotations
+
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Any
+
+from django.db.models.signals import post_delete, post_save, pre_save
+from django.dispatch import receiver
+from django.forms.models import model_to_dict
+
+from core.audit import get_audit_context
+from core.models import AuditLog
+
+AUDITED_APPS = {"core", "hr", "accounting", "analytics"}
+EXCLUDED_MODELS = {
+    "auditlog",
+    "exportlog",
+    "copilotquerylog",
+    "user",
+}
+
+
+def _serialize_value(value: Any) -> Any:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _serialize_value(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [_serialize_value(item) for item in value]
+    return value
+
+
+def _serialize_instance(instance) -> dict[str, Any]:
+    data = model_to_dict(instance)
+    data["id"] = instance.pk
+    return {key: _serialize_value(value) for key, value in data.items()}
+
+
+def _should_audit(sender) -> bool:
+    return (
+        sender._meta.app_label in AUDITED_APPS
+        and sender._meta.model_name not in EXCLUDED_MODELS
+    )
+
+
+def _resolve_company(instance, user):
+    if hasattr(instance, "company") and instance.company:
+        return instance.company
+    if hasattr(instance, "role") and instance.role and hasattr(instance.role, "company"):
+        return instance.role.company
+    if hasattr(instance, "user") and instance.user and hasattr(instance.user, "company"):
+        return instance.user.company
+    if user and hasattr(user, "company"):
+        return user.company
+    return None
+
+
+@receiver(pre_save)
+def audit_pre_save(sender, instance, **kwargs):
+    if not _should_audit(sender):
+        return
+    if instance.pk:
+        try:
+            instance._audit_before = _serialize_instance(sender.objects.get(pk=instance.pk))
+        except sender.DoesNotExist:
+            instance._audit_before = None
+
+
+@receiver(post_save)
+def audit_post_save(sender, instance, created, **kwargs):
+    if not _should_audit(sender):
+        return
+    audit_context = get_audit_context()
+    user = audit_context.user if audit_context else None
+    company = _resolve_company(instance, user)
+    if not company:
+        return
+    before = instance._audit_before if hasattr(instance, "_audit_before") else None
+    action = "create" if created else "update"
+    AuditLog.objects.create(
+        company=company,
+        actor=user,
+        action=f"{sender._meta.app_label}.{sender._meta.model_name}.{action}",
+        entity=sender._meta.model_name,
+        entity_id=str(instance.pk),
+        before=before or {},
+        after=_serialize_instance(instance),
+        ip_address=audit_context.ip_address if audit_context else None,
+        user_agent=audit_context.user_agent if audit_context else "",
+    )
+
+
+@receiver(post_delete)
+def audit_post_delete(sender, instance, **kwargs):
+    if not _should_audit(sender):
+        return
+    audit_context = get_audit_context()
+    user = audit_context.user if audit_context else None
+    company = _resolve_company(instance, user)
+    if not company:
+        return
+    AuditLog.objects.create(
+        company=company,
+        actor=user,
+        action=f"{sender._meta.app_label}.{sender._meta.model_name}.delete",
+        entity=sender._meta.model_name,
+        entity_id=str(instance.pk),
+        before=_serialize_instance(instance),
+        after={},
+        ip_address=audit_context.ip_address if audit_context else None,
+        user_agent=audit_context.user_agent if audit_context else "",
+    )

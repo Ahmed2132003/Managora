@@ -175,11 +175,38 @@ class AuditLog(models.Model):
     entity = models.CharField(max_length=150)
     entity_id = models.CharField(max_length=64)
     payload = models.JSONField(default=dict, blank=True)
+    before = models.JSONField(default=dict, blank=True)
+    after = models.JSONField(default=dict, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.company.name} - {self.action} - {self.entity}:{self.entity_id}"
 
+
+class ExportLog(models.Model):
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="export_logs",
+    )
+    actor = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="export_logs",
+    )
+    export_type = models.CharField(max_length=150)
+    filters = models.JSONField(default=dict, blank=True)
+    row_count = models.PositiveIntegerField(default=0)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.company.name} - {self.export_type} - {self.created_at:%Y-%m-%d}"
 
 class CopilotQueryLog(models.Model):
     class Status(models.TextChoices):

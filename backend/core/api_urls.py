@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from core.api_views.auth import LoginView
+from core.api_views.audit import AuditLogListView
 from core.api_views.copilot import CopilotQueryView
 from core.api_views.me import MeView
 from core.api_views.roles import RoleListView
@@ -20,6 +21,9 @@ urlpatterns = [
     
     # Me
     path("me/", MeView.as_view(), name="me"),
+
+    # Audit
+    path("audit/logs/", AuditLogListView.as_view(), name="audit-logs"),
 
     # Roles
     path("roles/", RoleListView.as_view(), name="roles"),

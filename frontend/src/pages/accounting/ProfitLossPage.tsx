@@ -13,14 +13,15 @@ import {
 } from "@mantine/core";
 import { isForbiddenError } from "../../shared/api/errors";
 import { useProfitLoss } from "../../shared/accounting/hooks";
+import { useCan } from "../../shared/auth/useCan";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { downloadCsv, formatAmount } from "../../shared/accounting/reporting.ts";
 
 export function ProfitLossPage() {
-  const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
   const pnlQuery = useProfitLoss(dateFrom || undefined, dateTo || undefined);
+  const canExport = useCan("export.accounting");
 
   if (isForbiddenError(pnlQuery.error)) {
     return <AccessDenied />;
@@ -53,15 +54,17 @@ export function ProfitLossPage() {
     <Stack gap="lg">
       <Group justify="space-between">
         <Title order={3}>Profit &amp; Loss</Title>
-        <Button
-          variant="light"
-          onClick={handleExport}
-          disabled={!pnlQuery.data}
-        >
-          Export CSV
-        </Button>
+        {canExport && (
+          <Button
+            variant="light"
+            onClick={handleExport}
+            disabled={!pnlQuery.data}
+          >
+            Export CSV
+          </Button>
+        )}
       </Group>
-
+      
       <Card withBorder radius="md" p="md">
         <Group align="end" gap="md" wrap="wrap">
           <TextInput

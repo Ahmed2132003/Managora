@@ -2,12 +2,14 @@ import { useState } from "react";
 import { Card, Group, Stack, Table, Text, TextInput, Title, Button } from "@mantine/core";
 import { isForbiddenError } from "../../shared/api/errors";
 import { type BalanceSheetLine, useBalanceSheet } from "../../shared/accounting/hooks";
+import { useCan } from "../../shared/auth/useCan";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { downloadCsv, formatAmount } from "../../shared/accounting/reporting.ts";
 
 export function BalanceSheetPage() {
   const [asOf, setAsOf] = useState("");
   const balanceSheetQuery = useBalanceSheet(asOf || undefined);
+  const canExport = useCan("export.accounting");
 
   if (isForbiddenError(balanceSheetQuery.error)) {
     return <AccessDenied />;
@@ -73,15 +75,17 @@ export function BalanceSheetPage() {
     <Stack gap="lg">
       <Group justify="space-between">
         <Title order={3}>Balance Sheet</Title>
-        <Button
-          variant="light"
-          onClick={handleExport}
-          disabled={!balanceSheetQuery.data}
-        >
-          Export CSV
-        </Button>
+        {canExport && (
+          <Button
+            variant="light"
+            onClick={handleExport}
+            disabled={!balanceSheetQuery.data}
+          >
+            Export CSV
+          </Button>
+        )}
       </Group>
-
+      
       <Card withBorder radius="md" p="md">
         <Group align="end" gap="md" wrap="wrap">
           <TextInput

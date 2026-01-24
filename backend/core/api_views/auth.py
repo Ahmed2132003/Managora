@@ -2,9 +2,11 @@ from drf_spectacular.utils import extend_schema
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from core.throttles import LoginRateThrottle
+
 
 @extend_schema(
-    tags=["Auth"],
+    tags=["Auth"],    
     summary="Login",
     description="Obtain access and refresh tokens using username/password credentials.",
     request=TokenObtainPairSerializer,
@@ -12,3 +14,4 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 )
 class LoginView(TokenObtainPairView):
     serializer_class = TokenObtainPairSerializer
+    throttle_classes = [LoginRateThrottle]

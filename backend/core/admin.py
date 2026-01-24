@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from .models import (
     AuditLog,
+    ExportLog,
     Company,
     Permission,
     Role,
@@ -95,4 +96,12 @@ class AuditLogAdmin(admin.ModelAdmin):
     list_display = ("id", "company", "actor", "action", "entity", "created_at")
     list_filter = ("company", "action", "entity")
     search_fields = ("entity", "entity_id", "actor__username")
+    ordering = ("-created_at",)
+
+
+@admin.register(ExportLog)
+class ExportLogAdmin(admin.ModelAdmin):
+    list_display = ("id", "company", "actor", "export_type", "row_count", "created_at")
+    list_filter = ("company", "export_type")
+    search_fields = ("export_type", "actor__username")
     ordering = ("-created_at",)
