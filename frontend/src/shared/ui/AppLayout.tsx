@@ -1,130 +1,110 @@
 import { Outlet, Link, useNavigate } from "react-router-dom";
-import { AppShell, Group, Title, Button, Container } from "@mantine/core";
+import {
+  AppShell,
+  Stack,
+  Title,
+  Button,
+  Container,
+  ScrollArea,
+  Text,
+  Divider,
+  Box,
+} from "@mantine/core";
 import { useCan } from "../auth/useCan";
 import { clearTokens } from "../auth/tokens";
+import { useMe } from "../auth/useMe";
+
+const navItems = [
+  { label: "Dashboard", to: "/dashboard" },
+  { label: "Users", to: "/users" },
+  { label: "My Attendance", to: "/attendance/self" },
+  { label: "Leave Balance", to: "/leaves/balance" },
+  { label: "Request Leave", to: "/leaves/request" },
+  { label: "My Requests", to: "/leaves/my" },
+  { label: "Employees", to: "/hr/employees" },
+  { label: "HR Attendance", to: "/hr/attendance" },
+  { label: "Payroll", to: "/payroll" },
+  { label: "Leave Inbox", to: "/hr/leaves/inbox" },
+  { label: "Policies", to: "/hr/policies" },
+  { label: "HR Actions", to: "/hr/actions" },
+  { label: "Departments", to: "/hr/departments" },
+  { label: "Job Titles", to: "/hr/job-titles" },
+  { label: "Accounting Setup", to: "/accounting/setup" },
+  { label: "Journal Entries", to: "/accounting/journal-entries" },
+  { label: "Expenses", to: "/accounting/expenses" },
+  { label: "Customers", to: "/customers" },
+  { label: "Invoices", to: "/invoices" },
+  { label: "Collections", to: "/collections" },
+  { label: "Trial Balance", to: "/accounting/reports/trial-balance" },
+  { label: "General Ledger", to: "/accounting/reports/general-ledger" },
+  { label: "P&L", to: "/accounting/reports/pnl" },
+  { label: "Balance Sheet", to: "/accounting/reports/balance-sheet" },
+  { label: "AR Aging", to: "/accounting/reports/ar-aging" },
+  { label: "CEO Dashboard", to: "/analytics/ceo" },
+  { label: "Finance Dashboard", to: "/analytics/finance" },
+  { label: "HR Dashboard", to: "/analytics/hr" },
+  { label: "Alerts Center", to: "/analytics/alerts" },
+  { label: "Cash Forecast", to: "/analytics/forecast" },
+  { label: "Copilot", to: "/copilot" },
+];
 
 export function AppLayout() {
   const navigate = useNavigate();
-  const canViewAudit = useCan("audit.view");  
+  const canViewAudit = useCan("audit.view");
+  const { data } = useMe();
+  const userName = data?.user.first_name || data?.user.username || "admin_user";
+
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });
   }
 
   return (
-    <AppShell
-      header={{ height: 64 }}
-      padding="md"
-    >      
-      <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group gap="md">
+    <AppShell navbar={{ width: 280 }} padding="md">
+      <AppShell.Navbar p="md">
+        <Stack h="100%" gap="md">
+          <Stack gap={4}>
             <Title order={4}>Company OS</Title>
-            <Button component={Link} to="/dashboard" variant="subtle">
-              Dashboard
-            </Button>
-            <Button component={Link} to="/users" variant="subtle">
-              Users
-            </Button>
-            <Button component={Link} to="/attendance/self" variant="subtle">
-              My Attendance
-            </Button>
-            <Button component={Link} to="/leaves/balance" variant="subtle">
-              Leave Balance
-            </Button>
-            <Button component={Link} to="/leaves/request" variant="subtle">
-              Request Leave
-            </Button>
-            <Button component={Link} to="/leaves/my" variant="subtle">
-              My Requests
-            </Button>
-            <Button component={Link} to="/hr/employees" variant="subtle">
-              Employees
-            </Button>
-            <Button component={Link} to="/hr/attendance" variant="subtle">
-              HR Attendance
-            </Button>
-            <Button component={Link} to="/payroll" variant="subtle">
-              Payroll
-            </Button>
-            <Button component={Link} to="/hr/leaves/inbox" variant="subtle">
-              Leave Inbox
-            </Button>
-            <Button component={Link} to="/hr/policies" variant="subtle">
-              Policies
-            </Button>
-            <Button component={Link} to="/hr/actions" variant="subtle">
-              HR Actions
-            </Button>
-            <Button component={Link} to="/hr/departments" variant="subtle">
-              Departments
-            </Button>
-            <Button component={Link} to="/hr/job-titles" variant="subtle">
-              Job Titles
-            </Button>
-            <Button component={Link} to="/accounting/setup" variant="subtle">
-              Accounting Setup
-            </Button>
-            <Button component={Link} to="/accounting/journal-entries" variant="subtle">
-              Journal Entries
-            </Button>
-            <Button component={Link} to="/accounting/expenses" variant="subtle">
-              Expenses
-            </Button>            
-            <Button component={Link} to="/customers" variant="subtle">
-              Customers
-            </Button>
-            <Button component={Link} to="/invoices" variant="subtle">
-              Invoices
-            </Button>
-            <Button component={Link} to="/collections" variant="subtle">
-              Collections
-            </Button>
-            <Button component={Link} to="/accounting/reports/trial-balance" variant="subtle">
-              Trial Balance
-            </Button>                                                                         
-            <Button component={Link} to="/accounting/reports/general-ledger" variant="subtle">
-              General Ledger
-            </Button>
-            <Button component={Link} to="/accounting/reports/pnl" variant="subtle">
-              P&amp;L
-            </Button>
-            <Button component={Link} to="/accounting/reports/balance-sheet" variant="subtle">
-              Balance Sheet
-            </Button>
-            <Button component={Link} to="/accounting/reports/ar-aging" variant="subtle">
-              AR Aging
-            </Button>            
-            <Button component={Link} to="/analytics/ceo" variant="subtle">
-              CEO Dashboard
-            </Button>
-            <Button component={Link} to="/analytics/finance" variant="subtle">
-              Finance Dashboard
-            </Button>
-            <Button component={Link} to="/analytics/hr" variant="subtle">
-              HR Dashboard
-            </Button>
-            <Button component={Link} to="/analytics/alerts" variant="subtle">
-              Alerts Center
-            </Button>            
-            <Button component={Link} to="/analytics/forecast" variant="subtle">
-              Cash Forecast
-            </Button>            
-            <Button component={Link} to="/copilot" variant="subtle">
-              Copilot
-            </Button>
-            {canViewAudit && (
-              <Button component={Link} to="/admin/audit-logs" variant="subtle">
-                Audit Logs
-              </Button>
-            )}
-          </Group>                                                                                                                      
-          <Button onClick={handleLogout} variant="light">
-            Logout            
+            <Text size="sm" c="dimmed">
+              أهلًا بعودتك
+            </Text>
+            <Text fw={600}>{userName}</Text>
+          </Stack>
+          <Divider />
+          <Box style={{ flex: 1 }}>
+            <ScrollArea type="auto" style={{ height: "100%" }}>
+              <Stack gap="xs">
+                {navItems.map((item) => (
+                  <Button
+                    key={item.to}
+                    component={Link}
+                    to={item.to}
+                    variant="subtle"
+                    justify="flex-start"
+                    fullWidth
+                  >
+                    {item.label}
+                  </Button>
+                ))}
+                {canViewAudit && (
+                  <Button
+                    component={Link}
+                    to="/admin/audit-logs"
+                    variant="subtle"
+                    justify="flex-start"
+                    fullWidth
+                  >
+                    Audit Logs
+                  </Button>
+                )}
+              </Stack>
+            </ScrollArea>
+          </Box>
+          <Button onClick={handleLogout} variant="light" fullWidth>
+            Logout
           </Button>
-        </Group>
-        
-      </AppShell.Header>
+        </Stack>
+      </AppShell.Navbar>
       <AppShell.Main>
         <Container size="lg">
           <Outlet />
