@@ -411,7 +411,10 @@ export function UsersPage() {
   const [theme, setTheme] = useState<ThemeMode>("light");
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
-  const userPermissions = data?.permissions ?? [];
+  const userPermissions = useMemo(
+    () => data?.permissions ?? [],
+    [data?.permissions]
+  );  
   const userName =
     data?.user.first_name || data?.user.username || content.brand;
 
