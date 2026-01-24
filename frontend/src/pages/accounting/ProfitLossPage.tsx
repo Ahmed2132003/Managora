@@ -18,8 +18,8 @@ import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { downloadCsv, formatAmount } from "../../shared/accounting/reporting.ts";
 
 export function ProfitLossPage() {
+  const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-
   const pnlQuery = useProfitLoss(dateFrom || undefined, dateTo || undefined);
   const canExport = useCan("export.accounting");
 
@@ -64,7 +64,7 @@ export function ProfitLossPage() {
           </Button>
         )}
       </Group>
-      
+
       <Card withBorder radius="md" p="md">
         <Group align="end" gap="md" wrap="wrap">
           <TextInput
