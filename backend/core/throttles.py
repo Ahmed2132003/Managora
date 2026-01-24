@@ -1,9 +1,16 @@
 from django.contrib.auth import get_user_model
+from rest_framework.settings import api_settings
 from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
 
 
 class LoginRateThrottle(SimpleRateThrottle):
     scope = "login"
+
+    def get_rate(self):
+        rates = api_settings.DEFAULT_THROTTLE_RATES
+        if not self.scope:
+            return None
+        return rates.get(self.scope)
 
     def get_cache_key(self, request, view):
         username = None
@@ -14,7 +21,7 @@ class LoginRateThrottle(SimpleRateThrottle):
         if not ident:
             return None
         return self.cache_format % {"scope": self.scope, "ident": ident}
-    
+        
 class CopilotRateThrottle(UserRateThrottle):
     scope = "copilot"
 

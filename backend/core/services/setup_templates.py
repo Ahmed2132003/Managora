@@ -160,40 +160,54 @@ def apply_policies(company, policies_data):
         )
 
 
+def _resolve_account_defaults(account_code, mapped_key, template_accounts, chart):
+    template_account = template_accounts.get(account_code)
+    if template_account:
+        return {
+            "name": template_account["name"],
+            "type": template_account["type"],
+            "chart": chart,
+            "is_active": True,
+        }
+    fallback_type = FALLBACK_ACCOUNT_TYPES.get(mapped_key, Account.Type.ASSET)
+    fallback_name = mapped_key.label if mapped_key else f"Account {account_code}"
+    return {
+        "name": fallback_name,
+        "type": fallback_type,
+        "chart": chart,
+        "is_active": True,
+    }
+
+
 def apply_accounting(company, accounting_data):
     template_key = accounting_data.get("chart_of_accounts_template")
     template_accounts = {}
     chart = None
     if template_key:
-        seed_coa_template(company=company, template_key=template_key)
+        try:
+            seed_coa_template(company=company, template_key=template_key)
+        except ValueError:
+            template_accounts = {}
         template = TEMPLATES.get(template_key, {})
         template_accounts = {
             account["code"]: account for account in template.get("accounts", [])
         }
-        chart = ChartOfAccounts.objects.filter(company=company, is_default=True).first()
+        chart = ChartOfAccounts.objects.filter(company=company, is_default=True).first()        
         
     mappings = accounting_data.get("mappings", {})
     if not mappings:
         return
 
-    account_codes = set(mappings.values())
+    account_codes = {code for code in mappings.values() if code}
     accounts = Account.objects.filter(company=company, code__in=account_codes)
     accounts_by_code = {account.code: account for account in accounts}
     missing_codes = account_codes.difference(accounts_by_code.keys())
     if missing_codes:
         for code in missing_codes:
-            template_account = template_accounts.get(code)
-            if not template_account:
-                continue
             account, _ = Account.objects.get_or_create(
                 company=company,
                 code=code,
-                defaults={
-                    "name": template_account["name"],
-                    "type": template_account["type"],
-                    "chart": chart,
-                    "is_active": True,
-                },
+                defaults=_resolve_account_defaults(code, None, template_accounts, chart),
             )
             accounts_by_code[code] = account
 
@@ -201,37 +215,26 @@ def apply_accounting(company, accounting_data):
         mapped_key = MAPPING_KEY_MAP.get(mapping_key)
         if not mapped_key:
             continue
+        if not account_code:
+            continue
         account = accounts_by_code.get(account_code)
         required = mapped_key in AccountMapping.REQUIRED_KEYS
         if not account and account_code:
-            template_account = template_accounts.get(account_code)
-            if template_account:
-                account, _ = Account.objects.get_or_create(
-                    company=company,
-                    code=account_code,
-                    defaults={
-                        "name": template_account["name"],
-                        "type": template_account["type"],
-                        "chart": chart,
-                        "is_active": True,
-                    },
-                )
-            elif required:
-                fallback_type = FALLBACK_ACCOUNT_TYPES.get(mapped_key, Account.Type.ASSET)
-                account, _ = Account.objects.get_or_create(
-                    company=company,
-                    code=account_code,
-                    defaults={
-                        "name": mapped_key.label,
-                        "type": fallback_type,
-                        "chart": chart,
-                        "is_active": True,
-                    },
-                )
+            account, _ = Account.objects.get_or_create(
+                company=company,
+                code=account_code,
+                defaults=_resolve_account_defaults(
+                    account_code,
+                    mapped_key,
+                    template_accounts,
+                    chart,
+                ),
+            )
             if account:
                 accounts_by_code[account_code] = account
         if required and not account:
-            raise ValueError(f"Required mapping {mapped_key} missing account {account_code}.")        
+            raise ValueError(f"Required mapping {mapped_key} missing account {account_code}.")
+                  
         AccountMapping.objects.update_or_create(
             company=company,
             key=mapped_key,
