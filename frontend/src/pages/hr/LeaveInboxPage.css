@@ -1,0 +1,170 @@
+.leave-inbox-page .hero-panel__intro h1 {
+  margin-bottom: 6px;
+}
+
+.leave-inbox-hero .hero-tags {
+  flex-wrap: wrap;
+}
+
+.leave-inbox-panel {
+  gap: 16px;
+}
+
+.leave-inbox-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.leave-inbox-table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.leave-inbox-table th,
+.leave-inbox-table td {
+  text-align: start;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.leave-inbox-table thead th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.leave-inbox-table tbody tr:hover {
+  background: var(--bg-alt);
+}
+
+.leave-inbox-empty {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.leave-inbox-review {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.leave-inbox-review__details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.leave-inbox-review__details span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.leave-inbox-review__details strong {
+  font-size: 1rem;
+}
+
+.leave-inbox-review__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.leave-inbox-review__field textarea {
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+  resize: vertical;
+  min-height: 90px;
+}
+
+.leave-inbox-review__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.primary-button {
+  padding: 12px 18px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(120deg, var(--secondary), var(--primary));
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+.ghost-button {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ghost-button--danger {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.4);
+}
+
+.status-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: rgba(122, 75, 255, 0.15);
+  color: var(--secondary);
+}
+
+.status-pill--pending {
+  background: rgba(250, 204, 21, 0.2);
+  color: #d97706;
+}
+
+.status-pill--approved {
+  background: rgba(34, 197, 94, 0.2);
+  color: #16a34a;
+}
+
+.status-pill--rejected {
+  background: rgba(239, 68, 68, 0.2);
+  color: #dc2626;
+}
+
+.status-pill--cancelled {
+  background: rgba(148, 163, 184, 0.2);
+  color: #64748b;
+}
+
+.panel-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .leave-inbox-table {
+    min-width: 620px;
+  }
+
+  .leave-inbox-review__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

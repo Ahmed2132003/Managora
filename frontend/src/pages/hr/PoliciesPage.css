@@ -1,0 +1,137 @@
+.policies-page .hero-panel__intro h1 {
+  margin-bottom: 6px;
+}
+
+.policies-hero .hero-tags {
+  flex-wrap: wrap;
+}
+
+.policies-panel {
+  gap: 16px;
+}
+
+.policies-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.primary-button {
+  padding: 12px 18px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(120deg, var(--secondary), var(--primary));
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.form-field input,
+.form-field select {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.form-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.form-toggle input {
+  width: 18px;
+  height: 18px;
+}
+
+.policies-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.policies-table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.policies-table th,
+.policies-table td {
+  text-align: start;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.policies-table thead th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.policies-table tbody tr:hover {
+  background: var(--bg-alt);
+}
+
+.policies-empty {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.status-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: rgba(122, 75, 255, 0.15);
+  color: var(--secondary);
+}
+
+.status-pill--approved {
+  background: rgba(34, 197, 94, 0.2);
+  color: #16a34a;
+}
+
+.status-pill--cancelled {
+  background: rgba(148, 163, 184, 0.2);
+  color: #64748b;
+}
+
+.panel-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .policies-table {
+    min-width: 620px;
+  }
+}
