@@ -310,10 +310,6 @@ export function ProfitLossPage() {
   const pnlQuery = useProfitLoss(dateFrom || undefined, dateTo || undefined);
   const canExport = useCan("export.accounting");
 
-  if (isForbiddenError(pnlQuery.error)) {
-    return <AccessDenied />;
-  }
-
   const allRows = useMemo(() => {
     if (!pnlQuery.data) {
       return [];
@@ -321,10 +317,20 @@ export function ProfitLossPage() {
     return [...pnlQuery.data.income_accounts, ...pnlQuery.data.expense_accounts];
   }, [pnlQuery.data]);
 
+  const incomeTotal = useMemo(
+    () => Number(pnlQuery.data?.income_total ?? 0),
+    
+    [pnlQuery.data?.income_total]
+  );
+  const netProfit = useMemo(
+    () => Number(pnlQuery.data?.net_profit ?? 0),
+    [pnlQuery.data?.net_profit]
+  );
+
   const filteredRows = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) {
-      return allRows;
+      return allRows;      
     }
     return allRows.filter((row) => {
       return (
@@ -336,11 +342,11 @@ export function ProfitLossPage() {
   }, [allRows, searchTerm]);
 
   const profitMargin = useMemo(() => {
-    if (!pnlQuery.data || pnlQuery.data.income_total === 0) {
+    if (incomeTotal === 0) {      
       return 0;
     }
-    return (pnlQuery.data.net_profit / pnlQuery.data.income_total) * 100;
-  }, [pnlQuery.data]);
+    return (netProfit / incomeTotal) * 100;
+  }, [incomeTotal, netProfit]);
 
   function handleExport() {
     if (!pnlQuery.data) {
@@ -549,6 +555,10 @@ export function ProfitLossPage() {
       );
     });
   }, [navLinks, userPermissions]);
+
+  if (isForbiddenError(pnlQuery.error)) {
+    return <AccessDenied />;
+  }
 
   function handleLogout() {
     clearTokens();

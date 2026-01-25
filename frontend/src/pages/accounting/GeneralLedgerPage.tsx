@@ -359,14 +359,10 @@ export function GeneralLedgerPage() {
     );
   }, [filteredLines]);
 
-  if (isForbiddenError(ledgerQuery.error)) {
-    return <AccessDenied />;
-  }
-
   function handleExport() {
     if (!ledgerQuery.data) {
       return;
-    }
+    }    
     const headers = [
       "Date",
       "Description",
@@ -584,11 +580,15 @@ export function GeneralLedgerPage() {
     });
   }, [navLinks, userPermissions]);
 
+  if (isForbiddenError(ledgerQuery.error)) {
+    return <AccessDenied />;
+  }
+
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });
   }
-
+  
   return (
     <div
       className="dashboard-page"

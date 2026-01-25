@@ -310,15 +310,14 @@ export function TrialBalancePage() {
   );
   const canExport = useCan("export.accounting");
 
-  if (isForbiddenError(trialBalanceQuery.error)) {
-    return <AccessDenied />;
-  }
-
-  const rows = trialBalanceQuery.data ?? [];
+  const rows = useMemo(
+    () => trialBalanceQuery.data ?? [],
+    [trialBalanceQuery.data]
+  );
   const filteredRows = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) {
-      return rows;
+      return rows;      
     }
     return rows.filter((row) => {
       return (
@@ -544,11 +543,15 @@ export function TrialBalancePage() {
     });
   }, [navLinks, userPermissions]);
 
+  if (isForbiddenError(trialBalanceQuery.error)) {
+    return <AccessDenied />;
+  }
+
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });
   }
-
+  
   return (
     <div
       className="dashboard-page"
