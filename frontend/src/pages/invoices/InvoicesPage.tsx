@@ -34,11 +34,7 @@ export function InvoicesPage() {
     return new Map((customersQuery.data ?? []).map((customer) => [customer.id, customer]));
   }, [customersQuery.data]);
 
-  if (isForbiddenError(invoicesQuery.error) || isForbiddenError(customersQuery.error)) {
-    return <AccessDenied />;
-  }
-
-  const headerCopy = {
+  const headerCopy = {    
     en: {
       title: "Invoices",
       subtitle: "Track billing, collections, and invoice lifecycle.",
@@ -109,7 +105,11 @@ export function InvoicesPage() {
     return { total, overdue, openBalance };
   }, [invoicesQuery.data]);
 
-  return (
+  if (isForbiddenError(invoicesQuery.error) || isForbiddenError(customersQuery.error)) {
+    return <AccessDenied />;
+  }
+
+  return (    
     <DashboardShell
       copy={headerCopy}
       className="invoices-page"

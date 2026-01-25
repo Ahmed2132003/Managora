@@ -101,7 +101,7 @@ export function BalanceSheetPage() {
   function renderSection(
     title: string,
     rows: BalanceSheetLine[],
-    labels: (typeof pageContent)["en"]["table"],
+    labels: { account: string; name: string; balance: string },    
     helper: string
   ) {
     return (

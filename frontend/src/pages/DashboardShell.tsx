@@ -1,4 +1,5 @@
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { clearTokens } from "../shared/auth/tokens";
 import { useMe } from "../shared/auth/useMe";
@@ -197,7 +198,7 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
   const content = useMemo(() => contentMap[language], [language]);
   const pageCopy = copy[language];
   const isArabic = language === "ar";
-  const userPermissions = data?.permissions ?? [];
+  const userPermissions = useMemo(() => data?.permissions ?? [], [data?.permissions]);  
   const userName =
     data?.user.first_name || data?.user.username || content.userFallback;
 
