@@ -1,0 +1,33 @@
+.setup-wizard-page .hero-panel__intro h1 {
+  margin-bottom: 6px;
+}
+
+.setup-hero__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.setup-hero__meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.setup-pill {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .setup-hero__meta {
+    width: 100%;
+  }
+}

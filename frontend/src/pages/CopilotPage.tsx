@@ -1,17 +1,5 @@
-import { useMemo, useState } from "react";
-import {
-  Button,
-  Card,
-  Group,
-  Modal,
-  NumberInput,
-  Select,
-  SimpleGrid,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
@@ -25,10 +13,239 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+
 import { endpoints } from "../shared/api/endpoints";
 import { http } from "../shared/api/http";
 import { isForbiddenError } from "../shared/api/errors";
+import { clearTokens } from "../shared/auth/tokens";
+import { useMe } from "../shared/auth/useMe";
+import { hasPermission } from "../shared/auth/useCan";
 import type { Department } from "../shared/hr/hooks";
+import "./DashboardPage.css";
+import "./CopilotPage.css";
+
+type Language = "en" | "ar";
+type ThemeMode = "light" | "dark";
+
+type Content = {
+  brand: string;
+  subtitle: string;
+  searchPlaceholder: string;
+  languageLabel: string;
+  themeLabel: string;
+  navigationLabel: string;
+  logoutLabel: string;
+  pageTitle: string;
+  pageSubtitle: string;
+  promptLabel: string;
+  promptPlaceholder: string;
+  runReport: string;
+  editParams: string;
+  suggestionTitle: string;
+  suggestionSubtitle: string;
+  responseTitle: string;
+  responseSubtitle: string;
+  paramsTitle: string;
+  paramsSubtitle: string;
+  applyParams: string;
+  loadingLabel: string;
+  emptyResponseTitle: string;
+  emptyResponseSubtitle: string;
+  errorTitle: string;
+  nav: {
+    dashboard: string;
+    users: string;
+    attendanceSelf: string;
+    leaveBalance: string;
+    leaveRequest: string;
+    leaveMyRequests: string;
+    employees: string;
+    departments: string;
+    jobTitles: string;
+    hrAttendance: string;
+    leaveInbox: string;
+    policies: string;
+    hrActions: string;
+    payroll: string;
+    accountingSetup: string;
+    journalEntries: string;
+    expenses: string;
+    collections: string;
+    trialBalance: string;
+    generalLedger: string;
+    profitLoss: string;
+    balanceSheet: string;
+    agingReport: string;
+    customers: string;
+    newCustomer: string;
+    invoices: string;
+    newInvoice: string;
+    alertsCenter: string;
+    cashForecast: string;
+    ceoDashboard: string;
+    financeDashboard: string;
+    hrDashboard: string;
+    copilot: string;
+    auditLogs: string;
+    setupTemplates: string;
+    setupProgress: string;
+  };
+  params: {
+    startDate: string;
+    endDate: string;
+    limit: string;
+    year: string;
+    month: string;
+    department: string;
+  };
+};
+
+const contentMap: Record<Language, Content> = {
+  en: {
+    brand: "managora",
+    subtitle: "Your AI-ready reporting cockpit.",
+    searchPlaceholder: "Search dashboards, insights, teams...",
+    languageLabel: "Language",
+    themeLabel: "Theme",
+    navigationLabel: "Navigation",
+    logoutLabel: "Logout",
+    pageTitle: "Copilot Intelligence",
+    pageSubtitle: "Ask natural-language questions and receive instant analytics.",
+    promptLabel: "Question",
+    promptPlaceholder: "Type your question or pick a suggestion",
+    runReport: "Run report",
+    editParams: "Edit parameters",
+    suggestionTitle: "Suggested prompts",
+    suggestionSubtitle: "Quick starts tailored to your teams",
+    responseTitle: "Latest response",
+    responseSubtitle: "Results stream as soon as data is ready",
+    paramsTitle: "Configure parameters",
+    paramsSubtitle: "Fine-tune filters before running the report.",
+    applyParams: "Apply & run",
+    loadingLabel: "Running report...",
+    emptyResponseTitle: "No response yet",
+    emptyResponseSubtitle: "Run a report to see analytics blocks here.",
+    errorTitle: "Something went wrong",
+    nav: {
+      dashboard: "Dashboard",
+      users: "Users",
+      attendanceSelf: "My Attendance",
+      leaveBalance: "Leave Balance",
+      leaveRequest: "Leave Request",
+      leaveMyRequests: "My Leave Requests",
+      employees: "Employees",
+      departments: "Departments",
+      jobTitles: "Job Titles",
+      hrAttendance: "HR Attendance",
+      leaveInbox: "Leave Inbox",
+      policies: "Policies",
+      hrActions: "HR Actions",
+      payroll: "Payroll",
+      accountingSetup: "Accounting Setup",
+      journalEntries: "Journal Entries",
+      expenses: "Expenses",
+      collections: "Collections",
+      trialBalance: "Trial Balance",
+      generalLedger: "General Ledger",
+      profitLoss: "Profit & Loss",
+      balanceSheet: "Balance Sheet",
+      agingReport: "AR Aging",
+      customers: "Customers",
+      newCustomer: "New Customer",
+      invoices: "Invoices",
+      newInvoice: "New Invoice",
+      alertsCenter: "Alerts Center",
+      cashForecast: "Cash Forecast",
+      ceoDashboard: "CEO Dashboard",
+      financeDashboard: "Finance Dashboard",
+      hrDashboard: "HR Dashboard",
+      copilot: "Copilot",
+      auditLogs: "Audit Logs",
+      setupTemplates: "Setup Templates",
+      setupProgress: "Setup Progress",
+    },
+    params: {
+      startDate: "Start date",
+      endDate: "End date",
+      limit: "Limit",
+      year: "Year",
+      month: "Month",
+      department: "Department",
+    },
+  },
+  ar: {
+    brand: "ماناجورا",
+    subtitle: "مركز تحليلات ذكي لقرارات أسرع.",
+    searchPlaceholder: "ابحث عن اللوحات أو الفرق أو الرؤى...",
+    languageLabel: "اللغة",
+    themeLabel: "المظهر",
+    navigationLabel: "التنقل",
+    logoutLabel: "تسجيل الخروج",
+    pageTitle: "ذكاء كوبيلوت",
+    pageSubtitle: "اسأل بالسياق الطبيعي واحصل على تقارير فورية.",
+    promptLabel: "السؤال",
+    promptPlaceholder: "اكتب سؤالك أو اختر اقتراحًا",
+    runReport: "تشغيل التقرير",
+    editParams: "تعديل المعايير",
+    suggestionTitle: "اقتراحات جاهزة",
+    suggestionSubtitle: "بدايات سريعة مخصصة لفريقك",
+    responseTitle: "آخر نتيجة",
+    responseSubtitle: "النتائج تظهر فور جاهزية البيانات",
+    paramsTitle: "تهيئة المعايير",
+    paramsSubtitle: "اضبط الفلاتر قبل تشغيل التقرير.",
+    applyParams: "تطبيق وتشغيل",
+    loadingLabel: "جارٍ تشغيل التقرير...",
+    emptyResponseTitle: "لا توجد نتائج بعد",
+    emptyResponseSubtitle: "شغّل تقريرًا لعرض المخرجات هنا.",
+    errorTitle: "حدث خطأ",
+    nav: {
+      dashboard: "لوحة التحكم",
+      users: "المستخدمون",
+      attendanceSelf: "حضوري",
+      leaveBalance: "رصيد الإجازات",
+      leaveRequest: "طلب إجازة",
+      leaveMyRequests: "طلباتي",
+      employees: "الموظفون",
+      departments: "الأقسام",
+      jobTitles: "المسميات الوظيفية",
+      hrAttendance: "حضور الموارد",
+      leaveInbox: "وارد الإجازات",
+      policies: "السياسات",
+      hrActions: "إجراءات الموارد",
+      payroll: "الرواتب",
+      accountingSetup: "إعداد المحاسبة",
+      journalEntries: "قيود اليومية",
+      expenses: "المصروفات",
+      collections: "التحصيلات",
+      trialBalance: "ميزان المراجعة",
+      generalLedger: "الأستاذ العام",
+      profitLoss: "الأرباح والخسائر",
+      balanceSheet: "الميزانية العمومية",
+      agingReport: "أعمار الذمم",
+      customers: "العملاء",
+      newCustomer: "عميل جديد",
+      invoices: "الفواتير",
+      newInvoice: "فاتورة جديدة",
+      alertsCenter: "مركز التنبيهات",
+      cashForecast: "توقع التدفق النقدي",
+      ceoDashboard: "لوحة المدير التنفيذي",
+      financeDashboard: "لوحة المالية",
+      hrDashboard: "لوحة الموارد",
+      copilot: "كوبيلوت",
+      auditLogs: "سجلات التدقيق",
+      setupTemplates: "قوالب الإعداد",
+      setupProgress: "تقدّم الإعداد",
+    },
+    params: {
+      startDate: "تاريخ البداية",
+      endDate: "تاريخ النهاية",
+      limit: "الحد",
+      year: "السنة",
+      month: "الشهر",
+      department: "القسم",
+    },
+  },
+};
 
 type CopilotBlock =
   | {
@@ -62,7 +279,7 @@ type CopilotIntentKey =
   | "profit_change_explain";
 
 type Suggestion = {
-  label: string;
+  label: { ar: string; en: string };
   intent: CopilotIntentKey;
   question: string;
   needsParams: boolean;
@@ -70,31 +287,31 @@ type Suggestion = {
 
 const suggestions: Suggestion[] = [
   {
-    label: "غياب قسم المبيعات آخر 30 يوم",
+    label: { ar: "غياب قسم المبيعات آخر 30 يوم", en: "Sales absence (last 30 days)" },
     intent: "attendance_report",
     question: "Attendance report for sales last 30 days",
     needsParams: true,
   },
   {
-    label: "أكتر 10 متأخرين",
+    label: { ar: "أكتر 10 متأخرين", en: "Top 10 late employees" },
     intent: "top_late_employees",
     question: "Top 10 late employees",
     needsParams: true,
   },
   {
-    label: "ملخص الرواتب",
+    label: { ar: "ملخص الرواتب", en: "Payroll summary" },
     intent: "payroll_summary",
     question: "Payroll summary",
     needsParams: true,
   },
   {
-    label: "أكبر العملاء المتعثرين",
+    label: { ar: "أكبر العملاء المتعثرين", en: "Top debtors" },
     intent: "top_debtors",
     question: "Top debtors",
     needsParams: true,
   },
   {
-    label: "شرح تغير الربح",
+    label: { ar: "شرح تغير الربح", en: "Explain profit change" },
     intent: "profit_change_explain",
     question: "Explain profit change",
     needsParams: true,
@@ -102,6 +319,30 @@ const suggestions: Suggestion[] = [
 ];
 
 export function CopilotPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { data, isLoading, isError } = useMe();
+
+  const [language, setLanguage] = useState<Language>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-language")
+        : null;
+    return stored === "en" || stored === "ar" ? stored : "ar";
+  });
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-theme")
+        : null;
+    return stored === "light" || stored === "dark" ? stored : "light";
+  });
+  const [search, setSearch] = useState("");
+  const content = useMemo(() => contentMap[language], [language]);
+  const isArabic = language === "ar";
+  const userPermissions = useMemo(() => data?.permissions ?? [], [data?.permissions]);
+  const userName = data?.user.first_name || data?.user.username || content.brand;
+
   const [question, setQuestion] = useState("");
   const [intent, setIntent] = useState<CopilotIntentKey | "">("");
   const [params, setParams] = useState<Record<string, string | number | null>>({});
@@ -109,6 +350,20 @@ export function CopilotPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-language", language);
+  }, [language]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-theme", theme);
+  }, [theme]);
 
   const departmentsQuery = useQuery({
     queryKey: ["departments"],
@@ -138,7 +393,7 @@ export function CopilotPage() {
 
   const executeQuery = async (overrideParams?: Record<string, string | number | null>) => {
     if (!intent || !question) {
-      setError("يرجى اختيار Intent وإضافة السؤال.");
+      setError(isArabic ? "يرجى اختيار السؤال والمعايير." : "Please select a prompt.");
       return;
     }
     const rawParams = overrideParams ?? params;
@@ -165,146 +420,378 @@ export function CopilotPage() {
       setResponse(res.data);
     } catch (err) {
       if (isForbiddenError(err)) {
-        setError("Access denied. اطلب من الأدمن تفعيل الصلاحية.");
+        setError(
+          isArabic
+            ? "غير مسموح بالوصول. اطلب من الأدمن تفعيل الصلاحية."
+            : "Access denied. Ask an admin to enable this permission."
+        );
       } else {
-        setError("حدث خطأ أثناء تنفيذ الاستعلام.");
+        setError(
+          isArabic
+            ? "حدث خطأ أثناء تنفيذ الاستعلام."
+            : "An error occurred while running the report."
+        );
       }
     } finally {
       setLoading(false);
     }
   };
 
+  const handleLogout = () => {
+    clearTokens();
+    navigate("/login", { replace: true });
+  };
+
+  const navLinks = useMemo(
+    () => [
+      { path: "/dashboard", label: content.nav.dashboard, icon: "🏠" },
+      { path: "/users", label: content.nav.users, icon: "👥", permissions: ["users.view"] },
+      {
+        path: "/attendance/self",
+        label: content.nav.attendanceSelf,
+        icon: "🕒",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/leaves/balance",
+        label: content.nav.leaveBalance,
+        icon: "📅",
+        permissions: ["leaves.balance"],
+      },
+      {
+        path: "/leaves/request",
+        label: content.nav.leaveRequest,
+        icon: "📝",
+        permissions: ["leaves.request"],
+      },
+      {
+        path: "/leaves/my-requests",
+        label: content.nav.leaveMyRequests,
+        icon: "✅",
+        permissions: ["leaves.my_requests"],
+      },
+      {
+        path: "/hr/employees",
+        label: content.nav.employees,
+        icon: "🧑‍🤝‍🧑",
+        permissions: ["employees.view"],
+      },
+      {
+        path: "/hr/departments",
+        label: content.nav.departments,
+        icon: "🏢",
+        permissions: ["departments.view"],
+      },
+      {
+        path: "/hr/job-titles",
+        label: content.nav.jobTitles,
+        icon: "🎯",
+        permissions: ["jobtitles.view"],
+      },
+      {
+        path: "/hr/attendance",
+        label: content.nav.hrAttendance,
+        icon: "🕒",
+        permissions: ["attendance.view_team"],
+      },
+      {
+        path: "/hr/leave-inbox",
+        label: content.nav.leaveInbox,
+        icon: "📥",
+        permissions: ["leaves.view_requests"],
+      },
+      {
+        path: "/hr/policies",
+        label: content.nav.policies,
+        icon: "📌",
+        permissions: ["policies.view"],
+      },
+      {
+        path: "/hr/actions",
+        label: content.nav.hrActions,
+        icon: "⚡",
+        permissions: ["hr_actions.view"],
+      },
+      {
+        path: "/payroll",
+        label: content.nav.payroll,
+        icon: "💰",
+        permissions: ["payroll.view"],
+      },
+      {
+        path: "/accounting/setup",
+        label: content.nav.accountingSetup,
+        icon: "📘",
+        permissions: ["accounting.view"],
+      },
+      {
+        path: "/accounting/journal",
+        label: content.nav.journalEntries,
+        icon: "📒",
+        permissions: ["accounting.view"],
+      },
+      {
+        path: "/accounting/expenses",
+        label: content.nav.expenses,
+        icon: "💳",
+        permissions: ["accounting.view"],
+      },
+      {
+        path: "/accounting/collections",
+        label: content.nav.collections,
+        icon: "🏦",
+        permissions: ["accounting.view"],
+      },
+      {
+        path: "/accounting/trial-balance",
+        label: content.nav.trialBalance,
+        icon: "📊",
+        permissions: ["accounting.view"],
+      },
+      {
+        path: "/accounting/general-ledger",
+        label: content.nav.generalLedger,
+        icon: "📈",
+        permissions: ["accounting.view"],
+      },
+      {
+        path: "/accounting/profit-loss",
+        label: content.nav.profitLoss,
+        icon: "📉",
+        permissions: ["accounting.view"],
+      },
+      {
+        path: "/accounting/balance-sheet",
+        label: content.nav.balanceSheet,
+        icon: "🧾",
+        permissions: ["accounting.view"],
+      },
+      {
+        path: "/accounting/aging-report",
+        label: content.nav.agingReport,
+        icon: "⏳",
+        permissions: ["accounting.view"],
+      },
+      {
+        path: "/sales/customers",
+        label: content.nav.customers,
+        icon: "🧑‍💼",
+        permissions: ["customers.view"],
+      },
+      {
+        path: "/sales/customers/new",
+        label: content.nav.newCustomer,
+        icon: "➕",
+        permissions: ["customers.create"],
+      },
+      {
+        path: "/sales/invoices",
+        label: content.nav.invoices,
+        icon: "🧾",
+        permissions: ["invoices.view"],
+      },
+      {
+        path: "/sales/invoices/new",
+        label: content.nav.newInvoice,
+        icon: "🧾",
+        permissions: ["invoices.create"],
+      },
+      { path: "/alerts", label: content.nav.alertsCenter, icon: "🚨" },
+      { path: "/forecast", label: content.nav.cashForecast, icon: "💡" },
+      { path: "/analytics/ceo", label: content.nav.ceoDashboard, icon: "📌" },
+      { path: "/analytics/finance", label: content.nav.financeDashboard, icon: "💹" },
+      { path: "/analytics/hr", label: content.nav.hrDashboard, icon: "🧑‍💻" },
+      { path: "/copilot", label: content.nav.copilot, icon: "🤖" },
+      {
+        path: "/admin/audit-logs",
+        label: content.nav.auditLogs,
+        icon: "🛡️",
+        permissions: ["audit.view"],
+      },
+      { path: "/setup/templates", label: content.nav.setupTemplates, icon: "🧱" },
+      { path: "/setup/progress", label: content.nav.setupProgress, icon: "🚀" },
+    ],
+    [content.nav]
+  );
+
+  const visibleNavLinks = useMemo(() => {
+    return navLinks.filter((link) => {
+      if (!link.permissions || link.permissions.length === 0) {
+        return true;
+      }
+      return link.permissions.some((permission) =>
+        hasPermission(userPermissions, permission)
+      );
+    });
+  }, [navLinks, userPermissions]);
+
   const renderParamsForm = () => {
     switch (intent) {
       case "attendance_report":
         return (
-          <Stack gap="sm">
-            <TextInput
-              label="Start date"
-              type="date"
-              value={(params.start_date as string) ?? ""}
-              onChange={(event) =>
-                setParams((prev) => ({ ...prev, start_date: event.currentTarget.value }))
-              }
-            />
-            <TextInput
-              label="End date"
-              type="date"
-              value={(params.end_date as string) ?? ""}
-              onChange={(event) =>
-                setParams((prev) => ({ ...prev, end_date: event.currentTarget.value }))
-              }
-            />
-            <Select
-              label="Department"
-              data={departmentOptions}
-              value={(params.department_id as string) ?? null}
-              onChange={(value) =>
-                setParams((prev) => ({ ...prev, department_id: value }))
-              }
-              clearable
-            />
-          </Stack>
+          <div className="copilot-form-grid">
+            <label className="copilot-field">
+              <span>{content.params.startDate}</span>
+              <input
+                type="date"
+                value={(params.start_date as string) ?? ""}
+                onChange={(event) =>
+                  setParams((prev) => ({ ...prev, start_date: event.currentTarget.value }))
+                }
+              />
+            </label>
+            <label className="copilot-field">
+              <span>{content.params.endDate}</span>
+              <input
+                type="date"
+                value={(params.end_date as string) ?? ""}
+                onChange={(event) =>
+                  setParams((prev) => ({ ...prev, end_date: event.currentTarget.value }))
+                }
+              />
+            </label>
+            <label className="copilot-field">
+              <span>{content.params.department}</span>
+              <select
+                value={(params.department_id as string) ?? ""}
+                onChange={(event) =>
+                  setParams((prev) => ({
+                    ...prev,
+                    department_id: event.currentTarget.value || null,
+                  }))
+                }
+              >
+                <option value="">
+                  {isArabic ? "اختيار قسم" : "Select department"}
+                </option>
+                {departmentOptions.map((dept) => (
+                  <option key={dept.value} value={dept.value}>
+                    {dept.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         );
       case "top_late_employees":
         return (
-          <Stack gap="sm">
-            <TextInput
-              label="Start date"
-              type="date"
-              value={(params.start_date as string) ?? ""}
-              onChange={(event) =>
-                setParams((prev) => ({ ...prev, start_date: event.currentTarget.value }))
-              }
-            />
-            <TextInput
-              label="End date"
-              type="date"
-              value={(params.end_date as string) ?? ""}
-              onChange={(event) =>
-                setParams((prev) => ({ ...prev, end_date: event.currentTarget.value }))
-              }
-            />
-            <NumberInput
-              label="Limit"
-              value={(params.limit as number) ?? 10}
-              min={1}
-              max={50}
-              onChange={(value) =>
-                setParams((prev) => ({
-                  ...prev,
-                  limit: value === null ? null : Number(value),
-                }))
-              }
-            />
-          </Stack>
+          <div className="copilot-form-grid">
+            <label className="copilot-field">
+              <span>{content.params.startDate}</span>
+              <input
+                type="date"
+                value={(params.start_date as string) ?? ""}
+                onChange={(event) =>
+                  setParams((prev) => ({ ...prev, start_date: event.currentTarget.value }))
+                }
+              />
+            </label>
+            <label className="copilot-field">
+              <span>{content.params.endDate}</span>
+              <input
+                type="date"
+                value={(params.end_date as string) ?? ""}
+                onChange={(event) =>
+                  setParams((prev) => ({ ...prev, end_date: event.currentTarget.value }))
+                }
+              />
+            </label>
+            <label className="copilot-field">
+              <span>{content.params.limit}</span>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={(params.limit as number | string) ?? 10}
+                onChange={(event) =>
+                  setParams((prev) => ({
+                    ...prev,
+                    limit: event.currentTarget.value === "" ? null : Number(event.currentTarget.value),
+                  }))
+                }
+              />
+            </label>
+          </div>
         );
       case "payroll_summary":
         return (
-          <Stack gap="sm">
-            <NumberInput
-              label="Year"
-              value={(params.year as number) ?? new Date().getFullYear()}
-              min={2000}
-              max={2100}
-              onChange={(value) =>
-                setParams((prev) => ({
-                  ...prev,
-                  year: value === null ? null : Number(value),
-                }))
-              }
-            />
-            <NumberInput
-              label="Month"
-              value={(params.month as number) ?? new Date().getMonth() + 1}
-              min={1}
-              max={12}
-              onChange={(value) =>
-                setParams((prev) => ({
-                  ...prev,
-                  month: value === null ? null : Number(value),
-                }))
-              }
-            />
-          </Stack>
+          <div className="copilot-form-grid">
+            <label className="copilot-field">
+              <span>{content.params.year}</span>
+              <input
+                type="number"
+                min={2000}
+                max={2100}
+                value={(params.year as number | string) ?? new Date().getFullYear()}
+                onChange={(event) =>
+                  setParams((prev) => ({
+                    ...prev,
+                    year: event.currentTarget.value === "" ? null : Number(event.currentTarget.value),
+                  }))
+                }
+              />
+            </label>
+            <label className="copilot-field">
+              <span>{content.params.month}</span>
+              <input
+                type="number"
+                min={1}
+                max={12}
+                value={(params.month as number | string) ?? new Date().getMonth() + 1}
+                onChange={(event) =>
+                  setParams((prev) => ({
+                    ...prev,
+                    month: event.currentTarget.value === "" ? null : Number(event.currentTarget.value),
+                  }))
+                }
+              />
+            </label>
+          </div>
         );
       case "top_debtors":
         return (
-          <Stack gap="sm">
-            <NumberInput
-              label="Limit"
-              value={(params.limit as number) ?? 10}
-              min={1}
-              max={50}
-              onChange={(value) =>
-                setParams((prev) => ({
-                  ...prev,
-                  limit: value === null ? null : Number(value),
-                }))
-              }
-            />
-          </Stack>
+          <div className="copilot-form-grid">
+            <label className="copilot-field">
+              <span>{content.params.limit}</span>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={(params.limit as number | string) ?? 10}
+                onChange={(event) =>
+                  setParams((prev) => ({
+                    ...prev,
+                    limit: event.currentTarget.value === "" ? null : Number(event.currentTarget.value),
+                  }))
+                }
+              />
+            </label>
+          </div>
         );
       case "profit_change_explain":
         return (
-          <Stack gap="sm">
-            <TextInput
-              label="Start date"
-              type="date"
-              value={(params.start_date as string) ?? ""}
-              onChange={(event) =>
-                setParams((prev) => ({ ...prev, start_date: event.currentTarget.value }))
-              }
-            />
-            <TextInput
-              label="End date"
-              type="date"
-              value={(params.end_date as string) ?? ""}
-              onChange={(event) =>
-                setParams((prev) => ({ ...prev, end_date: event.currentTarget.value }))
-              }
-            />
-          </Stack>
+          <div className="copilot-form-grid">
+            <label className="copilot-field">
+              <span>{content.params.startDate}</span>
+              <input
+                type="date"
+                value={(params.start_date as string) ?? ""}
+                onChange={(event) =>
+                  setParams((prev) => ({ ...prev, start_date: event.currentTarget.value }))
+                }
+              />
+            </label>
+            <label className="copilot-field">
+              <span>{content.params.endDate}</span>
+              <input
+                type="date"
+                value={(params.end_date as string) ?? ""}
+                onChange={(event) =>
+                  setParams((prev) => ({ ...prev, end_date: event.currentTarget.value }))
+                }
+              />
+            </label>
+          </div>
         );
       default:
         return null;
@@ -314,52 +801,50 @@ export function CopilotPage() {
   const renderBlock = (block: CopilotBlock, index: number) => {
     if (block.type === "kpi_cards") {
       return (
-        <SimpleGrid key={`kpi-${index}`} cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
+        <div key={`kpi-${index}`} className="copilot-kpi-grid">
           {block.data.map((item) => (
-            <Card key={item.label} withBorder radius="md" p="md">
-              <Text size="sm" c="dimmed">
-                {item.label}
-              </Text>
-              <Title order={3}>{item.value ?? "-"}</Title>
-            </Card>
+            <div key={item.label} className="copilot-kpi-card">
+              <span>{item.label}</span>
+              <strong>{item.value ?? "-"}</strong>
+            </div>
           ))}
-        </SimpleGrid>
+        </div>
       );
     }
 
     if (block.type === "table") {
       return (
-        <Card key={`table-${index}`} withBorder radius="md" p="md">
-          <Stack gap="sm">
-            <Group gap="md" wrap="wrap">
-              {block.columns.map((col) => (
-                <Text key={col.key} fw={600} w={140}>
-                  {col.label}
-                </Text>
-              ))}
-            </Group>
-            {block.rows.length === 0 ? (
-              <Text c="dimmed">No data available.</Text>
-            ) : (
-              block.rows.map((row, rowIndex) => (
-                <Group key={`row-${rowIndex}`} gap="md" wrap="wrap">
+        <div key={`table-${index}`} className="copilot-table-wrapper">
+          {block.rows.length === 0 ? (
+            <div className="copilot-empty">No data available.</div>
+          ) : (
+            <table className="copilot-table">
+              <thead>
+                <tr>
                   {block.columns.map((col) => (
-                    <Text key={`${rowIndex}-${col.key}`} w={140}>
-                      {row[col.key] ?? "-"}
-                    </Text>
+                    <th key={col.key}>{col.label}</th>
                   ))}
-                </Group>
-              ))
-            )}
-          </Stack>
-        </Card>
+                </tr>
+              </thead>
+              <tbody>
+                {block.rows.map((row, rowIndex) => (
+                  <tr key={`row-${rowIndex}`}>
+                    {block.columns.map((col) => (
+                      <td key={`${rowIndex}-${col.key}`}>{row[col.key] ?? "-"}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       );
     }
 
     if (block.type === "chart") {
       const palette = ["#3b82f6", "#22c55e", "#f97316", "#a855f7", "#ef4444"];
       return (
-        <Card key={`chart-${index}`} withBorder radius="md" p="md" h={320}>
+        <div key={`chart-${index}`} className="copilot-chart-card">
           <ResponsiveContainer width="100%" height="100%">
             {block.variant === "line" ? (
               <LineChart data={block.data}>
@@ -396,7 +881,7 @@ export function CopilotPage() {
               </BarChart>
             )}
           </ResponsiveContainer>
-        </Card>
+        </div>
       );
     }
 
@@ -404,75 +889,262 @@ export function CopilotPage() {
   };
 
   return (
-    <Stack gap="lg">
-      <Title order={2}>Copilot Reports</Title>
-      <Card withBorder radius="md" p="md">
-        <Stack gap="md">
-          <TextInput
-            label="Question"
-            placeholder="اكتب سؤالك أو اختر توصية"
-            value={question}
-            onChange={(event) => setQuestion(event.currentTarget.value)}
+    <div
+      className="dashboard-page copilot-page"
+      data-theme={theme}
+      dir={isArabic ? "rtl" : "ltr"}
+      lang={language}
+    >
+      <div className="dashboard-page__glow" aria-hidden="true" />
+      <header className="dashboard-topbar">
+        <div className="dashboard-brand">
+          <img src="/managora-logo.svg" alt="Managora logo" />
+          <div>
+            <span className="dashboard-brand__title">{content.brand}</span>
+            <span className="dashboard-brand__subtitle">{content.subtitle}</span>
+          </div>
+        </div>
+        <div className="dashboard-search">
+          <span aria-hidden="true">⌕</span>
+          <input
+            type="text"
+            placeholder={content.searchPlaceholder}
+            aria-label={content.searchPlaceholder}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
           />
-          <Group gap="sm" wrap="wrap">
-            {suggestions.map((suggestion) => (
-              <Button
-                key={suggestion.intent}
-                variant="light"
-                onClick={() => handleSelectSuggestion(suggestion)}
-              >
-                {suggestion.label}
-              </Button>
-            ))}
-          </Group>
-          <Group gap="sm">
-            <Button
-              onClick={() => executeQuery()}
-              loading={loading}
-              disabled={!intent}
-            >
-              Run report
-            </Button>
-            {intent && (
-              <Button variant="subtle" onClick={() => setModalOpen(true)}>
-                Edit params
-              </Button>
+        </div>
+      </header>
+
+      <div className="dashboard-shell">
+        <aside className="dashboard-sidebar">
+          <div className="sidebar-card">
+            <p>{content.pageTitle}</p>
+            <strong>{userName}</strong>
+            {isLoading && <span className="sidebar-note">...loading profile</span>}
+            {isError && (
+              <span className="sidebar-note sidebar-note--error">
+                {isArabic ? "تعذر تحميل بيانات الحساب." : "Unable to load account data."}
+              </span>
             )}
-          </Group>
-          {error && (
-            <Card withBorder radius="md" p="md" bg="red.0">
-              <Text c="red.7">{error}</Text>
-            </Card>
-          )}
-        </Stack>
-      </Card>
-
-      {response && (
-        <Stack gap="lg">
-          <Title order={3}>{response.title}</Title>
-          {response.blocks.map((block, index) => renderBlock(block, index))}
-        </Stack>
-      )}
-
-      <Modal
-        opened={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title="Configure parameters"
-      >
-        <Stack gap="md">
-          {renderParamsForm()}
-          <Group justify="flex-end">
-            <Button
-              onClick={() => {
-                setModalOpen(false);
-                executeQuery(params);
-              }}
+          </div>
+          <nav className="sidebar-nav" aria-label={content.navigationLabel}>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() => setLanguage((prev) => (prev === "en" ? "ar" : "en"))}
             >
-              Apply & Run
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-    </Stack>
+              <span className="nav-icon" aria-hidden="true">
+                🌐
+              </span>
+              {content.languageLabel} • {isArabic ? "EN" : "AR"}
+            </button>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                {theme === "light" ? "🌙" : "☀️"}
+              </span>
+              {content.themeLabel} • {theme === "light" ? "Dark" : "Light"}
+            </button>
+            <div className="sidebar-links">
+              <span className="sidebar-links__title">{content.navigationLabel}</span>
+              {visibleNavLinks.map((link) => (
+                <button
+                  key={link.path}
+                  type="button"
+                  className={`nav-item${location.pathname === link.path ? " nav-item--active" : ""}`}
+                  onClick={() => navigate(link.path)}
+                >
+                  <span className="nav-icon" aria-hidden="true">
+                    {link.icon}
+                  </span>
+                  {link.label}
+                </button>
+              ))}
+            </div>
+          </nav>
+          <div className="sidebar-footer">
+            <button type="button" className="pill-button" onClick={handleLogout}>
+              {content.logoutLabel}
+            </button>
+          </div>
+        </aside>
+
+        <main className="dashboard-main">
+          <section className="hero-panel copilot-hero">
+            <div className="copilot-hero__header">
+              <div className="hero-panel__intro">
+                <h1>{content.pageTitle}</h1>
+                <p>{content.pageSubtitle}</p>
+              </div>
+              <div className="copilot-hero__actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => executeQuery()}
+                  disabled={!intent || loading}
+                >
+                  {loading ? content.loadingLabel : content.runReport}
+                </button>
+                {intent && (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => setModalOpen(true)}
+                  >
+                    {content.editParams}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="hero-panel__stats copilot-stats">
+              {[
+                {
+                  label: isArabic ? "نوايا نشطة" : "Active intents",
+                  value: intent ? 1 : 0,
+                },
+                {
+                  label: isArabic ? "إجمالي الاقتراحات" : "Suggestions",
+                  value: suggestions.length,
+                },
+                {
+                  label: isArabic ? "كتل النتائج" : "Blocks",
+                  value: response?.blocks.length ?? 0,
+                },
+                {
+                  label: isArabic ? "آخر استعلام" : "Last query",
+                  value: question ? "●" : "—",
+                },
+              ].map((stat) => (
+                <div key={stat.label} className="stat-card">
+                  <div className="stat-card__top">
+                    <span>{stat.label}</span>
+                    <span className="stat-card__change">{content.pageTitle}</span>
+                  </div>
+                  <strong>{stat.value}</strong>
+                  <div className="stat-card__spark" aria-hidden="true" />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel copilot-panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.promptLabel}</h2>
+                <p>{content.promptPlaceholder}</p>
+              </div>
+            </div>
+            <label className="copilot-field">
+              <span>{content.promptLabel}</span>
+              <input
+                type="text"
+                value={question}
+                placeholder={content.promptPlaceholder}
+                onChange={(event) => setQuestion(event.currentTarget.value)}
+              />
+            </label>
+
+            <div className="copilot-suggestions">
+              <div className="copilot-suggestions__header">
+                <strong>{content.suggestionTitle}</strong>
+                <span>{content.suggestionSubtitle}</span>
+              </div>
+              <div className="copilot-suggestions__list">
+                {suggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.intent}
+                    type="button"
+                    className="chip-button"
+                    onClick={() => handleSelectSuggestion(suggestion)}
+                  >
+                    {suggestion.label[language]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {error && (
+              <div className="copilot-error">
+                <strong>{content.errorTitle}</strong>
+                <p>{error}</p>
+              </div>
+            )}
+          </section>
+
+          <section className="panel copilot-panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.responseTitle}</h2>
+                <p>{content.responseSubtitle}</p>
+              </div>
+            </div>
+            {response ? (
+              <div className="copilot-response">
+                <div className="copilot-response__header">
+                  <h3>{response.title}</h3>
+                  <span>{response.intent}</span>
+                </div>
+                <div className="copilot-response__blocks">
+                  {response.blocks.map((block, index) => renderBlock(block, index))}
+                </div>
+              </div>
+            ) : (
+              <div className="copilot-empty">
+                <strong>{content.emptyResponseTitle}</strong>
+                <span>{content.emptyResponseSubtitle}</span>
+              </div>
+            )}
+          </section>
+        </main>
+      </div>
+
+      <footer className="dashboard-footer">{content.subtitle}</footer>
+
+      {modalOpen && (
+        <div className="dashboard-modal">
+          <div
+            className="dashboard-modal__backdrop"
+            aria-hidden="true"
+            onClick={() => setModalOpen(false)}
+          />
+          <div className="dashboard-modal__content" role="dialog" aria-modal="true">
+            <div className="dashboard-modal__header">
+              <div>
+                <h2>{content.paramsTitle}</h2>
+                <p>{content.paramsSubtitle}</p>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setModalOpen(false)}
+                aria-label={isArabic ? "إغلاق" : "Close"}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="dashboard-modal__body">
+              {renderParamsForm()}
+              <div className="copilot-modal__actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    setModalOpen(false);
+                    executeQuery(params);
+                  }}
+                >
+                  {content.applyParams}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
