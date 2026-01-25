@@ -1,19 +1,6 @@
-import { useMemo, useState } from "react";
-import {
-  Badge,
-  Button,
-  Card,
-  Group,
-  NumberInput,
-  Select,
-  Skeleton,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { useEffect, useMemo, useState } from "react";
 import { notifications } from "@mantine/notifications";
+import { useLocation, useNavigate } from "react-router-dom";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { isForbiddenError } from "../../shared/api/errors";
 import {
@@ -22,21 +9,368 @@ import {
   useDepartments,
   useEmployees,
 } from "../../shared/hr/hooks";
+import { useMe } from "../../shared/auth/useMe";
+import { clearTokens } from "../../shared/auth/tokens";
+import { hasPermission } from "../../shared/auth/useCan";
+import "../DashboardPage.css";
+import "./HRAttendancePage.css";
 
-const statusOptions = [
-  { value: "present", label: "Present" },
-  { value: "late", label: "Late" },
-  { value: "early_leave", label: "Early leave" },
-  { value: "absent", label: "Absent" },
-  { value: "incomplete", label: "Incomplete" },
-];
+type Language = "en" | "ar";
 
-const statusColors: Record<string, string> = {
-  present: "green",
-  late: "orange",
-  early_leave: "yellow",
-  absent: "red",
-  incomplete: "blue",
+type ThemeMode = "light" | "dark";
+
+type Content = {
+  brand: string;
+  subtitle: string;
+  searchPlaceholder: string;
+  languageLabel: string;
+  themeLabel: string;
+  navigationLabel: string;
+  logoutLabel: string;
+  pageTitle: string;
+  pageSubtitle: string;
+  rangeLabel: string;
+  filtersTitle: string;
+  filtersSubtitle: string;
+  searchLabel: string;
+  searchHint: string;
+  fromLabel: string;
+  toLabel: string;
+  departmentLabel: string;
+  departmentPlaceholder: string;
+  employeeLabel: string;
+  employeePlaceholder: string;
+  statusLabel: string;
+  statusPlaceholder: string;
+  clearFilters: string;
+  stats: {
+    total: string;
+    present: string;
+    late: string;
+    absent: string;
+  };
+  qr: {
+    title: string;
+    subtitle: string;
+    worksiteLabel: string;
+    worksitePlaceholder: string;
+    shiftLabel: string;
+    shiftPlaceholder: string;
+    expiresLabel: string;
+    expiresPlaceholder: string;
+    generate: string;
+    tokenLabel: string;
+    expiresAt: string;
+    worksite: string;
+    shift: string;
+  };
+  table: {
+    title: string;
+    subtitle: string;
+    employee: string;
+    date: string;
+    checkIn: string;
+    checkOut: string;
+    late: string;
+    early: string;
+    method: string;
+    status: string;
+    emptyTitle: string;
+    emptySubtitle: string;
+    loading: string;
+  };
+  statusMap: Record<string, string>;
+  methodMap: Record<string, string>;
+  notifications: {
+    missingTitle: string;
+    missingMessage: string;
+    qrTitle: string;
+    qrMessage: string;
+    qrFailedTitle: string;
+    qrFailedMessage: string;
+  };
+  userFallback: string;
+  nav: {
+    dashboard: string;
+    users: string;
+    attendanceSelf: string;
+    leaveBalance: string;
+    leaveRequest: string;
+    leaveMyRequests: string;
+    employees: string;
+    departments: string;
+    jobTitles: string;
+    hrAttendance: string;
+    leaveInbox: string;
+    policies: string;
+    hrActions: string;
+    payroll: string;
+    accountingSetup: string;
+    journalEntries: string;
+    expenses: string;
+    collections: string;
+    trialBalance: string;
+    generalLedger: string;
+    profitLoss: string;
+    balanceSheet: string;
+    agingReport: string;
+    customers: string;
+    newCustomer: string;
+    invoices: string;
+    newInvoice: string;
+    alertsCenter: string;
+    cashForecast: string;
+    ceoDashboard: string;
+    financeDashboard: string;
+    hrDashboard: string;
+    copilot: string;
+    auditLogs: string;
+    setupTemplates: string;
+    setupProgress: string;
+  };
+};
+
+const contentMap: Record<Language, Content> = {
+  en: {
+    brand: "managora",
+    subtitle: "A smart dashboard that blends motion, clarity, and insight.",
+    searchPlaceholder: "Search attendance, employees, codes...",
+    languageLabel: "Language",
+    themeLabel: "Theme",
+    navigationLabel: "Navigation",
+    logoutLabel: "Logout",
+    pageTitle: "HR Attendance",
+    pageSubtitle: "Review daily attendance and generate QR tokens for teams.",
+    rangeLabel: "Date range",
+    filtersTitle: "Attendance filters",
+    filtersSubtitle: "Slice data by date, department, or status",
+    searchLabel: "Search",
+    searchHint: "Search by name or code",
+    fromLabel: "From",
+    toLabel: "To",
+    departmentLabel: "Department",
+    departmentPlaceholder: "All departments",
+    employeeLabel: "Employee",
+    employeePlaceholder: "Select employee",
+    statusLabel: "Status",
+    statusPlaceholder: "All statuses",
+    clearFilters: "Clear filters",
+    stats: {
+      total: "Total records",
+      present: "Present",
+      late: "Late",
+      absent: "Absent",
+    },
+    qr: {
+      title: "Generate QR token",
+      subtitle: "Instant attendance for onsite teams",
+      worksiteLabel: "Worksite ID",
+      worksitePlaceholder: "Example: 2",
+      shiftLabel: "Shift ID",
+      shiftPlaceholder: "Example: 1",
+      expiresLabel: "Expires (minutes)",
+      expiresPlaceholder: "60",
+      generate: "Generate",
+      tokenLabel: "Token",
+      expiresAt: "Expires at",
+      worksite: "Worksite",
+      shift: "Shift",
+    },
+    table: {
+      title: "Attendance log",
+      subtitle: "Live check-in and check-out status",
+      employee: "Employee",
+      date: "Date",
+      checkIn: "Check-in",
+      checkOut: "Check-out",
+      late: "Late mins",
+      early: "Early mins",
+      method: "Method",
+      status: "Status",
+      emptyTitle: "No attendance records yet",
+      emptySubtitle: "Try another date range or search term.",
+      loading: "Loading attendance...",
+    },
+    statusMap: {
+      present: "Present",
+      late: "Late",
+      early_leave: "Early leave",
+      absent: "Absent",
+      incomplete: "Incomplete",
+    },
+    methodMap: {
+      manual: "Manual",
+      qr: "QR",
+      gps: "GPS",
+    },
+    notifications: {
+      missingTitle: "Missing info",
+      missingMessage: "Please enter Worksite ID and Shift ID.",
+      qrTitle: "QR generated",
+      qrMessage: "QR token generated successfully.",
+      qrFailedTitle: "Failed to generate QR",
+      qrFailedMessage: "Something went wrong while creating the QR token.",
+    },
+    userFallback: "Explorer",
+    nav: {
+      dashboard: "Dashboard",
+      users: "Users",
+      attendanceSelf: "My Attendance",
+      leaveBalance: "Leave Balance",
+      leaveRequest: "Leave Request",
+      leaveMyRequests: "My Leave Requests",
+      employees: "Employees",
+      departments: "Departments",
+      jobTitles: "Job Titles",
+      hrAttendance: "HR Attendance",
+      leaveInbox: "Leave Inbox",
+      policies: "Policies",
+      hrActions: "HR Actions",
+      payroll: "Payroll",
+      accountingSetup: "Accounting Setup",
+      journalEntries: "Journal Entries",
+      expenses: "Expenses",
+      collections: "Collections",
+      trialBalance: "Trial Balance",
+      generalLedger: "General Ledger",
+      profitLoss: "Profit & Loss",
+      balanceSheet: "Balance Sheet",
+      agingReport: "AR Aging",
+      customers: "Customers",
+      newCustomer: "New Customer",
+      invoices: "Invoices",
+      newInvoice: "New Invoice",
+      alertsCenter: "Alerts Center",
+      cashForecast: "Cash Forecast",
+      ceoDashboard: "CEO Dashboard",
+      financeDashboard: "Finance Dashboard",
+      hrDashboard: "HR Dashboard",
+      copilot: "Copilot",
+      auditLogs: "Audit Logs",
+      setupTemplates: "Setup Templates",
+      setupProgress: "Setup Progress",
+    },
+  },
+  ar: {
+    brand: "ماناجورا",
+    subtitle: "لوحة ذكية تجمع الحركة والوضوح والرؤية التحليلية.",
+    searchPlaceholder: "ابحث عن الحضور أو الموظفين أو الأكواد...",
+    languageLabel: "اللغة",
+    themeLabel: "المظهر",
+    navigationLabel: "التنقل",
+    logoutLabel: "تسجيل الخروج",
+    pageTitle: "حضور الموارد البشرية",
+    pageSubtitle: "راجع سجلات الحضور اليومية وأنشئ أكواد QR للفِرق.",
+    rangeLabel: "النطاق الزمني",
+    filtersTitle: "فلاتر الحضور",
+    filtersSubtitle: "فرز البيانات حسب التاريخ أو القسم أو الحالة",
+    searchLabel: "بحث",
+    searchHint: "ابحث بالاسم أو الكود",
+    fromLabel: "من",
+    toLabel: "إلى",
+    departmentLabel: "القسم",
+    departmentPlaceholder: "كل الأقسام",
+    employeeLabel: "الموظف",
+    employeePlaceholder: "اختر الموظف",
+    statusLabel: "الحالة",
+    statusPlaceholder: "كل الحالات",
+    clearFilters: "مسح الفلاتر",
+    stats: {
+      total: "إجمالي السجلات",
+      present: "حاضر",
+      late: "متأخر",
+      absent: "غائب",
+    },
+    qr: {
+      title: "إنشاء رمز QR",
+      subtitle: "تسجيل فوري للحضور داخل الموقع",
+      worksiteLabel: "رقم الموقع",
+      worksitePlaceholder: "مثال: 2",
+      shiftLabel: "رقم الشيفت",
+      shiftPlaceholder: "مثال: 1",
+      expiresLabel: "الانتهاء (دقيقة)",
+      expiresPlaceholder: "60",
+      generate: "إنشاء",
+      tokenLabel: "الرمز",
+      expiresAt: "ينتهي في",
+      worksite: "الموقع",
+      shift: "الشيفت",
+    },
+    table: {
+      title: "سجل الحضور",
+      subtitle: "تفاصيل الدخول والخروج المباشرة",
+      employee: "الموظف",
+      date: "التاريخ",
+      checkIn: "وقت الدخول",
+      checkOut: "وقت الخروج",
+      late: "دقائق تأخير",
+      early: "دقائق انصراف",
+      method: "الطريقة",
+      status: "الحالة",
+      emptyTitle: "لا توجد سجلات حضور",
+      emptySubtitle: "جرّب تعديل التاريخ أو البحث.",
+      loading: "جاري تحميل سجلات الحضور...",
+    },
+    statusMap: {
+      present: "حاضر",
+      late: "متأخر",
+      early_leave: "انصراف مبكر",
+      absent: "غائب",
+      incomplete: "غير مكتمل",
+    },
+    methodMap: {
+      manual: "يدوي",
+      qr: "QR",
+      gps: "GPS",
+    },
+    notifications: {
+      missingTitle: "بيانات ناقصة",
+      missingMessage: "من فضلك أدخل رقم الموقع ورقم الشيفت.",
+      qrTitle: "تم إنشاء الكود",
+      qrMessage: "تم إنشاء كود QR بنجاح.",
+      qrFailedTitle: "تعذر إنشاء الكود",
+      qrFailedMessage: "حدث خطأ أثناء إنشاء كود QR.",
+    },
+    userFallback: "ضيف",
+    nav: {
+      dashboard: "لوحة التحكم",
+      users: "المستخدمون",
+      attendanceSelf: "حضوري",
+      leaveBalance: "رصيد الإجازات",
+      leaveRequest: "طلب إجازة",
+      leaveMyRequests: "طلباتي",
+      employees: "الموظفون",
+      departments: "الأقسام",
+      jobTitles: "المسميات الوظيفية",
+      hrAttendance: "حضور الموارد البشرية",
+      leaveInbox: "وارد الإجازات",
+      policies: "السياسات",
+      hrActions: "إجراءات الموارد البشرية",
+      payroll: "الرواتب",
+      accountingSetup: "إعداد المحاسبة",
+      journalEntries: "قيود اليومية",
+      expenses: "المصروفات",
+      collections: "التحصيلات",
+      trialBalance: "ميزان المراجعة",
+      generalLedger: "دفتر الأستاذ",
+      profitLoss: "الأرباح والخسائر",
+      balanceSheet: "الميزانية العمومية",
+      agingReport: "أعمار الديون",
+      customers: "العملاء",
+      newCustomer: "عميل جديد",
+      invoices: "الفواتير",
+      newInvoice: "فاتورة جديدة",
+      alertsCenter: "مركز التنبيهات",
+      cashForecast: "توقعات النقد",
+      ceoDashboard: "لوحة CEO",
+      financeDashboard: "لوحة المالية",
+      hrDashboard: "لوحة الموارد البشرية",
+      copilot: "المساعد",
+      auditLogs: "سجل التدقيق",
+      setupTemplates: "قوالب الإعداد",
+      setupProgress: "تقدم الإعداد",
+    },
+  },
 };
 
 function formatTime(value: string | null) {
@@ -46,6 +380,9 @@ function formatTime(value: string | null) {
 }
 
 export function HRAttendancePage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { data: meData, isLoading: isProfileLoading, isError } = useMe();
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [departmentId, setDepartmentId] = useState<string | null>(null);
@@ -61,10 +398,43 @@ export function HRAttendancePage() {
     worksite_id: number;
     shift_id: number;
   } | null>(null);
+  const [language, setLanguage] = useState<Language>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-language")
+        : null;
+    return stored === "en" || stored === "ar" ? stored : "ar";
+  });
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-theme")
+        : null;
+    return stored === "light" || stored === "dark" ? stored : "light";
+  });
+
+  const content = useMemo(() => contentMap[language], [language]);
+  const isArabic = language === "ar";
+  const userPermissions = meData?.permissions ?? [];
+  const userName =
+    meData?.user.first_name || meData?.user.username || content.userFallback;
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-language", language);
+  }, [language]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-theme", theme);
+  }, [theme]);
 
   const departmentsQuery = useDepartments();
   const employeesQuery = useEmployees({
-
     search: employeeSearch,
     filters: { departmentId: departmentId ?? undefined },
   });
@@ -97,19 +467,223 @@ export function HRAttendancePage() {
   });
   const qrGenerateMutation = useAttendanceQrGenerateMutation();
 
-  if (
-    isForbiddenError(attendanceQuery.error) ||
-    isForbiddenError(departmentsQuery.error) ||
-    isForbiddenError(employeesQuery.error)
-  ) {
-    return <AccessDenied />;
+  const stats = useMemo(() => {
+    const rows = attendanceQuery.data ?? [];
+    return {
+      total: rows.length,
+      present: rows.filter((record) => record.status === "present").length,
+      late: rows.filter((record) => record.status === "late").length,
+      absent: rows.filter((record) => record.status === "absent").length,
+    };
+  }, [attendanceQuery.data]);
+
+  const navLinks = useMemo(
+    () => [
+      { path: "/dashboard", label: content.nav.dashboard, icon: "🏠" },
+      { path: "/users", label: content.nav.users, icon: "👥", permissions: ["users.view"] },
+      {
+        path: "/attendance/self",
+        label: content.nav.attendanceSelf,
+        icon: "🕒",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/leaves/balance",
+        label: content.nav.leaveBalance,
+        icon: "📅",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/leaves/request",
+        label: content.nav.leaveRequest,
+        icon: "📝",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/leaves/my",
+        label: content.nav.leaveMyRequests,
+        icon: "📌",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/hr/employees",
+        label: content.nav.employees,
+        icon: "🧑‍💼",
+        permissions: ["employees.*", "hr.employees.view"],
+      },
+      {
+        path: "/hr/departments",
+        label: content.nav.departments,
+        icon: "🏢",
+        permissions: ["hr.departments.view"],
+      },
+      {
+        path: "/hr/job-titles",
+        label: content.nav.jobTitles,
+        icon: "🧩",
+        permissions: ["hr.job_titles.view"],
+      },
+      {
+        path: "/hr/attendance",
+        label: content.nav.hrAttendance,
+        icon: "📍",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/hr/leaves/inbox",
+        label: content.nav.leaveInbox,
+        icon: "📥",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/hr/policies",
+        label: content.nav.policies,
+        icon: "📚",
+        permissions: ["employees.*"],
+      },
+      {
+        path: "/hr/actions",
+        label: content.nav.hrActions,
+        icon: "✅",
+        permissions: ["approvals.*"],
+      },
+      {
+        path: "/payroll",
+        label: content.nav.payroll,
+        icon: "💸",
+        permissions: ["hr.payroll.view", "hr.payroll.*"],
+      },
+      {
+        path: "/accounting/setup",
+        label: content.nav.accountingSetup,
+        icon: "⚙️",
+        permissions: ["accounting.manage_coa", "accounting.*"],
+      },
+      {
+        path: "/accounting/journal-entries",
+        label: content.nav.journalEntries,
+        icon: "📒",
+        permissions: ["accounting.journal.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/expenses",
+        label: content.nav.expenses,
+        icon: "🧾",
+        permissions: ["expenses.view", "expenses.*"],
+      },
+      {
+        path: "/collections",
+        label: content.nav.collections,
+        icon: "💼",
+        permissions: ["accounting.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/trial-balance",
+        label: content.nav.trialBalance,
+        icon: "📈",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/general-ledger",
+        label: content.nav.generalLedger,
+        icon: "📊",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/pnl",
+        label: content.nav.profitLoss,
+        icon: "📉",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/balance-sheet",
+        label: content.nav.balanceSheet,
+        icon: "🧮",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/ar-aging",
+        label: content.nav.agingReport,
+        icon: "⏳",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/customers",
+        label: content.nav.customers,
+        icon: "🤝",
+        permissions: ["customers.view", "customers.*"],
+      },
+      {
+        path: "/customers/new",
+        label: content.nav.newCustomer,
+        icon: "➕",
+        permissions: ["customers.create", "customers.*"],
+      },
+      {
+        path: "/invoices",
+        label: content.nav.invoices,
+        icon: "📄",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/invoices/new",
+        label: content.nav.newInvoice,
+        icon: "🧾",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/analytics/alerts",
+        label: content.nav.alertsCenter,
+        icon: "🚨",
+        permissions: ["analytics.alerts.view", "analytics.alerts.manage"],
+      },
+      { path: "/analytics/cash-forecast", label: content.nav.cashForecast, icon: "💡" },
+      { path: "/analytics/ceo", label: content.nav.ceoDashboard, icon: "📌" },
+      { path: "/analytics/finance", label: content.nav.financeDashboard, icon: "💹" },
+      { path: "/analytics/hr", label: content.nav.hrDashboard, icon: "🧑‍💻" },
+      { path: "/copilot", label: content.nav.copilot, icon: "🤖" },
+      {
+        path: "/admin/audit-logs",
+        label: content.nav.auditLogs,
+        icon: "🛡️",
+        permissions: ["audit.view"],
+      },
+      { path: "/setup/templates", label: content.nav.setupTemplates, icon: "🧱" },
+      { path: "/setup/progress", label: content.nav.setupProgress, icon: "🚀" },
+    ],
+    [content.nav]
+  );
+
+  const visibleNavLinks = useMemo(() => {
+    return navLinks.filter((link) => {
+      if (!link.permissions || link.permissions.length === 0) {
+        return true;
+      }
+      return link.permissions.some((permission) =>
+        hasPermission(userPermissions, permission)
+      );
+    });
+  }, [navLinks, userPermissions]);
+
+  function handleLogout() {
+    clearTokens();
+    navigate("/login", { replace: true });
+  }
+
+  function handleClearFilters() {
+    setDateFrom("");
+    setDateTo("");
+    setDepartmentId(null);
+    setEmployeeId(null);
+    setEmployeeSearch("");
+    setStatus(null);
   }
 
   async function handleGenerateQr() {
     if (!qrWorksiteId || !qrShiftId) {
       notifications.show({
-        title: "Missing info",
-        message: "من فضلك أدخل Worksite ID و Shift ID.",
+        title: content.notifications.missingTitle,
+        message: content.notifications.missingMessage,
         color: "red",
       });
       return;
@@ -123,174 +697,360 @@ export function HRAttendancePage() {
       });
       setQrToken(token);
       notifications.show({
-        title: "QR generated",
-        message: "تم إنشاء كود QR بنجاح.",
+        title: content.notifications.qrTitle,
+        message: content.notifications.qrMessage,
       });
     } catch {
       notifications.show({
-        title: "Failed to generate QR",
-        message: "حدث خطأ أثناء إنشاء كود QR.",
-        color: "red",        
+        title: content.notifications.qrFailedTitle,
+        message: content.notifications.qrFailedMessage,
+        color: "red",
       });
     }
   }
 
-  return (    
-    <Stack gap="lg">
-      <Title order={3}>Attendance</Title>
-      <Card withBorder radius="md" p="md">
-        <Group align="flex-end" gap="md">        
-          <TextInput
-            label="From"
-            type="date"
-            value={dateFrom}
-            onChange={(event) => setDateFrom(event.currentTarget.value)}
-          />
-          <TextInput
-            label="To"
-            type="date"
-            value={dateTo}
-            onChange={(event) => setDateTo(event.currentTarget.value)}
-          />
-          <Select
-            label="Department"
-            placeholder="All departments"
-            data={departmentOptions}
-            value={departmentId}
-            onChange={setDepartmentId}
-            clearable
-            searchable
-          />
-          <Select
-            label="Employee"
-            placeholder="Search employee"
-            data={employeeOptions}
-            value={employeeId}
-            onChange={setEmployeeId}
-            searchable
-            clearable
-            onSearchChange={setEmployeeSearch}
-            searchValue={employeeSearch}
-          />
-          <Select
-            label="Status"
-            placeholder="All"
-            data={statusOptions}
-            value={status}
-            onChange={setStatus}
-            clearable
-          />
-        </Group>
-      </Card>
+  if (
+    isForbiddenError(attendanceQuery.error) ||
+    isForbiddenError(departmentsQuery.error) ||
+    isForbiddenError(employeesQuery.error)
+  ) {
+    return <AccessDenied />;
+  }
 
-      <Card withBorder radius="md" p="md">
-        <Stack gap="md">
-          <Text fw={600}>Generate QR token</Text>
-          <Group align="flex-end" gap="md">
-            <NumberInput
-              label="Worksite ID"
-              placeholder="مثال: 2"
-              value={qrWorksiteId}
-              onChange={(value) =>
-                setQrWorksiteId(typeof value === "number" ? value : undefined)
-              }
-              min={1}
-              hideControls
-            />
-            <NumberInput
-              label="Shift ID"
-              placeholder="مثال: 1"
-              value={qrShiftId}
-              onChange={(value) =>
-                setQrShiftId(typeof value === "number" ? value : undefined)
-              }
-              min={1}
-              hideControls
-            />
-            <NumberInput
-              label="Expires (minutes)"
-              placeholder="60"
-              value={qrExpiryMinutes}
-              onChange={(value) =>
-                setQrExpiryMinutes(typeof value === "number" ? value : undefined)
-              }
-              min={1}
-              max={1440}
-              hideControls
-            />
-            <Button onClick={handleGenerateQr} loading={qrGenerateMutation.isPending}>
-              Generate
-            </Button>
-          </Group>
-          {qrToken && (
-            <Stack gap={4}>
-              <TextInput label="Token" value={qrToken.token} readOnly />
-              <Group gap="md">
-                <Text size="sm" c="dimmed">
-                  Expires at: {new Date(qrToken.expires_at).toLocaleString()}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  Worksite: {qrToken.worksite_id} · Shift: {qrToken.shift_id}
-                </Text>
-              </Group>
-            </Stack>
-          )}
-        </Stack>
-      </Card>
+  return (
+    <div
+      className="dashboard-page hr-attendance-page"
+      data-theme={theme}
+      dir={isArabic ? "rtl" : "ltr"}
+      lang={language}
+    >
+      <div className="dashboard-page__glow" aria-hidden="true" />
+      <header className="dashboard-topbar">
+        <div className="dashboard-brand">
+          <img src="/managora-logo.svg" alt="Managora logo" />
+          <div>
+            <span className="dashboard-brand__title">{content.brand}</span>
+            <span className="dashboard-brand__subtitle">{content.subtitle}</span>
+          </div>
+        </div>
+        <div className="dashboard-search">
+          <span aria-hidden="true">⌕</span>
+          <input
+            type="text"
+            placeholder={content.searchPlaceholder}
+            aria-label={content.searchPlaceholder}
+            value={employeeSearch}
+            onChange={(event) => setEmployeeSearch(event.target.value)}
+          />
+        </div>
+      </header>
 
-      <Card withBorder radius="md" p="md">
-        {attendanceQuery.isLoading ? (            
-          <Stack gap="sm">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <Skeleton key={index} height={32} radius="sm" />
-            ))}
-          </Stack>
-        ) : (attendanceQuery.data ?? []).length === 0 ? (
-          <Stack align="center" py="lg">
-            <Text c="dimmed">No attendance records yet.</Text>
-          </Stack>
-        ) : (
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Employee</Table.Th>
-                <Table.Th>Date</Table.Th>
-                <Table.Th>Check-in</Table.Th>
-                <Table.Th>Check-out</Table.Th>
-                <Table.Th>Late mins</Table.Th>
-                <Table.Th>Early mins</Table.Th>
-                <Table.Th>Method</Table.Th>
-                <Table.Th>Status</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>                
-              {(attendanceQuery.data ?? []).map((record) => (
-                <Table.Tr key={record.id}>
-                  <Table.Td>
-                    <Stack gap={2}>
-                      <Text fw={600}>{record.employee.full_name}</Text>
-                      <Text size="xs" c="dimmed">
-                        {record.employee.employee_code}
-                      </Text>
-                    </Stack>
-                  </Table.Td>
-                  <Table.Td>{record.date}</Table.Td>
-                  <Table.Td>{formatTime(record.check_in_time)}</Table.Td>
-                  <Table.Td>{formatTime(record.check_out_time)}</Table.Td>
-                  <Table.Td>{record.late_minutes || "-"}</Table.Td>
-                  <Table.Td>{record.early_leave_minutes || "-"}</Table.Td>
-                  <Table.Td>{record.method}</Table.Td>
-                  <Table.Td>
-                    <Badge color={statusColors[record.status] ?? "gray"}>
-                      {record.status}
-                    </Badge>
-                  </Table.Td>                  
-                </Table.Tr>
+      <div className="dashboard-shell">
+        <aside className="dashboard-sidebar">
+          <div className="sidebar-card">
+            <p>{content.pageTitle}</p>
+            <strong>{userName}</strong>
+            {isProfileLoading && <span className="sidebar-note">...loading profile</span>}
+            {isError && (
+              <span className="sidebar-note sidebar-note--error">
+                {isArabic ? "تعذر تحميل بيانات الحساب." : "Unable to load account data."}
+              </span>
+            )}
+          </div>
+          <nav className="sidebar-nav" aria-label={content.navigationLabel}>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() => setLanguage((prev) => (prev === "en" ? "ar" : "en"))}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                🌐
+              </span>
+              {content.languageLabel} • {isArabic ? "EN" : "AR"}
+            </button>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                {theme === "light" ? "🌙" : "☀️"}
+              </span>
+              {content.themeLabel} • {theme === "light" ? "Dark" : "Light"}
+            </button>
+            <div className="sidebar-links">
+              <span className="sidebar-links__title">{content.navigationLabel}</span>
+              {visibleNavLinks.map((link) => (
+                <button
+                  key={link.path}
+                  type="button"
+                  className={`nav-item${location.pathname === link.path ? " nav-item--active" : ""}`}
+                  onClick={() => navigate(link.path)}
+                >
+                  <span className="nav-icon" aria-hidden="true">
+                    {link.icon}
+                  </span>
+                  {link.label}
+                </button>
               ))}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Card>
-    </Stack>
+            </div>
+          </nav>
+          <div className="sidebar-footer">
+            <button type="button" className="pill-button" onClick={handleLogout}>
+              {content.logoutLabel}
+            </button>
+          </div>
+        </aside>
+
+        <main className="dashboard-main">
+          <section className="hero-panel hr-attendance-hero">
+            <div className="hr-attendance-hero__header">
+              <div className="hero-panel__intro">
+                <h1>{content.pageTitle}</h1>
+                <p>{content.pageSubtitle}</p>
+              </div>
+              <div className="hero-tags">
+                <span className="pill">{content.rangeLabel}</span>
+                <span className="pill pill--accent">
+                  {dateFrom || dateTo ? `${dateFrom || "--"} → ${dateTo || "--"}` : "--"}
+                </span>
+              </div>
+            </div>
+
+            <div className="hero-panel__stats">
+              {[
+                { label: content.stats.total, value: stats.total },
+                { label: content.stats.present, value: stats.present },
+                { label: content.stats.late, value: stats.late },
+                { label: content.stats.absent, value: stats.absent },
+              ].map((stat) => (
+                <div key={stat.label} className="stat-card">
+                  <div className="stat-card__top">
+                    <span>{stat.label}</span>
+                  </div>
+                  <strong>{attendanceQuery.isLoading ? "-" : stat.value}</strong>
+                  <div className="stat-card__spark" aria-hidden="true" />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel hr-attendance-panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.filtersTitle}</h2>
+                <p>{content.filtersSubtitle}</p>
+              </div>
+              <button type="button" className="ghost-button" onClick={handleClearFilters}>
+                {content.clearFilters}
+              </button>
+            </div>
+            <div className="attendance-filters">
+              <label className="filter-field">
+                {content.searchLabel}
+                <input
+                  type="text"
+                  value={employeeSearch}
+                  onChange={(event) => setEmployeeSearch(event.target.value)}
+                  placeholder={content.searchHint}
+                />
+              </label>
+              <label className="filter-field">
+                {content.fromLabel}
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(event) => setDateFrom(event.target.value)}
+                />
+              </label>
+              <label className="filter-field">
+                {content.toLabel}
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(event) => setDateTo(event.target.value)}
+                />
+              </label>
+              <label className="filter-field">
+                {content.departmentLabel}
+                <select
+                  value={departmentId ?? ""}
+                  onChange={(event) =>
+                    setDepartmentId(event.target.value ? event.target.value : null)
+                  }
+                >
+                  <option value="">{content.departmentPlaceholder}</option>
+                  {departmentOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-field">
+                {content.employeeLabel}
+                <select
+                  value={employeeId ?? ""}
+                  onChange={(event) =>
+                    setEmployeeId(event.target.value ? event.target.value : null)
+                  }
+                >
+                  <option value="">{content.employeePlaceholder}</option>
+                  {employeeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="filter-field">
+                {content.statusLabel}
+                <select value={status ?? ""} onChange={(event) => setStatus(event.target.value || null)}>
+                  <option value="">{content.statusPlaceholder}</option>
+                  {Object.entries(content.statusMap).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section className="panel hr-attendance-panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.qr.title}</h2>
+                <p>{content.qr.subtitle}</p>
+              </div>
+            </div>
+            <div className="attendance-qr-grid">
+              <label className="filter-field">
+                {content.qr.worksiteLabel}
+                <input
+                  type="number"
+                  min={1}
+                  value={qrWorksiteId ?? ""}
+                  placeholder={content.qr.worksitePlaceholder}
+                  onChange={(event) =>
+                    setQrWorksiteId(event.target.value ? Number(event.target.value) : undefined)
+                  }
+                />
+              </label>
+              <label className="filter-field">
+                {content.qr.shiftLabel}
+                <input
+                  type="number"
+                  min={1}
+                  value={qrShiftId ?? ""}
+                  placeholder={content.qr.shiftPlaceholder}
+                  onChange={(event) =>
+                    setQrShiftId(event.target.value ? Number(event.target.value) : undefined)
+                  }
+                />
+              </label>
+              <label className="filter-field">
+                {content.qr.expiresLabel}
+                <input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={qrExpiryMinutes ?? ""}
+                  placeholder={content.qr.expiresPlaceholder}
+                  onChange={(event) =>
+                    setQrExpiryMinutes(event.target.value ? Number(event.target.value) : undefined)
+                  }
+                />
+              </label>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={handleGenerateQr}
+                disabled={qrGenerateMutation.isPending}
+              >
+                {qrGenerateMutation.isPending ? `${content.qr.generate}...` : content.qr.generate}
+              </button>
+            </div>
+            {qrToken && (
+              <div className="qr-token-card">
+                <label className="filter-field">
+                  {content.qr.tokenLabel}
+                  <input type="text" value={qrToken.token} readOnly />
+                </label>
+                <div className="qr-token-meta">
+                  <span>
+                    {content.qr.expiresAt}: {new Date(qrToken.expires_at).toLocaleString()}
+                  </span>
+                  <span>
+                    {content.qr.worksite}: {qrToken.worksite_id} · {content.qr.shift}: {qrToken.shift_id}
+                  </span>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="panel hr-attendance-panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.table.title}</h2>
+                <p>{content.table.subtitle}</p>
+              </div>
+            </div>
+            {attendanceQuery.isLoading ? (
+              <div className="attendance-state attendance-state--loading">
+                {content.table.loading}
+              </div>
+            ) : (attendanceQuery.data ?? []).length === 0 ? (
+              <div className="attendance-state">
+                <strong>{content.table.emptyTitle}</strong>
+                <span>{content.table.emptySubtitle}</span>
+              </div>
+            ) : (
+              <div className="attendance-table-wrapper">
+                <table className="attendance-table">
+                  <thead>
+                    <tr>
+                      <th>{content.table.employee}</th>
+                      <th>{content.table.date}</th>
+                      <th>{content.table.checkIn}</th>
+                      <th>{content.table.checkOut}</th>
+                      <th>{content.table.late}</th>
+                      <th>{content.table.early}</th>
+                      <th>{content.table.method}</th>
+                      <th>{content.table.status}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(attendanceQuery.data ?? []).map((record) => (
+                      <tr key={record.id}>
+                        <td>
+                          <div className="attendance-employee">
+                            <strong>{record.employee.full_name}</strong>
+                            <span>{record.employee.employee_code}</span>
+                          </div>
+                        </td>
+                        <td>{record.date}</td>
+                        <td>{formatTime(record.check_in_time)}</td>
+                        <td>{formatTime(record.check_out_time)}</td>
+                        <td>{record.late_minutes || "-"}</td>
+                        <td>{record.early_leave_minutes || "-"}</td>
+                        <td>{content.methodMap[record.method] ?? record.method}</td>
+                        <td>
+                          <span className="status-pill" data-status={record.status}>
+                            {content.statusMap[record.status] ?? record.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </main>
+      </div>
+
+      <footer className="dashboard-footer">{content.subtitle}</footer>
+    </div>
   );
 }
