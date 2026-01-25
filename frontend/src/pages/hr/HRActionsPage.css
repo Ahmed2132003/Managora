@@ -1,0 +1,118 @@
+.hr-actions-page .hero-panel__intro h1 {
+  margin-bottom: 6px;
+}
+
+.hr-actions-hero__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.hr-actions-panel {
+  gap: 16px;
+}
+
+.hr-actions-state {
+  border-radius: 16px;
+  border: 1px dashed var(--border);
+  padding: 16px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hr-actions-state--loading {
+  background: var(--bg-alt);
+  border-style: solid;
+}
+
+.hr-actions-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.hr-actions-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.hr-actions-table th,
+.hr-actions-table td {
+  text-align: start;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.hr-actions-table thead th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hr-actions-table tbody tr {
+  transition: background 0.2s ease;
+}
+
+.hr-actions-table tbody tr:hover {
+  background: var(--bg-alt);
+}
+
+.hr-actions-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hr-actions-cell span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.hr-actions-reason {
+  color: var(--muted);
+}
+
+.action-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  text-transform: capitalize;
+}
+
+.action-pill[data-tone="warning"] {
+  color: #f59f00;
+  border-color: rgba(245, 159, 0, 0.35);
+  background: rgba(245, 159, 0, 0.12);
+}
+
+.action-pill[data-tone="danger"] {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.12);
+}
+
+@media (max-width: 900px) {
+  .hr-actions-hero__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .hr-actions-table {
+    min-width: 720px;
+  }
+}
