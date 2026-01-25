@@ -1,15 +1,14 @@
-import { useMemo, useState } from "react";
-import {
-  Badge,
-  Card,
-  Group,
-  SimpleGrid,
-  Skeleton,
-  Stack,
-  Table,
-  Text,
-  Title,
-} from "@mantine/core";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { clearTokens } from "../../shared/auth/tokens";
+import { useMe } from "../../shared/auth/useMe";
+import { hasPermission } from "../../shared/auth/useCan";
+import { useAnalyticsSummary, useAnalyticsKpis } from "../../shared/analytics/insights.ts";
+import { useAlerts } from "../../shared/analytics/hooks";
+import { useCashForecast } from "../../shared/analytics/forecast";
+import { buildRangeSelection } from "../../shared/analytics/range.ts";
+import type { RangeOption } from "../../shared/analytics/range.ts";
+import { formatCurrency, formatPercent } from "../../shared/analytics/format.ts";
 import {
   Line,
   LineChart,
@@ -19,13 +18,260 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useAnalyticsSummary, useAnalyticsKpis } from "../../shared/analytics/insights.ts";
-import { useAlerts } from "../../shared/analytics/hooks";
-import { useCashForecast } from "../../shared/analytics/forecast";
-import { buildRangeSelection } from "../../shared/analytics/range.ts";
-import type { RangeOption } from "../../shared/analytics/range.ts";
-import { RangeSelector } from "../../shared/analytics/RangeSelector";
-import { formatCurrency, formatPercent } from "../../shared/analytics/format.ts";
+import "./CEODashboardPage.css";
+
+type Language = "en" | "ar";
+type ThemeMode = "light" | "dark";
+
+type Content = {
+  brand: string;
+  subtitle: string;
+  searchPlaceholder: string;
+  languageLabel: string;
+  themeLabel: string;
+  navigationLabel: string;
+  logoutLabel: string;
+  rangeLabel: string;
+  welcome: string;
+  footer: string;
+  userFallback: string;
+  loadingLabel: string;
+  searchResultsTitle: string;
+  searchResultsSubtitle: string;
+  searchEmptyTitle: string;
+  searchEmptySubtitle: string;
+  page: {
+    title: string;
+    subtitle: string;
+    rangeTitle: string;
+    rangeSubtitle: string;
+    rangeHint: string;
+    rangeOptions: {
+      seven: string;
+      thirty: string;
+      ninety: string;
+      custom: string;
+    };
+    stats: {
+      revenue: string;
+      expenses: string;
+      netProfit: string;
+      cashForecast: string;
+    };
+    chartRevenue: string;
+    chartRevenueSubtitle: string;
+    chartAbsence: string;
+    chartAbsenceSubtitle: string;
+    alertsTitle: string;
+    alertsBadge: string;
+    alertsEmpty: string;
+  };
+  nav: {
+    dashboard: string;
+    users: string;
+    attendanceSelf: string;
+    leaveBalance: string;
+    leaveRequest: string;
+    leaveMyRequests: string;
+    employees: string;
+    departments: string;
+    jobTitles: string;
+    hrAttendance: string;
+    leaveInbox: string;
+    policies: string;
+    hrActions: string;
+    payroll: string;
+    accountingSetup: string;
+    journalEntries: string;
+    expenses: string;
+    collections: string;
+    trialBalance: string;
+    generalLedger: string;
+    profitLoss: string;
+    balanceSheet: string;
+    agingReport: string;
+    customers: string;
+    newCustomer: string;
+    invoices: string;
+    newInvoice: string;
+    alertsCenter: string;
+    cashForecast: string;
+    ceoDashboard: string;
+    financeDashboard: string;
+    hrDashboard: string;
+    copilot: string;
+    auditLogs: string;
+    setupTemplates: string;
+    setupProgress: string;
+  };
+};
+
+const contentMap: Record<Language, Content> = {
+  en: {
+    brand: "managora",
+    subtitle: "A smart dashboard that blends motion, clarity, and insight.",
+    searchPlaceholder: "Search dashboards, teams, workflows...",
+    languageLabel: "Language",
+    themeLabel: "Theme",
+    navigationLabel: "Navigation",
+    logoutLabel: "Logout",
+    rangeLabel: "Last 30 days",
+    welcome: "Welcome back",
+    footer: "This system is produced by Creativity Code.",
+    userFallback: "Explorer",
+    loadingLabel: "Loading...",
+    searchResultsTitle: "Search results",
+    searchResultsSubtitle: "Live data matched in your dashboard",
+    searchEmptyTitle: "No results found",
+    searchEmptySubtitle: "Try another keyword or check spelling.",
+    page: {
+      title: "CEO Dashboard",
+      subtitle: "Executive overview of revenue, expenses, and open alerts.",
+      rangeTitle: "Timeline",
+      rangeSubtitle: "Choose the reporting range for insights.",
+      rangeHint: "Select start and end dates to show results.",
+      rangeOptions: {
+        seven: "7 days",
+        thirty: "30 days",
+        ninety: "90 days",
+        custom: "Custom",
+      },
+      stats: {
+        revenue: "Total revenue",
+        expenses: "Total expenses",
+        netProfit: "Estimated net profit",
+        cashForecast: "30-day cash forecast",
+      },
+      chartRevenue: "Revenue vs expenses",
+      chartRevenueSubtitle: "Daily movement",
+      chartAbsence: "Absence rate",
+      chartAbsenceSubtitle: "People pulse",
+      alertsTitle: "Top alerts",
+      alertsBadge: "Open",
+      alertsEmpty: "No active alerts right now.",
+    },
+    nav: {
+      dashboard: "Dashboard",
+      users: "Users",
+      attendanceSelf: "My Attendance",
+      leaveBalance: "Leave Balance",
+      leaveRequest: "Leave Request",
+      leaveMyRequests: "My Leave Requests",
+      employees: "Employees",
+      departments: "Departments",
+      jobTitles: "Job Titles",
+      hrAttendance: "HR Attendance",
+      leaveInbox: "Leave Inbox",
+      policies: "Policies",
+      hrActions: "HR Actions",
+      payroll: "Payroll",
+      accountingSetup: "Accounting Setup",
+      journalEntries: "Journal Entries",
+      expenses: "Expenses",
+      collections: "Collections",
+      trialBalance: "Trial Balance",
+      generalLedger: "General Ledger",
+      profitLoss: "Profit & Loss",
+      balanceSheet: "Balance Sheet",
+      agingReport: "AR Aging",
+      customers: "Customers",
+      newCustomer: "New Customer",
+      invoices: "Invoices",
+      newInvoice: "New Invoice",
+      alertsCenter: "Alerts Center",
+      cashForecast: "Cash Forecast",
+      ceoDashboard: "CEO Dashboard",
+      financeDashboard: "Finance Dashboard",
+      hrDashboard: "HR Dashboard",
+      copilot: "Copilot",
+      auditLogs: "Audit Logs",
+      setupTemplates: "Setup Templates",
+      setupProgress: "Setup Progress",
+    },
+  },
+  ar: {
+    brand: "ماناجورا",
+    subtitle: "لوحة ذكية تجمع الحركة والوضوح والرؤية التحليلية.",
+    searchPlaceholder: "ابحث عن اللوحات أو الفرق أو التدفقات...",
+    languageLabel: "اللغة",
+    themeLabel: "المظهر",
+    navigationLabel: "التنقل",
+    logoutLabel: "تسجيل الخروج",
+    rangeLabel: "آخر ٣٠ يوم",
+    welcome: "أهلًا بعودتك",
+    footer: "هذا السيستم من انتاج كريتفيتي كود",
+    userFallback: "ضيف",
+    loadingLabel: "جاري التحميل...",
+    searchResultsTitle: "نتائج البحث",
+    searchResultsSubtitle: "بيانات مباشرة مطابقة لكلماتك",
+    searchEmptyTitle: "لا توجد نتائج",
+    searchEmptySubtitle: "جرّب كلمة مختلفة أو تحقق من الإملاء.",
+    page: {
+      title: "لوحة CEO",
+      subtitle: "نظرة شاملة على الإيرادات والمصروفات والتنبيهات المفتوحة.",
+      rangeTitle: "النطاق الزمني",
+      rangeSubtitle: "حدد الفترة المطلوبة لتحليل المؤشرات.",
+      rangeHint: "اختر تاريخ البداية والنهاية لعرض البيانات.",
+      rangeOptions: {
+        seven: "٧ أيام",
+        thirty: "٣٠ يوم",
+        ninety: "٩٠ يوم",
+        custom: "مخصص",
+      },
+      stats: {
+        revenue: "إجمالي الإيرادات",
+        expenses: "إجمالي المصروفات",
+        netProfit: "صافي الربح التقديري",
+        cashForecast: "توقع السيولة 30 يوم",
+      },
+      chartRevenue: "الإيرادات مقابل المصروفات",
+      chartRevenueSubtitle: "حركة يومية",
+      chartAbsence: "معدل الغياب",
+      chartAbsenceSubtitle: "نبض الموارد البشرية",
+      alertsTitle: "أهم التنبيهات",
+      alertsBadge: "مفتوحة",
+      alertsEmpty: "لا توجد تنبيهات حالياً.",
+    },
+    nav: {
+      dashboard: "لوحة التحكم",
+      users: "المستخدمون",
+      attendanceSelf: "حضوري",
+      leaveBalance: "رصيد الإجازات",
+      leaveRequest: "طلب إجازة",
+      leaveMyRequests: "طلباتي",
+      employees: "الموظفون",
+      departments: "الأقسام",
+      jobTitles: "المسميات الوظيفية",
+      hrAttendance: "حضور الموارد البشرية",
+      leaveInbox: "وارد الإجازات",
+      policies: "السياسات",
+      hrActions: "إجراءات الموارد البشرية",
+      payroll: "الرواتب",
+      accountingSetup: "إعداد المحاسبة",
+      journalEntries: "قيود اليومية",
+      expenses: "المصروفات",
+      collections: "التحصيلات",
+      trialBalance: "ميزان المراجعة",
+      generalLedger: "دفتر الأستاذ",
+      profitLoss: "الأرباح والخسائر",
+      balanceSheet: "الميزانية العمومية",
+      agingReport: "أعمار الديون",
+      customers: "العملاء",
+      newCustomer: "عميل جديد",
+      invoices: "الفواتير",
+      newInvoice: "فاتورة جديدة",
+      alertsCenter: "مركز التنبيهات",
+      cashForecast: "توقعات النقد",
+      ceoDashboard: "لوحة CEO",
+      financeDashboard: "لوحة المالية",
+      hrDashboard: "لوحة الموارد البشرية",
+      copilot: "المساعد",
+      auditLogs: "سجل التدقيق",
+      setupTemplates: "قوالب الإعداد",
+      setupProgress: "تقدم الإعداد",
+    },
+  },
+};
 
 const kpiKeys = ["revenue_daily", "expenses_daily", "absence_rate_daily"];
 
@@ -51,9 +297,46 @@ function buildChartData(series: Array<{ key: string; points: { date: string; val
 }
 
 export function CEODashboardPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { data, isLoading, isError } = useMe();
+  const [language, setLanguage] = useState<Language>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-language")
+        : null;
+    return stored === "en" || stored === "ar" ? stored : "ar";
+  });
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-theme")
+        : null;
+    return stored === "light" || stored === "dark" ? stored : "light";
+  });
+  const [searchTerm, setSearchTerm] = useState("");
   const [range, setRange] = useState<RangeOption>("30d");
   const [customStart, setCustomStart] = useState<string>("");
   const [customEnd, setCustomEnd] = useState<string>("");
+  const content = useMemo(() => contentMap[language], [language]);
+  const userPermissions = data?.permissions ?? [];
+  const userName =
+    data?.user.first_name || data?.user.username || content.userFallback;
+  const isArabic = language === "ar";
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-language", language);
+  }, [language]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-theme", theme);
+  }, [theme]);
 
   const selection = useMemo(
     () => buildRangeSelection(range, customStart, customEnd),
@@ -82,188 +365,590 @@ export function CEODashboardPage() {
 
   const showCustomHint = range === "custom" && (!selection.start || !selection.end);
 
+  const rangeLabel = useMemo(() => {
+    switch (range) {
+      case "7d":
+        return content.page.rangeOptions.seven;
+      case "30d":
+        return content.page.rangeOptions.thirty;
+      case "90d":
+        return content.page.rangeOptions.ninety;
+      case "custom":
+        return content.page.rangeOptions.custom;
+      default:
+        return content.page.rangeOptions.thirty;
+    }
+  }, [content.page.rangeOptions, range]);
+
+  const searchResults = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) {
+      return [];
+    }
+
+    const results: Array<{ label: string; description: string }> = [];
+
+    results.push(
+      {
+        label: content.page.stats.revenue,
+        description: formatCurrency(summaryQuery.data?.revenue_total ?? null),
+      },
+      {
+        label: content.page.stats.expenses,
+        description: formatCurrency(summaryQuery.data?.expenses_total ?? null),
+      },
+      {
+        label: content.page.stats.netProfit,
+        description: formatCurrency(summaryQuery.data?.net_profit_est ?? null),
+      },
+      {
+        label: content.page.stats.cashForecast,
+        description: formatCurrency(forecast30?.net_expected ?? null),
+      }
+    );
+
+    topAlerts.forEach((alert) => {
+      results.push({
+        label: alert.title,
+        description: new Date(alert.event_date).toLocaleDateString(
+          isArabic ? "ar" : "en"
+        ),
+      });
+    });
+
+    return results.filter((item) => {
+      return (
+        item.label.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query)
+      );
+    });
+  }, [
+    content.page.stats,
+    forecast30?.net_expected,
+    isArabic,
+    searchTerm,
+    summaryQuery.data,
+    topAlerts,
+  ]);
+
+  function handleLogout() {
+    clearTokens();
+    navigate("/login", { replace: true });
+  }
+
+  const navLinks = useMemo(
+    () => [
+      { path: "/dashboard", label: content.nav.dashboard, icon: "🏠" },
+      { path: "/users", label: content.nav.users, icon: "👥", permissions: ["users.view"] },
+      {
+        path: "/attendance/self",
+        label: content.nav.attendanceSelf,
+        icon: "🕒",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/leaves/balance",
+        label: content.nav.leaveBalance,
+        icon: "📅",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/leaves/request",
+        label: content.nav.leaveRequest,
+        icon: "📝",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/leaves/my",
+        label: content.nav.leaveMyRequests,
+        icon: "📌",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/hr/employees",
+        label: content.nav.employees,
+        icon: "🧑‍💼",
+        permissions: ["employees.*", "hr.employees.view"],
+      },
+      {
+        path: "/hr/departments",
+        label: content.nav.departments,
+        icon: "🏢",
+        permissions: ["hr.departments.view"],
+      },
+      {
+        path: "/hr/job-titles",
+        label: content.nav.jobTitles,
+        icon: "🧩",
+        permissions: ["hr.job_titles.view"],
+      },
+      {
+        path: "/hr/attendance",
+        label: content.nav.hrAttendance,
+        icon: "📍",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/hr/leaves/inbox",
+        label: content.nav.leaveInbox,
+        icon: "📥",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/hr/policies",
+        label: content.nav.policies,
+        icon: "📚",
+        permissions: ["employees.*"],
+      },
+      {
+        path: "/hr/actions",
+        label: content.nav.hrActions,
+        icon: "✅",
+        permissions: ["approvals.*"],
+      },
+      {
+        path: "/payroll",
+        label: content.nav.payroll,
+        icon: "💸",
+        permissions: ["hr.payroll.view", "hr.payroll.*"],
+      },
+      {
+        path: "/accounting/setup",
+        label: content.nav.accountingSetup,
+        icon: "⚙️",
+        permissions: ["accounting.manage_coa", "accounting.*"],
+      },
+      {
+        path: "/accounting/journal-entries",
+        label: content.nav.journalEntries,
+        icon: "📒",
+        permissions: ["accounting.journal.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/expenses",
+        label: content.nav.expenses,
+        icon: "🧾",
+        permissions: ["expenses.view", "expenses.*"],
+      },
+      {
+        path: "/collections",
+        label: content.nav.collections,
+        icon: "💼",
+        permissions: ["accounting.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/trial-balance",
+        label: content.nav.trialBalance,
+        icon: "📈",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/general-ledger",
+        label: content.nav.generalLedger,
+        icon: "📊",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/pnl",
+        label: content.nav.profitLoss,
+        icon: "📉",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/balance-sheet",
+        label: content.nav.balanceSheet,
+        icon: "🧮",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/ar-aging",
+        label: content.nav.agingReport,
+        icon: "⏳",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/customers",
+        label: content.nav.customers,
+        icon: "🤝",
+        permissions: ["customers.view", "customers.*"],
+      },
+      {
+        path: "/customers/new",
+        label: content.nav.newCustomer,
+        icon: "➕",
+        permissions: ["customers.create", "customers.*"],
+      },
+      {
+        path: "/invoices",
+        label: content.nav.invoices,
+        icon: "📄",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/invoices/new",
+        label: content.nav.newInvoice,
+        icon: "🧾",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/analytics/alerts",
+        label: content.nav.alertsCenter,
+        icon: "🚨",
+        permissions: ["analytics.alerts.view", "analytics.alerts.manage"],
+      },
+      { path: "/analytics/cash-forecast", label: content.nav.cashForecast, icon: "💡" },
+      { path: "/analytics/ceo", label: content.nav.ceoDashboard, icon: "📌" },
+      { path: "/analytics/finance", label: content.nav.financeDashboard, icon: "💹" },
+      { path: "/analytics/hr", label: content.nav.hrDashboard, icon: "🧑‍💻" },
+      { path: "/copilot", label: content.nav.copilot, icon: "🤖" },
+      {
+        path: "/admin/audit-logs",
+        label: content.nav.auditLogs,
+        icon: "🛡️",
+        permissions: ["audit.view"],
+      },
+      { path: "/setup/templates", label: content.nav.setupTemplates, icon: "🧱" },
+      { path: "/setup/progress", label: content.nav.setupProgress, icon: "🚀" },
+    ],
+    [content.nav]
+  );
+
+  const visibleNavLinks = useMemo(() => {
+    return navLinks.filter((link) => {
+      if (!link.permissions || link.permissions.length === 0) {
+        return true;
+      }
+      return link.permissions.some((permission) =>
+        hasPermission(userPermissions, permission)
+      );
+    });
+  }, [navLinks, userPermissions]);
+
   return (
-    <Stack gap="lg">
-      <Stack gap="xs">
-        <Title order={3}>لوحة CEO</Title>
-        <Text c="dimmed">نظرة شاملة على الإيرادات والمصروفات والتنبيهات.</Text>
-      </Stack>
+    <div
+      className="dashboard-page"
+      data-theme={theme}
+      dir={isArabic ? "rtl" : "ltr"}
+      lang={language}
+    >
+      <div className="dashboard-page__glow" aria-hidden="true" />
+      <header className="dashboard-topbar">
+        <div className="dashboard-brand">
+          <img src="/managora-logo.svg" alt="Managora logo" />
+          <div>
+            <span className="dashboard-brand__title">{content.brand}</span>
+            <span className="dashboard-brand__subtitle">{content.subtitle}</span>
+          </div>
+        </div>
+        <div className="dashboard-search">
+          <span aria-hidden="true">⌕</span>
+          <input
+            type="text"
+            placeholder={content.searchPlaceholder}
+            aria-label={content.searchPlaceholder}
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+        </div>
+      </header>
 
-      <RangeSelector
-        value={range}
-        onChange={setRange}
-        customStart={customStart}
-        customEnd={customEnd}
-        onCustomStartChange={setCustomStart}
-        onCustomEndChange={setCustomEnd}
-      />
-      {showCustomHint && <Text c="dimmed">اختر تاريخ البداية والنهاية لعرض البيانات.</Text>}
-
-      <SimpleGrid cols={{ base: 1, md: 4 }}>
-        {summaryQuery.isLoading ? (
-          Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} height={120} radius="md" />
-          ))
-        ) : (
-          <>
-            <Card withBorder radius="md" p="lg">
-              <Stack gap={4}>
-                <Text size="sm" c="dimmed">
-                  إجمالي الإيرادات
-                </Text>
-                <Text size="xl" fw={600}>
-                  {formatCurrency(summaryQuery.data?.revenue_total ?? null)}
-                </Text>
-              </Stack>
-            </Card>
-            <Card withBorder radius="md" p="lg">
-              <Stack gap={4}>
-                <Text size="sm" c="dimmed">
-                  إجمالي المصروفات
-                </Text>
-                <Text size="xl" fw={600}>
-                  {formatCurrency(summaryQuery.data?.expenses_total ?? null)}
-                </Text>
-              </Stack>
-            </Card>
-            <Card withBorder radius="md" p="lg">
-              <Stack gap={4}>
-                <Text size="sm" c="dimmed">
-                  صافي الربح التقديري
-                </Text>
-                <Text size="xl" fw={600}>
-                  {formatCurrency(summaryQuery.data?.net_profit_est ?? null)}
-                </Text>
-              </Stack>
-            </Card>
-            <Card withBorder radius="md" p="lg">
-              <Stack gap={4}>
-                <Text size="sm" c="dimmed">
-                  توقع السيولة 30 يوم
-                </Text>
-                <Text size="xl" fw={600}>
-                  {formatCurrency(forecast30?.net_expected ?? null)}
-                </Text>
-              </Stack>
-            </Card>
-          </>
-        )}
-      </SimpleGrid>
-
-      <SimpleGrid cols={{ base: 1, md: 2 }}>
-        <Card withBorder radius="md" p="lg">
-          <Stack gap="sm">
-            <Group justify="space-between">
-              <Title order={5}>الإيرادات مقابل المصروفات</Title>
-              <Badge variant="light">خط زمني</Badge>
-            </Group>
-            {kpisQuery.isLoading ? (
-              <Skeleton height={240} radius="md" />
-            ) : chartData.length ? (
-              <div style={{ width: "100%", height: 240 }}>
-                <ResponsiveContainer>
-                  <LineChart data={chartData}>
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip formatter={(value: number) => formatCurrency(String(value))} />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="revenue"
-                      name="الإيرادات"
-                      stroke="#1971c2"
-                      strokeWidth={2}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="expenses"
-                      name="المصروفات"
-                      stroke="#f03e3e"
-                      strokeWidth={2}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <Text c="dimmed">لسه مفيش داتا.</Text>
+      <div className="dashboard-shell">
+        <aside className="dashboard-sidebar">
+          <div className="sidebar-card">
+            <p>{content.welcome}</p>
+            <strong>{userName}</strong>
+            {isLoading && <span className="sidebar-note">...loading profile</span>}
+            {isError && (
+              <span className="sidebar-note sidebar-note--error">
+                {isArabic ? "تعذر تحميل بيانات الحساب." : "Unable to load account data."}
+              </span>
             )}
-          </Stack>
-        </Card>
+          </div>
+          <nav className="sidebar-nav" aria-label={content.navigationLabel}>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() => setLanguage((prev) => (prev === "en" ? "ar" : "en"))}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                🌐
+              </span>
+              {content.languageLabel} • {isArabic ? "EN" : "AR"}
+            </button>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                {theme === "light" ? "🌙" : "☀️"}
+              </span>
+              {content.themeLabel} • {theme === "light" ? "Dark" : "Light"}
+            </button>
+            <div className="sidebar-links">
+              <span className="sidebar-links__title">{content.navigationLabel}</span>
+              {visibleNavLinks.map((link) => (
+                <button
+                  key={link.path}
+                  type="button"
+                  className={`nav-item${
+                    location.pathname === link.path ? " nav-item--active" : ""
+                  }`}
+                  onClick={() => navigate(link.path)}
+                >
+                  <span className="nav-icon" aria-hidden="true">
+                    {link.icon}
+                  </span>
+                  {link.label}
+                </button>
+              ))}
+            </div>
+          </nav>
+          <div className="sidebar-footer">
+            <button type="button" className="pill-button" onClick={handleLogout}>
+              {content.logoutLabel}
+            </button>
+          </div>
+        </aside>
 
-        <Card withBorder radius="md" p="lg">
-          <Stack gap="sm">
-            <Group justify="space-between">
-              <Title order={5}>معدل الغياب</Title>
-              <Badge variant="light">آخر الفترة</Badge>
-            </Group>
-            {kpisQuery.isLoading ? (
-              <Skeleton height={240} radius="md" />
-            ) : chartData.length ? (
-              <div style={{ width: "100%", height: 240 }}>
-                <ResponsiveContainer>
-                  <LineChart data={chartData}>
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip formatter={(value: number) => formatPercent(String(value))} />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="absence"
-                      name="الغياب"
-                      stroke="#845ef7"
-                      strokeWidth={2}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+        <main className="dashboard-main">
+          <section className="hero-panel">
+            <div className="hero-panel__intro">
+              <h1>{content.page.title}</h1>
+              <p>{content.page.subtitle}</p>
+              <div className="hero-tags">
+                <span className="pill">{rangeLabel}</span>
+                <span className="pill pill--accent">
+                  {selection.start && selection.end
+                    ? `${selection.start} → ${selection.end}`
+                    : content.rangeLabel}
+                </span>
               </div>
-            ) : (
-              <Text c="dimmed">لسه مفيش داتا.</Text>
-            )}
-          </Stack>
-        </Card>
-      </SimpleGrid>
+            </div>
+            <div className="hero-panel__stats">
+              {[
+                {
+                  label: content.page.stats.revenue,
+                  value: formatCurrency(summaryQuery.data?.revenue_total ?? null),
+                },
+                {
+                  label: content.page.stats.expenses,
+                  value: formatCurrency(summaryQuery.data?.expenses_total ?? null),
+                },
+                {
+                  label: content.page.stats.netProfit,
+                  value: formatCurrency(summaryQuery.data?.net_profit_est ?? null),
+                },
+                {
+                  label: content.page.stats.cashForecast,
+                  value: formatCurrency(forecast30?.net_expected ?? null),
+                },
+              ].map((stat) => (
+                <div key={stat.label} className="stat-card">
+                  <div className="stat-card__top">
+                    <span>{stat.label}</span>
+                    <span className="stat-card__change">{rangeLabel}</span>
+                  </div>
+                  <strong>{summaryQuery.isLoading ? content.loadingLabel : stat.value}</strong>
+                  <div className="stat-card__spark" aria-hidden="true" />
+                </div>
+              ))}
+            </div>
+          </section>
 
-      <Card withBorder radius="md" p="lg">
-        <Stack gap="sm">
-          <Group justify="space-between">
-            <Title order={5}>Top Alerts</Title>
-            <Badge color="red" variant="light">
-              مفتوحة
-            </Badge>
-          </Group>
-          {alertsQuery.isLoading ? (
-            <Skeleton height={160} radius="md" />
-          ) : topAlerts.length ? (
-            <Table striped highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>العنوان</Table.Th>
-                  <Table.Th>الحدة</Table.Th>
-                  <Table.Th>التاريخ</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {topAlerts.map((alert) => (
-                  <Table.Tr key={alert.id}>
-                    <Table.Td>{alert.title}</Table.Td>
-                    <Table.Td>
-                      <Badge
-                        color={alert.severity === "high" ? "red" : "yellow"}
-                        variant="light"
-                      >
-                        {alert.severity}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>{alert.event_date}</Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          ) : (
-            <Text c="dimmed">لسه مفيش داتا.</Text>
+          <section className="panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.page.rangeTitle}</h2>
+                <p>{content.page.rangeSubtitle}</p>
+              </div>
+              <span className="pill pill--accent">{rangeLabel}</span>
+            </div>
+            <div className="panel-actions">
+              {[
+                { value: "7d" as RangeOption, label: content.page.rangeOptions.seven },
+                { value: "30d" as RangeOption, label: content.page.rangeOptions.thirty },
+                { value: "90d" as RangeOption, label: content.page.rangeOptions.ninety },
+                { value: "custom" as RangeOption, label: content.page.rangeOptions.custom },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`action-button${
+                    range === option.value ? "" : " action-button--ghost"
+                  }`}
+                  onClick={() => setRange(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {range === "custom" && (
+              <div className="filters-grid">
+                <label className="field">
+                  <span>{isArabic ? "من" : "From"}</span>
+                  <input
+                    type="date"
+                    value={customStart}
+                    onChange={(event) => setCustomStart(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>{isArabic ? "إلى" : "To"}</span>
+                  <input
+                    type="date"
+                    value={customEnd}
+                    onChange={(event) => setCustomEnd(event.target.value)}
+                  />
+                </label>
+              </div>
+            )}
+            {showCustomHint && <p className="helper-text">{content.page.rangeHint}</p>}
+          </section>
+
+          {searchTerm.trim().length > 0 && (
+            <section className="search-results" aria-live="polite">
+              <div className="search-results__header">
+                <div>
+                  <h2>{content.searchResultsTitle}</h2>
+                  <p>{content.searchResultsSubtitle}</p>
+                </div>
+                <span className="pill pill--accent">{searchResults.length}</span>
+              </div>
+              {searchResults.length ? (
+                <ul className="search-results__list">
+                  {searchResults.map((result, index) => (
+                    <li key={`${result.label}-${index}`}>
+                      <strong>{result.label}</strong>
+                      <span>{result.description}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="search-results__empty">
+                  <strong>{content.searchEmptyTitle}</strong>
+                  <span>{content.searchEmptySubtitle}</span>
+                </div>
+              )}
+            </section>
           )}
-        </Stack>
-      </Card>
-    </Stack>
+
+          <section className="grid-panels">
+            <div className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.page.chartRevenue}</h2>
+                  <p>{content.page.chartRevenueSubtitle}</p>
+                </div>
+                <span className="pill">{rangeLabel}</span>
+              </div>
+              {kpisQuery.isLoading ? (
+                <span className="helper-text">{content.loadingLabel}</span>
+              ) : chartData.length ? (
+                <div style={{ width: "100%", height: 240 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={chartData}>
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip formatter={(value: number) => formatCurrency(String(value))} />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="revenue"
+                        name={isArabic ? "الإيرادات" : "Revenue"}
+                        stroke="#1971c2"
+                        strokeWidth={2}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="expenses"
+                        name={isArabic ? "المصروفات" : "Expenses"}
+                        stroke="#f03e3e"
+                        strokeWidth={2}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <span className="helper-text">{content.searchEmptyTitle}</span>
+              )}
+            </div>
+
+            <div className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.page.chartAbsence}</h2>
+                  <p>{content.page.chartAbsenceSubtitle}</p>
+                </div>
+                <span className="pill">{rangeLabel}</span>
+              </div>
+              {kpisQuery.isLoading ? (
+                <span className="helper-text">{content.loadingLabel}</span>
+              ) : chartData.length ? (
+                <div style={{ width: "100%", height: 240 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={chartData}>
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip formatter={(value: number) => formatPercent(String(value))} />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="absence"
+                        name={isArabic ? "الغياب" : "Absence"}
+                        stroke="#845ef7"
+                        strokeWidth={2}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <span className="helper-text">{content.searchEmptyTitle}</span>
+              )}
+            </div>
+
+            <div className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.page.alertsTitle}</h2>
+                  <p>{isArabic ? "آخر التنبيهات المفتوحة" : "Latest open alerts"}</p>
+                </div>
+                <span className="pill pill--accent">{content.page.alertsBadge}</span>
+              </div>
+              {alertsQuery.isLoading ? (
+                <span className="helper-text">{content.loadingLabel}</span>
+              ) : topAlerts.length ? (
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>{isArabic ? "العنوان" : "Title"}</th>
+                        <th>{isArabic ? "الحدة" : "Severity"}</th>
+                        <th>{isArabic ? "التاريخ" : "Date"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topAlerts.map((alert) => (
+                        <tr key={alert.id}>
+                          <td>{alert.title}</td>
+                          <td>
+                            <span className="status-pill">{alert.severity}</span>
+                          </td>
+                          <td>{alert.event_date}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <span className="helper-text">{content.page.alertsEmpty}</span>
+              )}
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <footer className="dashboard-footer">{content.footer}</footer>
+    </div>
   );
 }

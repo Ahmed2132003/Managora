@@ -1,15 +1,10 @@
-import {
-  Card,
-  Stack,
-  Title,
-  Text,
-  SimpleGrid,
-  Group,
-  Table,
-  Badge,
-  Divider,
-} from "@mantine/core";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { clearTokens } from "../../shared/auth/tokens";
+import { useMe } from "../../shared/auth/useMe";
+import { hasPermission } from "../../shared/auth/useCan";
+import { useCashForecast } from "../../shared/analytics/forecast";
+import { formatCurrency, formatNumber } from "../../shared/analytics/format.ts";
 import {
   Bar,
   BarChart,
@@ -19,204 +14,852 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useCashForecast } from "../../shared/analytics/forecast";
+import "./CashForecastPage.css";
 
-const currencyFormatter = new Intl.NumberFormat("ar", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
+type Language = "en" | "ar";
+type ThemeMode = "light" | "dark";
 
-const numberFormatter = new Intl.NumberFormat("ar", {
-  maximumFractionDigits: 2,
-});
+type Content = {
+  brand: string;
+  subtitle: string;
+  searchPlaceholder: string;
+  languageLabel: string;
+  themeLabel: string;
+  navigationLabel: string;
+  logoutLabel: string;
+  welcome: string;
+  footer: string;
+  userFallback: string;
+  loadingLabel: string;
+  searchResultsTitle: string;
+  searchResultsSubtitle: string;
+  searchEmptyTitle: string;
+  searchEmptySubtitle: string;
+  page: {
+    title: string;
+    subtitle: string;
+    stats: {
+      net30: string;
+      inflows30: string;
+      outflows30: string;
+      topCustomer: string;
+    };
+    chartTitle: string;
+    chartSubtitle: string;
+    customersTitle: string;
+    customersEmpty: string;
+    categoriesTitle: string;
+    categoriesEmpty: string;
+    assumptionsTitle: string;
+    assumptionsEmpty: string;
+    assumptions: {
+      collectionRate: string;
+      recurringExpense: string;
+      payrollEstimate: string;
+      payrollDate: string;
+      payrollDateFallback: string;
+    };
+  };
+  nav: {
+    dashboard: string;
+    users: string;
+    attendanceSelf: string;
+    leaveBalance: string;
+    leaveRequest: string;
+    leaveMyRequests: string;
+    employees: string;
+    departments: string;
+    jobTitles: string;
+    hrAttendance: string;
+    leaveInbox: string;
+    policies: string;
+    hrActions: string;
+    payroll: string;
+    accountingSetup: string;
+    journalEntries: string;
+    expenses: string;
+    collections: string;
+    trialBalance: string;
+    generalLedger: string;
+    profitLoss: string;
+    balanceSheet: string;
+    agingReport: string;
+    customers: string;
+    newCustomer: string;
+    invoices: string;
+    newInvoice: string;
+    alertsCenter: string;
+    cashForecast: string;
+    ceoDashboard: string;
+    financeDashboard: string;
+    hrDashboard: string;
+    copilot: string;
+    auditLogs: string;
+    setupTemplates: string;
+    setupProgress: string;
+  };
+};
 
-function formatCurrency(value: string) {
-  const numeric = Number(value);
-  if (Number.isNaN(numeric)) {
-    return "-";
-  }
-  return currencyFormatter.format(numeric);
-}
-
-function formatNumber(value: string) {
-  const numeric = Number(value);
-  if (Number.isNaN(numeric)) {
-    return "-";
-  }
-  return numberFormatter.format(numeric);
-}
+const contentMap: Record<Language, Content> = {
+  en: {
+    brand: "managora",
+    subtitle: "A smart dashboard that blends motion, clarity, and insight.",
+    searchPlaceholder: "Search dashboards, teams, workflows...",
+    languageLabel: "Language",
+    themeLabel: "Theme",
+    navigationLabel: "Navigation",
+    logoutLabel: "Logout",
+    welcome: "Welcome back",
+    footer: "This system is produced by Creativity Code.",
+    userFallback: "Explorer",
+    loadingLabel: "Loading...",
+    searchResultsTitle: "Search results",
+    searchResultsSubtitle: "Live data matched in your dashboard",
+    searchEmptyTitle: "No results found",
+    searchEmptySubtitle: "Try another keyword or check spelling.",
+    page: {
+      title: "Cash Forecast 30/60/90",
+      subtitle: "A simple projection based on invoices, recurring expenses, and payroll.",
+      stats: {
+        net30: "Net expected (30d)",
+        inflows30: "Expected inflows (30d)",
+        outflows30: "Expected outflows (30d)",
+        topCustomer: "Top customer (30d)",
+      },
+      chartTitle: "Forecasted inflows vs outflows",
+      chartSubtitle: "Stacked comparison per horizon",
+      customersTitle: "Top customers expected to pay (30d)",
+      customersEmpty: "No invoices due within 30 days.",
+      categoriesTitle: "Top expected expenses (30d)",
+      categoriesEmpty: "No recurring expenses recorded.",
+      assumptionsTitle: "Forecast assumptions",
+      assumptionsEmpty: "No assumptions available.",
+      assumptions: {
+        collectionRate: "Historic collection rate",
+        recurringExpense: "Average monthly recurring expenses (last 3 months)",
+        payrollEstimate: "Upcoming payroll estimate",
+        payrollDate: "Expected payroll date",
+        payrollDateFallback: "Not available",
+      },
+    },
+    nav: {
+      dashboard: "Dashboard",
+      users: "Users",
+      attendanceSelf: "My Attendance",
+      leaveBalance: "Leave Balance",
+      leaveRequest: "Leave Request",
+      leaveMyRequests: "My Leave Requests",
+      employees: "Employees",
+      departments: "Departments",
+      jobTitles: "Job Titles",
+      hrAttendance: "HR Attendance",
+      leaveInbox: "Leave Inbox",
+      policies: "Policies",
+      hrActions: "HR Actions",
+      payroll: "Payroll",
+      accountingSetup: "Accounting Setup",
+      journalEntries: "Journal Entries",
+      expenses: "Expenses",
+      collections: "Collections",
+      trialBalance: "Trial Balance",
+      generalLedger: "General Ledger",
+      profitLoss: "Profit & Loss",
+      balanceSheet: "Balance Sheet",
+      agingReport: "AR Aging",
+      customers: "Customers",
+      newCustomer: "New Customer",
+      invoices: "Invoices",
+      newInvoice: "New Invoice",
+      alertsCenter: "Alerts Center",
+      cashForecast: "Cash Forecast",
+      ceoDashboard: "CEO Dashboard",
+      financeDashboard: "Finance Dashboard",
+      hrDashboard: "HR Dashboard",
+      copilot: "Copilot",
+      auditLogs: "Audit Logs",
+      setupTemplates: "Setup Templates",
+      setupProgress: "Setup Progress",
+    },
+  },
+  ar: {
+    brand: "ماناجورا",
+    subtitle: "لوحة ذكية تجمع الحركة والوضوح والرؤية التحليلية.",
+    searchPlaceholder: "ابحث عن اللوحات أو الفرق أو التدفقات...",
+    languageLabel: "اللغة",
+    themeLabel: "المظهر",
+    navigationLabel: "التنقل",
+    logoutLabel: "تسجيل الخروج",
+    welcome: "أهلًا بعودتك",
+    footer: "هذا السيستم من انتاج كريتفيتي كود",
+    userFallback: "ضيف",
+    loadingLabel: "جاري التحميل...",
+    searchResultsTitle: "نتائج البحث",
+    searchResultsSubtitle: "بيانات مباشرة مطابقة لكلماتك",
+    searchEmptyTitle: "لا توجد نتائج",
+    searchEmptySubtitle: "جرّب كلمة مختلفة أو تحقق من الإملاء.",
+    page: {
+      title: "توقع السيولة 30/60/90",
+      subtitle: "توقع بسيط يعتمد على الفواتير المستحقة والمصاريف المتكررة والرواتب القادمة.",
+      stats: {
+        net30: "صافي متوقع (30 يوم)",
+        inflows30: "تدفقات داخلة (30 يوم)",
+        outflows30: "تدفقات خارجة (30 يوم)",
+        topCustomer: "أعلى عميل (30 يوم)",
+      },
+      chartTitle: "التدفقات المتوقعة",
+      chartSubtitle: "مقارنة التدفقات الداخلة والخارجة",
+      customersTitle: "أكبر العملاء المتوقع تحصيلهم (30 يوم)",
+      customersEmpty: "لا توجد فواتير مستحقة خلال 30 يوم.",
+      categoriesTitle: "أكبر المصروفات المتوقعة (30 يوم)",
+      categoriesEmpty: "لا توجد مصروفات متكررة مسجلة.",
+      assumptionsTitle: "افتراضات التوقع",
+      assumptionsEmpty: "لا توجد افتراضات متاحة.",
+      assumptions: {
+        collectionRate: "معدل التحصيل التاريخي",
+        recurringExpense: "متوسط المصروفات الشهرية (آخر 3 أشهر)",
+        payrollEstimate: "تقدير الرواتب القادمة",
+        payrollDate: "تاريخ الرواتب المتوقع",
+        payrollDateFallback: "غير متاح",
+      },
+    },
+    nav: {
+      dashboard: "لوحة التحكم",
+      users: "المستخدمون",
+      attendanceSelf: "حضوري",
+      leaveBalance: "رصيد الإجازات",
+      leaveRequest: "طلب إجازة",
+      leaveMyRequests: "طلباتي",
+      employees: "الموظفون",
+      departments: "الأقسام",
+      jobTitles: "المسميات الوظيفية",
+      hrAttendance: "حضور الموارد البشرية",
+      leaveInbox: "وارد الإجازات",
+      policies: "السياسات",
+      hrActions: "إجراءات الموارد البشرية",
+      payroll: "الرواتب",
+      accountingSetup: "إعداد المحاسبة",
+      journalEntries: "قيود اليومية",
+      expenses: "المصروفات",
+      collections: "التحصيلات",
+      trialBalance: "ميزان المراجعة",
+      generalLedger: "دفتر الأستاذ",
+      profitLoss: "الأرباح والخسائر",
+      balanceSheet: "الميزانية العمومية",
+      agingReport: "أعمار الديون",
+      customers: "العملاء",
+      newCustomer: "عميل جديد",
+      invoices: "الفواتير",
+      newInvoice: "فاتورة جديدة",
+      alertsCenter: "مركز التنبيهات",
+      cashForecast: "توقعات النقد",
+      ceoDashboard: "لوحة CEO",
+      financeDashboard: "لوحة المالية",
+      hrDashboard: "لوحة الموارد البشرية",
+      copilot: "المساعد",
+      auditLogs: "سجل التدقيق",
+      setupTemplates: "قوالب الإعداد",
+      setupProgress: "تقدم الإعداد",
+    },
+  },
+};
 
 export function CashForecastPage() {
-  const { data, isLoading, isError } = useCashForecast();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { data, isLoading, isError } = useMe();
+  const [language, setLanguage] = useState<Language>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-language")
+        : null;
+    return stored === "en" || stored === "ar" ? stored : "ar";
+  });
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-theme")
+        : null;
+    return stored === "light" || stored === "dark" ? stored : "light";
+  });
+  const [searchTerm, setSearchTerm] = useState("");
+  const content = useMemo(() => contentMap[language], [language]);
+  const userPermissions = data?.permissions ?? [];
+  const userName =
+    data?.user.first_name || data?.user.username || content.userFallback;
+  const isArabic = language === "ar";
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-language", language);
+  }, [language]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-theme", theme);
+  }, [theme]);
+
+  const { data: forecastData, isLoading: forecastLoading, isError: forecastError } = useCashForecast();
 
   const snapshots = useMemo(() => {
-    if (!data) {
+    if (!forecastData) {
       return [];
     }
-    return [...data].sort((a, b) => a.horizon_days - b.horizon_days);
-  }, [data]);
+    return [...forecastData].sort((a, b) => a.horizon_days - b.horizon_days);
+  }, [forecastData]);
 
   const chartData = useMemo(
     () =>
       snapshots.map((snapshot) => ({
-        horizon: `${snapshot.horizon_days} يوم`,
+        horizon: `${snapshot.horizon_days} ${isArabic ? "يوم" : "days"}`,
         inflows: Number(snapshot.expected_inflows),
         outflows: Number(snapshot.expected_outflows),
       })),
-    [snapshots]
+    [snapshots, isArabic]
   );
 
   const snapshot30 = snapshots.find((snapshot) => snapshot.horizon_days === 30);
+  const topCustomer = snapshot30?.details.inflows_by_bucket.top_customers[0];
+
+  const searchResults = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) {
+      return [];
+    }
+
+    const results: Array<{ label: string; description: string }> = [];
+
+    if (snapshot30) {
+      results.push(
+        {
+          label: content.page.stats.net30,
+          description: formatCurrency(snapshot30.net_expected),
+        },
+        {
+          label: content.page.stats.inflows30,
+          description: formatCurrency(snapshot30.expected_inflows),
+        },
+        {
+          label: content.page.stats.outflows30,
+          description: formatCurrency(snapshot30.expected_outflows),
+        },
+        {
+          label: `${content.page.stats.topCustomer} • ${topCustomer?.customer ?? "-"}`,
+          description: formatCurrency(topCustomer?.amount ?? null),
+        }
+      );
+    }
+
+    snapshot30?.details.inflows_by_bucket.top_customers.forEach((item) => {
+      results.push({
+        label: item.customer,
+        description: formatCurrency(item.amount),
+      });
+    });
+
+    snapshot30?.details.outflows_by_bucket.top_categories.forEach((item) => {
+      results.push({
+        label: item.category,
+        description: formatCurrency(item.amount),
+      });
+    });
+
+    return results.filter((item) => {
+      return (
+        item.label.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query)
+      );
+    });
+  }, [content.page.stats, searchTerm, snapshot30, topCustomer?.amount, topCustomer?.customer]);
+
+  function handleLogout() {
+    clearTokens();
+    navigate("/login", { replace: true });
+  }
+
+  const navLinks = useMemo(
+    () => [
+      { path: "/dashboard", label: content.nav.dashboard, icon: "🏠" },
+      { path: "/users", label: content.nav.users, icon: "👥", permissions: ["users.view"] },
+      {
+        path: "/attendance/self",
+        label: content.nav.attendanceSelf,
+        icon: "🕒",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/leaves/balance",
+        label: content.nav.leaveBalance,
+        icon: "📅",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/leaves/request",
+        label: content.nav.leaveRequest,
+        icon: "📝",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/leaves/my",
+        label: content.nav.leaveMyRequests,
+        icon: "📌",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/hr/employees",
+        label: content.nav.employees,
+        icon: "🧑‍💼",
+        permissions: ["employees.*", "hr.employees.view"],
+      },
+      {
+        path: "/hr/departments",
+        label: content.nav.departments,
+        icon: "🏢",
+        permissions: ["hr.departments.view"],
+      },
+      {
+        path: "/hr/job-titles",
+        label: content.nav.jobTitles,
+        icon: "🧩",
+        permissions: ["hr.job_titles.view"],
+      },
+      {
+        path: "/hr/attendance",
+        label: content.nav.hrAttendance,
+        icon: "📍",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/hr/leaves/inbox",
+        label: content.nav.leaveInbox,
+        icon: "📥",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/hr/policies",
+        label: content.nav.policies,
+        icon: "📚",
+        permissions: ["employees.*"],
+      },
+      {
+        path: "/hr/actions",
+        label: content.nav.hrActions,
+        icon: "✅",
+        permissions: ["approvals.*"],
+      },
+      {
+        path: "/payroll",
+        label: content.nav.payroll,
+        icon: "💸",
+        permissions: ["hr.payroll.view", "hr.payroll.*"],
+      },
+      {
+        path: "/accounting/setup",
+        label: content.nav.accountingSetup,
+        icon: "⚙️",
+        permissions: ["accounting.manage_coa", "accounting.*"],
+      },
+      {
+        path: "/accounting/journal-entries",
+        label: content.nav.journalEntries,
+        icon: "📒",
+        permissions: ["accounting.journal.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/expenses",
+        label: content.nav.expenses,
+        icon: "🧾",
+        permissions: ["expenses.view", "expenses.*"],
+      },
+      {
+        path: "/collections",
+        label: content.nav.collections,
+        icon: "💼",
+        permissions: ["accounting.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/trial-balance",
+        label: content.nav.trialBalance,
+        icon: "📈",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/general-ledger",
+        label: content.nav.generalLedger,
+        icon: "📊",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/pnl",
+        label: content.nav.profitLoss,
+        icon: "📉",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/balance-sheet",
+        label: content.nav.balanceSheet,
+        icon: "🧮",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/ar-aging",
+        label: content.nav.agingReport,
+        icon: "⏳",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/customers",
+        label: content.nav.customers,
+        icon: "🤝",
+        permissions: ["customers.view", "customers.*"],
+      },
+      {
+        path: "/customers/new",
+        label: content.nav.newCustomer,
+        icon: "➕",
+        permissions: ["customers.create", "customers.*"],
+      },
+      {
+        path: "/invoices",
+        label: content.nav.invoices,
+        icon: "📄",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/invoices/new",
+        label: content.nav.newInvoice,
+        icon: "🧾",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/analytics/alerts",
+        label: content.nav.alertsCenter,
+        icon: "🚨",
+        permissions: ["analytics.alerts.view", "analytics.alerts.manage"],
+      },
+      { path: "/analytics/cash-forecast", label: content.nav.cashForecast, icon: "💡" },
+      { path: "/analytics/ceo", label: content.nav.ceoDashboard, icon: "📌" },
+      { path: "/analytics/finance", label: content.nav.financeDashboard, icon: "💹" },
+      { path: "/analytics/hr", label: content.nav.hrDashboard, icon: "🧑‍💻" },
+      { path: "/copilot", label: content.nav.copilot, icon: "🤖" },
+      {
+        path: "/admin/audit-logs",
+        label: content.nav.auditLogs,
+        icon: "🛡️",
+        permissions: ["audit.view"],
+      },
+      { path: "/setup/templates", label: content.nav.setupTemplates, icon: "🧱" },
+      { path: "/setup/progress", label: content.nav.setupProgress, icon: "🚀" },
+    ],
+    [content.nav]
+  );
+
+  const visibleNavLinks = useMemo(() => {
+    return navLinks.filter((link) => {
+      if (!link.permissions || link.permissions.length === 0) {
+        return true;
+      }
+      return link.permissions.some((permission) =>
+        hasPermission(userPermissions, permission)
+      );
+    });
+  }, [navLinks, userPermissions]);
 
   return (
-    <Stack gap="lg">
-      <Stack gap="xs">
-        <Title order={3}>توقع السيولة 30/60/90</Title>
-        <Text c="dimmed">
-          توقع بسيط يعتمد على الفواتير المستحقة والمصاريف المتكررة والرواتب القادمة.
-        </Text>
-      </Stack>
+    <div
+      className="dashboard-page"
+      data-theme={theme}
+      dir={isArabic ? "rtl" : "ltr"}
+      lang={language}
+    >
+      <div className="dashboard-page__glow" aria-hidden="true" />
+      <header className="dashboard-topbar">
+        <div className="dashboard-brand">
+          <img src="/managora-logo.svg" alt="Managora logo" />
+          <div>
+            <span className="dashboard-brand__title">{content.brand}</span>
+            <span className="dashboard-brand__subtitle">{content.subtitle}</span>
+          </div>
+        </div>
+        <div className="dashboard-search">
+          <span aria-hidden="true">⌕</span>
+          <input
+            type="text"
+            placeholder={content.searchPlaceholder}
+            aria-label={content.searchPlaceholder}
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+        </div>
+      </header>
 
-      {isLoading && <Text c="dimmed">جاري تجهيز التوقعات...</Text>}
-      {isError && (
-        <Text c="red">تعذر تحميل التوقعات حالياً. حاول مرة أخرى لاحقاً.</Text>
-      )}
+      <div className="dashboard-shell">
+        <aside className="dashboard-sidebar">
+          <div className="sidebar-card">
+            <p>{content.welcome}</p>
+            <strong>{userName}</strong>
+            {isLoading && <span className="sidebar-note">...loading profile</span>}
+            {isError && (
+              <span className="sidebar-note sidebar-note--error">
+                {isArabic ? "تعذر تحميل بيانات الحساب." : "Unable to load account data."}
+              </span>
+            )}
+          </div>
+          <nav className="sidebar-nav" aria-label={content.navigationLabel}>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() => setLanguage((prev) => (prev === "en" ? "ar" : "en"))}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                🌐
+              </span>
+              {content.languageLabel} • {isArabic ? "EN" : "AR"}
+            </button>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                {theme === "light" ? "🌙" : "☀️"}
+              </span>
+              {content.themeLabel} • {theme === "light" ? "Dark" : "Light"}
+            </button>
+            <div className="sidebar-links">
+              <span className="sidebar-links__title">{content.navigationLabel}</span>
+              {visibleNavLinks.map((link) => (
+                <button
+                  key={link.path}
+                  type="button"
+                  className={`nav-item${
+                    location.pathname === link.path ? " nav-item--active" : ""
+                  }`}
+                  onClick={() => navigate(link.path)}
+                >
+                  <span className="nav-icon" aria-hidden="true">
+                    {link.icon}
+                  </span>
+                  {link.label}
+                </button>
+              ))}
+            </div>
+          </nav>
+          <div className="sidebar-footer">
+            <button type="button" className="pill-button" onClick={handleLogout}>
+              {content.logoutLabel}
+            </button>
+          </div>
+        </aside>
 
-      {!isLoading && !isError && (
-        <>
-          <SimpleGrid cols={{ base: 1, md: 3 }}>
-            {snapshots.map((snapshot) => {
-              const netValue = Number(snapshot.net_expected);
-              const netColor = netValue >= 0 ? "teal" : "red";
-              return (
-                <Card key={snapshot.horizon_days} withBorder radius="md" p="lg">
-                  <Stack gap="xs">
-                    <Group justify="space-between">
-                      <Title order={5}>{snapshot.horizon_days} يوم</Title>
-                      <Badge color={netColor} variant="light">
-                        صافي متوقع
-                      </Badge>
-                    </Group>
-                    <Text size="xl" fw={600} c={netColor}>
-                      {formatCurrency(snapshot.net_expected)}
-                    </Text>
-                    <Text size="sm" c="dimmed">
-                      تدفقات داخلة {formatCurrency(snapshot.expected_inflows)}
-                    </Text>
-                    <Text size="sm" c="dimmed">
-                      تدفقات خارجة {formatCurrency(snapshot.expected_outflows)}
-                    </Text>
-                  </Stack>
-                </Card>
-              );
-            })}
-          </SimpleGrid>
+        <main className="dashboard-main">
+          <section className="hero-panel">
+            <div className="hero-panel__intro">
+              <h1>{content.page.title}</h1>
+              <p>{content.page.subtitle}</p>
+            </div>
+            <div className="hero-panel__stats">
+              {[
+                {
+                  label: content.page.stats.net30,
+                  value: formatCurrency(snapshot30?.net_expected ?? null),
+                },
+                {
+                  label: content.page.stats.inflows30,
+                  value: formatCurrency(snapshot30?.expected_inflows ?? null),
+                },
+                {
+                  label: content.page.stats.outflows30,
+                  value: formatCurrency(snapshot30?.expected_outflows ?? null),
+                },
+                {
+                  label: `${content.page.stats.topCustomer} • ${topCustomer?.customer ?? "-"}`,
+                  value: formatCurrency(topCustomer?.amount ?? null),
+                },
+              ].map((stat) => (
+                <div key={stat.label} className="stat-card">
+                  <div className="stat-card__top">
+                    <span>{stat.label}</span>
+                    <span className="stat-card__change">30d</span>
+                  </div>
+                  <strong>{forecastLoading ? content.loadingLabel : stat.value}</strong>
+                  <div className="stat-card__spark" aria-hidden="true" />
+                </div>
+              ))}
+            </div>
+          </section>
 
-          <Card withBorder radius="md" p="lg">
-            <Stack gap="md">
-              <Group justify="space-between">
-                <Title order={5}>التدفقات المتوقعة</Title>
-                <Text size="sm" c="dimmed">
-                  مقارنة التدفقات الداخلة والخارجة لكل فترة
-                </Text>
-              </Group>
-              <div style={{ width: "100%", height: 280 }}>
-                <ResponsiveContainer>
-                  <BarChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-                    <XAxis dataKey="horizon" />
-                    <YAxis />
-                    <Tooltip formatter={(value: number) => formatCurrency(String(value))} />
-                    <Legend />
-                    <Bar name="الداخل" dataKey="inflows" stackId="a" fill="#2f9e44" />
-                    <Bar name="الخارج" dataKey="outflows" stackId="a" fill="#f03e3e" />
-                  </BarChart>
-                </ResponsiveContainer>
+          {(forecastLoading || forecastError) && (
+            <section className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.page.chartTitle}</h2>
+                  <p>{content.page.chartSubtitle}</p>
+                </div>
               </div>
-            </Stack>
-          </Card>
+              <span className="helper-text">
+                {forecastLoading
+                  ? content.loadingLabel
+                  : isArabic
+                    ? "تعذر تحميل التوقعات حالياً."
+                    : "Unable to load forecasts right now."}
+              </span>
+            </section>
+          )}
 
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <Card withBorder radius="md" p="lg">
-              <Stack gap="sm">
-                <Title order={5}>أكبر العملاء المتوقع تحصيلهم (30 يوم)</Title>
-                {snapshot30?.details.inflows_by_bucket.top_customers.length ? (
-                  <Table striped withTableBorder>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th>العميل</Table.Th>
-                        <Table.Th>قيمة متوقعة</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {snapshot30.details.inflows_by_bucket.top_customers.map((item) => (
-                        <Table.Tr key={item.customer}>
-                          <Table.Td>{item.customer}</Table.Td>
-                          <Table.Td>{formatCurrency(item.amount)}</Table.Td>
-                        </Table.Tr>
+          {!forecastLoading && !forecastError && (
+            <>
+              {searchTerm.trim().length > 0 && (
+                <section className="search-results" aria-live="polite">
+                  <div className="search-results__header">
+                    <div>
+                      <h2>{content.searchResultsTitle}</h2>
+                      <p>{content.searchResultsSubtitle}</p>
+                    </div>
+                    <span className="pill pill--accent">{searchResults.length}</span>
+                  </div>
+                  {searchResults.length ? (
+                    <ul className="search-results__list">
+                      {searchResults.map((result, index) => (
+                        <li key={`${result.label}-${index}`}>
+                          <strong>{result.label}</strong>
+                          <span>{result.description}</span>
+                        </li>
                       ))}
-                    </Table.Tbody>
-                  </Table>
-                ) : (
-                  <Text c="dimmed">لا توجد فواتير مستحقة خلال 30 يوم.</Text>
-                )}
-              </Stack>
-            </Card>
-
-            <Card withBorder radius="md" p="lg">
-              <Stack gap="sm">
-                <Title order={5}>أكبر المصروفات المتوقعة (30 يوم)</Title>
-                {snapshot30?.details.outflows_by_bucket.top_categories.length ? (
-                  <Table striped withTableBorder>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th>الفئة</Table.Th>
-                        <Table.Th>قيمة متوقعة</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {snapshot30.details.outflows_by_bucket.top_categories.map((item) => (
-                        <Table.Tr key={item.category}>
-                          <Table.Td>{item.category}</Table.Td>
-                          <Table.Td>{formatCurrency(item.amount)}</Table.Td>
-                        </Table.Tr>
-                      ))}
-                    </Table.Tbody>
-                  </Table>
-                ) : (
-                  <Text c="dimmed">لا توجد مصروفات متكررة مسجلة.</Text>
-                )}
-              </Stack>
-            </Card>
-          </SimpleGrid>
-
-          <Card withBorder radius="md" p="lg">
-            <Stack gap="xs">
-              <Title order={5}>افتراضات التوقع</Title>
-              <Divider />
-              {snapshot30 ? (
-                <Stack gap={4}>
-                  <Text size="sm">
-                    معدل التحصيل التاريخي: {formatNumber(snapshot30.details.assumptions.collection_rate)}
-                  </Text>
-                  <Text size="sm">
-                    متوسط المصروفات الشهرية (آخر 3 أشهر):{" "}
-                    {formatCurrency(snapshot30.details.assumptions.recurring_expense_est)}
-                  </Text>
-                  <Text size="sm">
-                    تقدير الرواتب القادمة: {formatCurrency(snapshot30.details.assumptions.payroll_est)}
-                  </Text>
-                  <Text size="sm" c="dimmed">
-                    تاريخ الرواتب المتوقع: {snapshot30.details.assumptions.payroll_date || "غير متاح"}
-                  </Text>
-                </Stack>
-              ) : (
-                <Text c="dimmed">لا توجد افتراضات متاحة.</Text>
+                    </ul>
+                  ) : (
+                    <div className="search-results__empty">
+                      <strong>{content.searchEmptyTitle}</strong>
+                      <span>{content.searchEmptySubtitle}</span>
+                    </div>
+                  )}
+                </section>
               )}
-            </Stack>
-          </Card>
-        </>
-      )}
-    </Stack>
+
+              <section className="grid-panels">
+                <div className="panel">
+                  <div className="panel__header">
+                    <div>
+                      <h2>{content.page.chartTitle}</h2>
+                      <p>{content.page.chartSubtitle}</p>
+                    </div>
+                  </div>
+                  <div style={{ width: "100%", height: 280 }}>
+                    <ResponsiveContainer>
+                      <BarChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                        <XAxis dataKey="horizon" />
+                        <YAxis />
+                        <Tooltip formatter={(value: number) => formatCurrency(String(value))} />
+                        <Legend />
+                        <Bar name={isArabic ? "الداخل" : "Inflows"} dataKey="inflows" stackId="a" fill="#2f9e44" />
+                        <Bar name={isArabic ? "الخارج" : "Outflows"} dataKey="outflows" stackId="a" fill="#f03e3e" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="panel">
+                  <div className="panel__header">
+                    <div>
+                      <h2>{content.page.customersTitle}</h2>
+                      <p>{isArabic ? "فواتير مستحقة خلال 30 يوم" : "Invoices due within 30 days"}</p>
+                    </div>
+                  </div>
+                  {snapshot30?.details.inflows_by_bucket.top_customers.length ? (
+                    <div className="table-wrapper">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>{isArabic ? "العميل" : "Customer"}</th>
+                            <th>{isArabic ? "قيمة متوقعة" : "Expected"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {snapshot30.details.inflows_by_bucket.top_customers.map((item) => (
+                            <tr key={item.customer}>
+                              <td>{item.customer}</td>
+                              <td>{formatCurrency(item.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <span className="helper-text">{content.page.customersEmpty}</span>
+                  )}
+                </div>
+
+                <div className="panel">
+                  <div className="panel__header">
+                    <div>
+                      <h2>{content.page.categoriesTitle}</h2>
+                      <p>{isArabic ? "مصروفات متكررة" : "Recurring expenses"}</p>
+                    </div>
+                  </div>
+                  {snapshot30?.details.outflows_by_bucket.top_categories.length ? (
+                    <div className="table-wrapper">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>{isArabic ? "الفئة" : "Category"}</th>
+                            <th>{isArabic ? "قيمة متوقعة" : "Expected"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {snapshot30.details.outflows_by_bucket.top_categories.map((item) => (
+                            <tr key={item.category}>
+                              <td>{item.category}</td>
+                              <td>{formatCurrency(item.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <span className="helper-text">{content.page.categoriesEmpty}</span>
+                  )}
+                </div>
+
+                <div className="panel">
+                  <div className="panel__header">
+                    <div>
+                      <h2>{content.page.assumptionsTitle}</h2>
+                      <p>{isArabic ? "افتراضات الحساب" : "Calculation assumptions"}</p>
+                    </div>
+                  </div>
+                  {snapshot30 ? (
+                    <div className="assistant-chat">
+                      <div className="assistant-message">
+                        {content.page.assumptions.collectionRate}: {formatNumber(snapshot30.details.assumptions.collection_rate)}
+                      </div>
+                      <div className="assistant-message">
+                        {content.page.assumptions.recurringExpense}: {" "}
+                        {formatCurrency(snapshot30.details.assumptions.recurring_expense_est)}
+                      </div>
+                      <div className="assistant-message">
+                        {content.page.assumptions.payrollEstimate}: {" "}
+                        {formatCurrency(snapshot30.details.assumptions.payroll_est)}
+                      </div>
+                      <div className="assistant-message">
+                        {content.page.assumptions.payrollDate}: {" "}
+                        {snapshot30.details.assumptions.payroll_date ||
+                          content.page.assumptions.payrollDateFallback}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="helper-text">{content.page.assumptionsEmpty}</span>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+        </main>
+      </div>
+
+      <footer className="dashboard-footer">{content.footer}</footer>
+    </div>
   );
 }
