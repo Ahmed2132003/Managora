@@ -1,14 +1,225 @@
-import {
-  Card,
-  Group,
-  SimpleGrid,
-  Stack,
-  Table,
-  Text,
-  Title,
-} from "@mantine/core";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useMyLeaveBalancesQuery } from "../../shared/hr/hooks";
+import { useMe } from "../../shared/auth/useMe";
+import { clearTokens } from "../../shared/auth/tokens";
+import { hasPermission } from "../../shared/auth/useCan";
+import "../DashboardPage.css";
+import "./LeaveBalancePage.css";
+
+type Language = "en" | "ar";
+type ThemeMode = "light" | "dark";
+
+type Content = {
+  brand: string;
+  welcome: string;
+  subtitle: string;
+  searchPlaceholder: string;
+  languageLabel: string;
+  themeLabel: string;
+  navigationLabel: string;
+  logoutLabel: string;
+  pageTitle: string;
+  pageSubtitle: string;
+  userFallback: string;
+  summaryTitle: string;
+  summarySubtitle: string;
+  tableTitle: string;
+  tableSubtitle: string;
+  tableHeaders: {
+    type: string;
+    year: string;
+    allocated: string;
+    used: string;
+    remaining: string;
+  };
+  totals: {
+    allocated: string;
+    used: string;
+    remaining: string;
+  };
+  emptyState: string;
+  loadingLabel: string;
+  nav: {
+    dashboard: string;
+    users: string;
+    attendanceSelf: string;
+    leaveBalance: string;
+    leaveRequest: string;
+    leaveMyRequests: string;
+    employees: string;
+    departments: string;
+    jobTitles: string;
+    hrAttendance: string;
+    leaveInbox: string;
+    policies: string;
+    hrActions: string;
+    payroll: string;
+    accountingSetup: string;
+    journalEntries: string;
+    expenses: string;
+    collections: string;
+    trialBalance: string;
+    generalLedger: string;
+    profitLoss: string;
+    balanceSheet: string;
+    agingReport: string;
+    customers: string;
+    newCustomer: string;
+    invoices: string;
+    newInvoice: string;
+    alertsCenter: string;
+    cashForecast: string;
+    ceoDashboard: string;
+    financeDashboard: string;
+    hrDashboard: string;
+    copilot: string;
+    auditLogs: string;
+    setupTemplates: string;
+    setupProgress: string;
+  };
+};
+
+const contentMap: Record<Language, Content> = {
+  en: {
+    brand: "managora",
+    welcome: "Welcome back",
+    subtitle: "A smart dashboard that blends motion, clarity, and insight.",
+    searchPlaceholder: "Search dashboards, teams, workflows...",
+    languageLabel: "Language",
+    themeLabel: "Theme",
+    navigationLabel: "Navigation",
+    logoutLabel: "Logout",
+    pageTitle: "Leave Balance",
+    pageSubtitle: "Track allocations, usage, and remaining days in one view.",
+    userFallback: "Explorer",
+    summaryTitle: "Balance summary",
+    summarySubtitle: "Totals across all leave types",
+    tableTitle: "Balance details",
+    tableSubtitle: "Breakdown by leave type",
+    tableHeaders: {
+      type: "Leave type",
+      year: "Year",
+      allocated: "Allocated",
+      used: "Used",
+      remaining: "Remaining",
+    },
+    totals: {
+      allocated: "Allocated balance",
+      used: "Used balance",
+      remaining: "Remaining balance",
+    },
+    emptyState: "No leave balance recorded yet.",
+    loadingLabel: "Loading...",
+    nav: {
+      dashboard: "Dashboard",
+      users: "Users",
+      attendanceSelf: "My Attendance",
+      leaveBalance: "Leave Balance",
+      leaveRequest: "Leave Request",
+      leaveMyRequests: "My Leave Requests",
+      employees: "Employees",
+      departments: "Departments",
+      jobTitles: "Job Titles",
+      hrAttendance: "HR Attendance",
+      leaveInbox: "Leave Inbox",
+      policies: "Policies",
+      hrActions: "HR Actions",
+      payroll: "Payroll",
+      accountingSetup: "Accounting Setup",
+      journalEntries: "Journal Entries",
+      expenses: "Expenses",
+      collections: "Collections",
+      trialBalance: "Trial Balance",
+      generalLedger: "General Ledger",
+      profitLoss: "Profit & Loss",
+      balanceSheet: "Balance Sheet",
+      agingReport: "AR Aging",
+      customers: "Customers",
+      newCustomer: "New Customer",
+      invoices: "Invoices",
+      newInvoice: "New Invoice",
+      alertsCenter: "Alerts Center",
+      cashForecast: "Cash Forecast",
+      ceoDashboard: "CEO Dashboard",
+      financeDashboard: "Finance Dashboard",
+      hrDashboard: "HR Dashboard",
+      copilot: "Copilot",
+      auditLogs: "Audit Logs",
+      setupTemplates: "Setup Templates",
+      setupProgress: "Setup Progress",
+    },
+  },
+  ar: {
+    brand: "ماناجورا",
+    welcome: "أهلًا بعودتك",
+    subtitle: "لوحة ذكية تجمع الحركة والوضوح والرؤية التحليلية.",
+    searchPlaceholder: "ابحث عن اللوحات أو الفرق أو التدفقات...",
+    languageLabel: "اللغة",
+    themeLabel: "المظهر",
+    navigationLabel: "التنقل",
+    logoutLabel: "تسجيل الخروج",
+    pageTitle: "رصيد الإجازات",
+    pageSubtitle: "تابع المخصص والمستخدم والمتبقي في نظرة واحدة.",
+    userFallback: "ضيف",
+    summaryTitle: "ملخص الرصيد",
+    summarySubtitle: "إجماليات كل الأنواع",
+    tableTitle: "تفاصيل الرصيد",
+    tableSubtitle: "التفاصيل حسب نوع الإجازة",
+    tableHeaders: {
+      type: "نوع الإجازة",
+      year: "السنة",
+      allocated: "المخصص",
+      used: "المستخدم",
+      remaining: "المتبقي",
+    },
+    totals: {
+      allocated: "الرصيد المخصص",
+      used: "الرصيد المستخدم",
+      remaining: "الرصيد المتبقي",
+    },
+    emptyState: "لا يوجد رصيد مسجل بعد.",
+    loadingLabel: "جاري التحميل...",
+    nav: {
+      dashboard: "لوحة التحكم",
+      users: "المستخدمون",
+      attendanceSelf: "حضوري",
+      leaveBalance: "رصيد الإجازات",
+      leaveRequest: "طلب إجازة",
+      leaveMyRequests: "طلباتي",
+      employees: "الموظفون",
+      departments: "الأقسام",
+      jobTitles: "المسميات الوظيفية",
+      hrAttendance: "حضور الموارد البشرية",
+      leaveInbox: "وارد الإجازات",
+      policies: "السياسات",
+      hrActions: "إجراءات الموارد البشرية",
+      payroll: "الرواتب",
+      accountingSetup: "إعداد المحاسبة",
+      journalEntries: "قيود اليومية",
+      expenses: "المصروفات",
+      collections: "التحصيلات",
+      trialBalance: "ميزان المراجعة",
+      generalLedger: "دفتر الأستاذ",
+      profitLoss: "الأرباح والخسائر",
+      balanceSheet: "الميزانية العمومية",
+      agingReport: "أعمار الديون",
+      customers: "العملاء",
+      newCustomer: "عميل جديد",
+      invoices: "الفواتير",
+      newInvoice: "فاتورة جديدة",
+      alertsCenter: "مركز التنبيهات",
+      cashForecast: "توقعات النقد",
+      ceoDashboard: "لوحة CEO",
+      financeDashboard: "لوحة المالية",
+      hrDashboard: "لوحة الموارد البشرية",
+      copilot: "المساعد",
+      auditLogs: "سجل التدقيق",
+      setupTemplates: "قوالب الإعداد",
+      setupProgress: "تقدم الإعداد",
+    },
+  },
+};
 
 function formatDays(value: string | number) {
   const num = typeof value === "number" ? value : Number(value);
@@ -19,7 +230,43 @@ function formatDays(value: string | number) {
 }
 
 export function LeaveBalancePage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [language, setLanguage] = useState<Language>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-language")
+        : null;
+    return stored === "en" || stored === "ar" ? stored : "ar";
+  });
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-theme")
+        : null;
+    return stored === "light" || stored === "dark" ? stored : "light";
+  });
+
+  const content = useMemo(() => contentMap[language], [language]);
+  const isArabic = language === "ar";
+
   const balancesQuery = useMyLeaveBalancesQuery();
+  const meQuery = useMe();
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-language", language);
+  }, [language]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-theme", theme);
+  }, [theme]);
 
   const totals = useMemo(() => {
     const balances = balancesQuery.data ?? [];
@@ -34,74 +281,416 @@ export function LeaveBalancePage() {
     );
   }, [balancesQuery.data]);
 
+  const navLinks = useMemo(
+    () => [
+      { path: "/dashboard", label: content.nav.dashboard, icon: "🏠" },
+      {
+        path: "/users",
+        label: content.nav.users,
+        icon: "👥",
+        permissions: ["users.view"],
+      },
+      {
+        path: "/attendance/self",
+        label: content.nav.attendanceSelf,
+        icon: "🕒",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/leaves/balance",
+        label: content.nav.leaveBalance,
+        icon: "📅",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/leaves/request",
+        label: content.nav.leaveRequest,
+        icon: "📝",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/leaves/my",
+        label: content.nav.leaveMyRequests,
+        icon: "📌",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/hr/employees",
+        label: content.nav.employees,
+        icon: "🧑‍💼",
+        permissions: ["employees.*", "hr.employees.view"],
+      },
+      {
+        path: "/hr/departments",
+        label: content.nav.departments,
+        icon: "🏢",
+        permissions: ["hr.departments.view"],
+      },
+      {
+        path: "/hr/job-titles",
+        label: content.nav.jobTitles,
+        icon: "🧩",
+        permissions: ["hr.job_titles.view"],
+      },
+      {
+        path: "/hr/attendance",
+        label: content.nav.hrAttendance,
+        icon: "📍",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/hr/leaves/inbox",
+        label: content.nav.leaveInbox,
+        icon: "📥",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/hr/policies",
+        label: content.nav.policies,
+        icon: "📚",
+        permissions: ["employees.*"],
+      },
+      {
+        path: "/hr/actions",
+        label: content.nav.hrActions,
+        icon: "✅",
+        permissions: ["approvals.*"],
+      },
+      {
+        path: "/payroll",
+        label: content.nav.payroll,
+        icon: "💸",
+        permissions: ["hr.payroll.view", "hr.payroll.*"],
+      },
+      {
+        path: "/accounting/setup",
+        label: content.nav.accountingSetup,
+        icon: "⚙️",
+        permissions: ["accounting.manage_coa", "accounting.*"],
+      },
+      {
+        path: "/accounting/journal-entries",
+        label: content.nav.journalEntries,
+        icon: "📒",
+        permissions: ["accounting.journal.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/expenses",
+        label: content.nav.expenses,
+        icon: "🧾",
+        permissions: ["expenses.view", "expenses.*"],
+      },
+      {
+        path: "/collections",
+        label: content.nav.collections,
+        icon: "💼",
+        permissions: ["accounting.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/trial-balance",
+        label: content.nav.trialBalance,
+        icon: "📈",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/general-ledger",
+        label: content.nav.generalLedger,
+        icon: "📊",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/pnl",
+        label: content.nav.profitLoss,
+        icon: "📉",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/balance-sheet",
+        label: content.nav.balanceSheet,
+        icon: "🧮",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/ar-aging",
+        label: content.nav.agingReport,
+        icon: "⏳",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/customers",
+        label: content.nav.customers,
+        icon: "🤝",
+        permissions: ["customers.view", "customers.*"],
+      },
+      {
+        path: "/customers/new",
+        label: content.nav.newCustomer,
+        icon: "➕",
+        permissions: ["customers.create", "customers.*"],
+      },
+      {
+        path: "/invoices",
+        label: content.nav.invoices,
+        icon: "📄",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/invoices/new",
+        label: content.nav.newInvoice,
+        icon: "🧾",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/analytics/alerts",
+        label: content.nav.alertsCenter,
+        icon: "🚨",
+        permissions: ["analytics.alerts.view", "analytics.alerts.manage"],
+      },
+      { path: "/analytics/cash-forecast", label: content.nav.cashForecast, icon: "💡" },
+      { path: "/analytics/ceo", label: content.nav.ceoDashboard, icon: "📌" },
+      {
+        path: "/analytics/finance",
+        label: content.nav.financeDashboard,
+        icon: "💹",
+      },
+      { path: "/analytics/hr", label: content.nav.hrDashboard, icon: "🧑‍💻" },
+      { path: "/copilot", label: content.nav.copilot, icon: "🤖" },
+      {
+        path: "/admin/audit-logs",
+        label: content.nav.auditLogs,
+        icon: "🛡️",
+        permissions: ["audit.view"],
+      },
+      { path: "/setup/templates", label: content.nav.setupTemplates, icon: "🧱" },
+      { path: "/setup/progress", label: content.nav.setupProgress, icon: "🚀" },
+    ],
+    [content.nav]
+  );
+
+  const visibleNavLinks = useMemo(() => {
+    const userPermissions = meQuery.data?.permissions ?? [];
+    return navLinks.filter((link) => {
+      if (!link.permissions || link.permissions.length === 0) {
+        return true;
+      }
+      return link.permissions.some((permission) =>
+        hasPermission(userPermissions, permission)
+      );
+    });
+  }, [meQuery.data?.permissions, navLinks]);
+
+  const userName =
+    meQuery.data?.user.first_name ||
+    meQuery.data?.user.username ||
+    content.userFallback;
+
+  function handleLogout() {
+    clearTokens();
+    navigate("/login", { replace: true });
+  }
+
   return (
-    <Stack gap="lg">
-      <Title order={3}>رصيدي من الإجازات</Title>
+    <div
+      className="dashboard-page leave-balance-page"
+      data-theme={theme}
+      dir={isArabic ? "rtl" : "ltr"}
+      lang={language}
+    >
+      <div className="dashboard-page__glow" aria-hidden="true" />
+      <header className="dashboard-topbar">
+        <div className="dashboard-brand">
+          <img src="/managora-logo.svg" alt="Managora logo" />
+          <div>
+            <span className="dashboard-brand__title">{content.brand}</span>
+            <span className="dashboard-brand__subtitle">{content.subtitle}</span>
+          </div>
+        </div>
+        <div className="dashboard-search">
+          <span aria-hidden="true">⌕</span>
+          <input
+            type="text"
+            placeholder={content.searchPlaceholder}
+            aria-label={content.searchPlaceholder}
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+        </div>
+      </header>
 
-      <SimpleGrid cols={{ base: 1, sm: 3 }}>
-        <Card withBorder radius="md">
-          <Text size="sm" c="dimmed">
-            الرصيد المتبقي
-          </Text>
-          <Text fw={700} size="xl">
-            {formatDays(totals.remaining)}
-          </Text>
-        </Card>
-        <Card withBorder radius="md">
-          <Text size="sm" c="dimmed">
-            الرصيد المستخدم
-          </Text>
-          <Text fw={700} size="xl">
-            {formatDays(totals.used)}
-          </Text>
-        </Card>
-        <Card withBorder radius="md">
-          <Text size="sm" c="dimmed">
-            الرصيد المخصص
-          </Text>
-          <Text fw={700} size="xl">
-            {formatDays(totals.allocated)}
-          </Text>
-        </Card>
-      </SimpleGrid>
-
-      <Card withBorder radius="md">
-        <Group justify="space-between" mb="sm">
-          <Text fw={600}>تفاصيل الرصيد حسب النوع</Text>
-          {balancesQuery.isLoading && <Text c="dimmed">تحميل...</Text>}
-        </Group>
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>نوع الإجازة</Table.Th>
-              <Table.Th>السنة</Table.Th>
-              <Table.Th>المخصص</Table.Th>
-              <Table.Th>المستخدم</Table.Th>
-              <Table.Th>المتبقي</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {(balancesQuery.data ?? []).map((balance) => (
-              <Table.Tr key={balance.id}>
-                <Table.Td>{balance.leave_type.name}</Table.Td>
-                <Table.Td>{balance.year}</Table.Td>
-                <Table.Td>{formatDays(balance.allocated_days)}</Table.Td>
-                <Table.Td>{formatDays(balance.used_days)}</Table.Td>
-                <Table.Td>{formatDays(balance.remaining_days)}</Table.Td>
-              </Table.Tr>
-            ))}
-            {!balancesQuery.isLoading && (balancesQuery.data ?? []).length === 0 && (
-              <Table.Tr>
-                <Table.Td colSpan={5}>
-                  <Text c="dimmed" ta="center">
-                    لا يوجد رصيد مسجل بعد.
-                  </Text>
-                </Table.Td>
-              </Table.Tr>
+      <div className="dashboard-shell">
+        <aside className="dashboard-sidebar">
+          <div className="sidebar-card">
+            <p>{content.pageTitle}</p>
+            <strong>{userName}</strong>
+            {meQuery.isLoading && (
+              <span className="sidebar-note">...loading profile</span>
             )}
-          </Table.Tbody>
-        </Table>
-      </Card>
-    </Stack>
+            {meQuery.isError && (
+              <span className="sidebar-note sidebar-note--error">
+                {isArabic
+                  ? "تعذر تحميل بيانات الحساب."
+                  : "Unable to load account data."}
+              </span>
+            )}
+          </div>
+          <nav className="sidebar-nav" aria-label={content.navigationLabel}>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() =>
+                setLanguage((prev) => (prev === "en" ? "ar" : "en"))
+              }
+            >
+              <span className="nav-icon" aria-hidden="true">
+                🌐
+              </span>
+              {content.languageLabel} • {isArabic ? "EN" : "AR"}
+            </button>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() =>
+                setTheme((prev) => (prev === "light" ? "dark" : "light"))
+              }
+            >
+              <span className="nav-icon" aria-hidden="true">
+                {theme === "light" ? "🌙" : "☀️"}
+              </span>
+              {content.themeLabel} • {theme === "light" ? "Dark" : "Light"}
+            </button>
+            <div className="sidebar-links">
+              <span className="sidebar-links__title">
+                {content.navigationLabel}
+              </span>
+              {visibleNavLinks.map((link) => (
+                <button
+                  key={link.path}
+                  type="button"
+                  className={`nav-item${
+                    location.pathname === link.path ? " nav-item--active" : ""
+                  }`}
+                  onClick={() => navigate(link.path)}
+                >
+                  <span className="nav-icon" aria-hidden="true">
+                    {link.icon}
+                  </span>
+                  {link.label}
+                </button>
+              ))}
+            </div>
+          </nav>
+          <div className="sidebar-footer">
+            <button type="button" className="pill-button" onClick={handleLogout}>
+              {content.logoutLabel}
+            </button>
+          </div>
+        </aside>
+
+        <main className="dashboard-main">
+          <section className="hero-panel leave-balance-hero">
+            <div className="hero-panel__intro">
+              <h1>{content.pageTitle}</h1>
+              <p>{content.pageSubtitle}</p>
+              <div className="hero-tags">
+                <span className="pill">{content.summaryTitle}</span>
+                <span className="pill pill--accent">
+                  {balancesQuery.isLoading ? content.loadingLabel : formatDays(totals.remaining)}
+                </span>
+              </div>
+            </div>
+            <div className="hero-panel__stats">
+              {[
+                {
+                  label: content.totals.remaining,
+                  value: formatDays(totals.remaining),
+                },
+                {
+                  label: content.totals.used,
+                  value: formatDays(totals.used),
+                },
+                {
+                  label: content.totals.allocated,
+                  value: formatDays(totals.allocated),
+                },
+              ].map((stat) => (
+                <div key={stat.label} className="stat-card">
+                  <div className="stat-card__top">
+                    <span>{stat.label}</span>
+                    <span className="stat-card__change">{content.summaryTitle}</span>
+                  </div>
+                  <strong>{stat.value}</strong>
+                  <div className="stat-card__spark" aria-hidden="true" />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="grid-panels">
+            <div className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.summaryTitle}</h2>
+                  <p>{content.summarySubtitle}</p>
+                </div>
+                <span className="pill">{balancesQuery.data?.length ?? 0}</span>
+              </div>
+              <div className="leave-balance-summary">
+                <div className="leave-balance-card">
+                  <span>{content.totals.remaining}</span>
+                  <strong>{formatDays(totals.remaining)}</strong>
+                </div>
+                <div className="leave-balance-card">
+                  <span>{content.totals.used}</span>
+                  <strong>{formatDays(totals.used)}</strong>
+                </div>
+                <div className="leave-balance-card">
+                  <span>{content.totals.allocated}</span>
+                  <strong>{formatDays(totals.allocated)}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.tableTitle}</h2>
+                  <p>{content.tableSubtitle}</p>
+                </div>
+                <span className="pill">
+                  {balancesQuery.isLoading ? content.loadingLabel : content.tableHeaders.year}
+                </span>
+              </div>
+              <div className="leave-table-wrapper">
+                <table className="leave-table">
+                  <thead>
+                    <tr>
+                      <th>{content.tableHeaders.type}</th>
+                      <th>{content.tableHeaders.year}</th>
+                      <th>{content.tableHeaders.allocated}</th>
+                      <th>{content.tableHeaders.used}</th>
+                      <th>{content.tableHeaders.remaining}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(balancesQuery.data ?? []).map((balance) => (
+                      <tr key={balance.id}>
+                        <td>{balance.leave_type.name}</td>
+                        <td>{balance.year}</td>
+                        <td>{formatDays(balance.allocated_days)}</td>
+                        <td>{formatDays(balance.used_days)}</td>
+                        <td>{formatDays(balance.remaining_days)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {!balancesQuery.isLoading && (balancesQuery.data ?? []).length === 0 && (
+                <div className="leave-empty">{content.emptyState}</div>
+              )}
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
   );
 }

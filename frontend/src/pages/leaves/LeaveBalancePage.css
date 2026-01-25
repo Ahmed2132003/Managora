@@ -1,0 +1,77 @@
+.leave-balance-page .hero-panel__intro h1 {
+  margin-bottom: 6px;
+}
+
+.leave-balance-hero .hero-tags {
+  flex-wrap: wrap;
+}
+
+.leave-balance-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.leave-balance-card {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.leave-balance-card span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.leave-balance-card strong {
+  font-size: 1.4rem;
+}
+
+.leave-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.leave-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.leave-table th,
+.leave-table td {
+  text-align: start;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.leave-table thead th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.leave-table tbody tr:hover {
+  background: var(--bg-alt);
+}
+
+.leave-empty {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .leave-table {
+    min-width: 540px;
+  }
+}
