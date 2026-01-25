@@ -1,0 +1,45 @@
+@import "../DashboardPage.css";
+
+.invoice-form-page .hero-panel {
+  align-items: flex-start;
+}
+
+.invoice-form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.invoice-form-page table input,
+.invoice-form-page table select,
+.invoice-form-page table textarea {
+  width: 100%;
+}
+
+.invoice-form-page table input,
+.invoice-form-page table select {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.invoice-form-page table input[type="number"] {
+  text-align: end;
+}
+
+.table-action--danger {
+  background: rgba(255, 85, 85, 0.15);
+  color: #ff5555;
+}
+
+.invoice-form-actions {
+  margin-top: 12px;
+}
+
+@media (max-width: 720px) {
+  .invoice-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,16 +1,8 @@
 import { useMemo, useState } from "react";
-import {
-  Badge,
-  Card,
-  Group,
-  Modal,
-  Stack,
-  Table,
-  Text,
-  Title,
-} from "@mantine/core";
 import { useAlerts, useAgingReport } from "../../shared/accounting/hooks";
 import { useInvoices } from "../../shared/invoices/hooks";
+import { DashboardShell } from "../DashboardShell";
+import "./AgingReportPage.css";
 
 const bucketColors: Record<string, string> = {
   "0_30": "green",
@@ -50,144 +42,307 @@ export function AgingReportPage() {
     );
   }, [invoicesQuery.data, selectedCustomerId]);
 
+  const headerCopy = {
+    en: {
+      title: "AR Aging",
+      subtitle: "Track outstanding receivables by time bucket.",
+      helper: "Select a customer to review open invoices.",
+      tags: ["Receivables", "Collections"],
+    },
+    ar: {
+      title: "أعمار الديون",
+      subtitle: "تابع الذمم المدينة حسب فترة الاستحقاق.",
+      helper: "اختر عميلًا لاستعراض الفواتير المفتوحة.",
+      tags: ["الذمم المدينة", "التحصيل"],
+    },
+  };
+
+  const pageContent = {
+    en: {
+      loading: "Loading aging report...",
+      empty: "No receivables found.",
+      alertsTitle: "Alerts Center",
+      alertsLoading: "Loading alerts...",
+      alertsEmpty: "No alerts yet.",
+      table: {
+        customer: "Customer",
+        totalDue: "Total Due",
+        bucket0: "0–30",
+        bucket31: "31–60",
+        bucket61: "61–90",
+        bucket90: "90+",
+      },
+      alertsTable: {
+        severity: "Severity",
+        type: "Type",
+        message: "Message",
+        created: "Created",
+      },
+      modalTitle: "Open invoices",
+      modalEmpty: "No open invoices for this customer.",
+      modalTable: {
+        invoice: "Invoice",
+        dueDate: "Due date",
+        daysOverdue: "Days overdue",
+        remaining: "Remaining",
+      },
+    },
+    ar: {
+      loading: "جاري تحميل تقرير الأعمار...",
+      empty: "لا توجد ذمم مدينة.",
+      alertsTitle: "مركز التنبيهات",
+      alertsLoading: "جاري تحميل التنبيهات...",
+      alertsEmpty: "لا توجد تنبيهات بعد.",
+      table: {
+        customer: "العميل",
+        totalDue: "الإجمالي المستحق",
+        bucket0: "٠–٣٠",
+        bucket31: "٣١–٦٠",
+        bucket61: "٦١–٩٠",
+        bucket90: "٩٠+",
+      },
+      alertsTable: {
+        severity: "الحدة",
+        type: "النوع",
+        message: "الرسالة",
+        created: "تاريخ الإنشاء",
+      },
+      modalTitle: "فواتير مفتوحة",
+      modalEmpty: "لا توجد فواتير مفتوحة لهذا العميل.",
+      modalTable: {
+        invoice: "الفاتورة",
+        dueDate: "تاريخ الاستحقاق",
+        daysOverdue: "أيام التأخير",
+        remaining: "المتبقي",
+      },
+    },
+  } as const;
+
+  const totalSummary = useMemo(() => {
+    const rows = agingQuery.data ?? [];
+    const totalDue = rows.reduce((sum, row) => sum + Number(row.total_due), 0);
+    const customers = rows.length;
+    return { totalDue, customers };
+  }, [agingQuery.data]);
+
   return (
-    <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={3}>Aging Dashboard</Title>
-      </Group>
+    <DashboardShell copy={headerCopy} className="aging-report-page">
+      {({ language }) => {
+        const labels = pageContent[language];
+        return (
+          <>
+            <section className="panel aging-summary">
+              <div className="panel__header">
+                <div>
+                  <h2>{language === "ar" ? "ملخص الأعمار" : "Aging Summary"}</h2>
+                  <p className="helper-text">
+                    {language === "ar"
+                      ? "نظرة سريعة على إجمالي الديون الحالية."
+                      : "Quick snapshot of current receivables."}
+                  </p>
+                </div>
+                <span className="pill pill--accent">{totalSummary.customers}</span>
+              </div>
+              <div className="aging-summary__grid">
+                <div>
+                  <span>{labels.table.totalDue}</span>
+                  <strong>{totalSummary.totalDue.toFixed(2)}</strong>
+                </div>
+                <div>
+                  <span>{labels.table.customer}</span>
+                  <strong>{totalSummary.customers}</strong>
+                </div>
+              </div>
+            </section>
 
-      <Card withBorder radius="md" p="md">
-        {agingQuery.isLoading ? (
-          <Text c="dimmed">Loading aging report...</Text>
-        ) : (
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Customer</Table.Th>
-                <Table.Th>Total Due</Table.Th>
-                <Table.Th>0–30</Table.Th>
-                <Table.Th>31–60</Table.Th>
-                <Table.Th>61–90</Table.Th>
-                <Table.Th>90+</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {(agingQuery.data ?? []).length === 0 ? (
-                <Table.Tr>
-                  <Table.Td colSpan={6}>
-                    <Text c="dimmed">No receivables found.</Text>
-                  </Table.Td>
-                </Table.Tr>
-              ) : (                
-                (agingQuery.data ?? []).map((row) => (
-                  <Table.Tr key={row.customer.id}>
-                    <Table.Td>
-                      <Text
-                        component="button"
-                        onClick={() => setSelectedCustomerId(row.customer.id)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "inherit",
-                          cursor: "pointer",
-                        }}
-                      >
-                        {row.customer.name}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>{row.total_due}</Table.Td>
-                    {(["0_30", "31_60", "61_90", "90_plus"] as const).map((key) => (
-                      <Table.Td key={key}>
-                        <Badge color={bucketColors[key]} variant="light">
-                          {row.buckets[key]}
-                        </Badge>
-                      </Table.Td>
-                    ))}
-                  </Table.Tr>
-                ))
-              )}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Card>
-
-      <Card withBorder radius="md" p="md">
-        <Title order={4} mb="sm">
-          Alerts Center
-        </Title>
-        {alertsQuery.isLoading ? (
-          <Text c="dimmed">Loading alerts...</Text>
-        ) : (
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Severity</Table.Th>
-                <Table.Th>Type</Table.Th>
-                <Table.Th>Message</Table.Th>
-                <Table.Th>Created</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {(alertsQuery.data ?? []).length === 0 ? (
-                <Table.Tr>
-                  <Table.Td colSpan={4}>
-                    <Text c="dimmed">No alerts yet.</Text>
-                  </Table.Td>
-                </Table.Tr>
+            <section className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{language === "ar" ? "تفاصيل الأعمار" : "Aging Details"}</h2>
+                  <p className="helper-text">
+                    {language === "ar"
+                      ? "اضغط على اسم العميل لعرض الفواتير المفتوحة."
+                      : "Select a customer to inspect open invoices."}
+                  </p>
+                </div>
+              </div>
+              {agingQuery.isLoading ? (
+                <p className="helper-text">{labels.loading}</p>
               ) : (
-                (alertsQuery.data ?? []).map((alert) => (
-                  <Table.Tr key={alert.id}>
-                    <Table.Td>
-                      <Badge color={alert.severity === "high" ? "red" : "yellow"}>
-                        {alert.severity}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>{alert.type.replace("_", " ")}</Table.Td>
-                    <Table.Td>{alert.message}</Table.Td>
-                    <Table.Td>{new Date(alert.created_at).toLocaleDateString()}</Table.Td>
-                  </Table.Tr>
-                ))
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>{labels.table.customer}</th>
+                        <th>{labels.table.totalDue}</th>
+                        <th>{labels.table.bucket0}</th>
+                        <th>{labels.table.bucket31}</th>
+                        <th>{labels.table.bucket61}</th>
+                        <th>{labels.table.bucket90}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(agingQuery.data ?? []).length === 0 ? (
+                        <tr>
+                          <td colSpan={6}>
+                            <span className="helper-text">{labels.empty}</span>
+                          </td>
+                        </tr>
+                      ) : (
+                        (agingQuery.data ?? []).map((row) => (
+                          <tr key={row.customer.id}>
+                            <td>
+                              <button
+                                type="button"
+                                className="link-button"
+                                onClick={() => setSelectedCustomerId(row.customer.id)}
+                              >
+                                {row.customer.name}
+                              </button>
+                            </td>
+                            <td>{row.total_due}</td>
+                            {(["0_30", "31_60", "61_90", "90_plus"] as const).map(
+                              (key) => (
+                                <td key={key}>
+                                  <span
+                                    className={`status-pill status-pill--${bucketColors[key]}`}
+                                  >
+                                    {row.buckets[key]}
+                                  </span>
+                                </td>
+                              )
+                            )}
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               )}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Card>
+            </section>
 
-      <Modal
-        opened={Boolean(selectedCustomerId)}
-        onClose={() => setSelectedCustomerId(null)}
-        title={`Open invoices ${selectedCustomerName ? `- ${selectedCustomerName}` : ""}`}
-        size="lg"
-      >
-        <Table striped highlightOnHover>            
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Invoice</Table.Th>
-              <Table.Th>Due date</Table.Th>
-              <Table.Th>Days overdue</Table.Th>
-              <Table.Th>Remaining</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {openInvoices.length === 0 ? (
-              <Table.Tr>
-                <Table.Td colSpan={4}>
-                  <Text c="dimmed">No open invoices for this customer.</Text>
-                </Table.Td>
-              </Table.Tr>
-            ) : (
-              openInvoices.map((invoice) => (
-                <Table.Tr key={invoice.id}>
-                  <Table.Td>{invoice.invoice_number}</Table.Td>
-                  <Table.Td>{invoice.due_date}</Table.Td>
-                  <Table.Td>{daysOverdue(invoice.due_date)}</Table.Td>
-                  <Table.Td>{invoice.remaining_balance}</Table.Td>
-                </Table.Tr>
-              ))
+            <section className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{labels.alertsTitle}</h2>
+                  <p className="helper-text">
+                    {language === "ar"
+                      ? "تنبيهات مرتبطة بالمخاطر والتحصيل."
+                      : "Alerts tied to risk and collections."}
+                  </p>
+                </div>
+              </div>
+              {alertsQuery.isLoading ? (
+                <p className="helper-text">{labels.alertsLoading}</p>
+              ) : (
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>{labels.alertsTable.severity}</th>
+                        <th>{labels.alertsTable.type}</th>
+                        <th>{labels.alertsTable.message}</th>
+                        <th>{labels.alertsTable.created}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(alertsQuery.data ?? []).length === 0 ? (
+                        <tr>
+                          <td colSpan={4}>
+                            <span className="helper-text">{labels.alertsEmpty}</span>
+                          </td>
+                        </tr>
+                      ) : (
+                        (alertsQuery.data ?? []).map((alert) => (
+                          <tr key={alert.id}>
+                            <td>
+                              <span
+                                className={`status-pill status-pill--${
+                                  alert.severity === "high" ? "red" : "yellow"
+                                }`}
+                              >
+                                {alert.severity}
+                              </span>
+                            </td>
+                            <td>{alert.type.replace("_", " ")}</td>
+                            <td>{alert.message}</td>
+                            <td>{new Date(alert.created_at).toLocaleDateString()}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {selectedCustomerId && (
+              <div className="dashboard-modal" role="dialog" aria-modal="true">
+                <div
+                  className="dashboard-modal__backdrop"
+                  onClick={() => setSelectedCustomerId(null)}
+                  aria-hidden="true"
+                />
+                <div className="dashboard-modal__content">
+                  <div className="dashboard-modal__header">
+                    <div>
+                      <h2>
+                        {labels.modalTitle}
+                        {selectedCustomerName ? ` - ${selectedCustomerName}` : ""}
+                      </h2>
+                      <p className="helper-text">
+                        {language === "ar"
+                          ? "قائمة الفواتير التي ما زالت مفتوحة."
+                          : "List of invoices still outstanding."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      onClick={() => setSelectedCustomerId(null)}
+                      aria-label={language === "ar" ? "إغلاق" : "Close"}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="dashboard-modal__body">
+                    <div className="table-wrapper">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>{labels.modalTable.invoice}</th>
+                            <th>{labels.modalTable.dueDate}</th>
+                            <th>{labels.modalTable.daysOverdue}</th>
+                            <th>{labels.modalTable.remaining}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {openInvoices.length === 0 ? (
+                            <tr>
+                              <td colSpan={4}>
+                                <span className="helper-text">{labels.modalEmpty}</span>
+                              </td>
+                            </tr>
+                          ) : (
+                            openInvoices.map((invoice) => (
+                              <tr key={invoice.id}>
+                                <td>{invoice.invoice_number}</td>
+                                <td>{invoice.due_date}</td>
+                                <td>{daysOverdue(invoice.due_date)}</td>
+                                <td>{invoice.remaining_balance}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
-          </Table.Tbody>
-        </Table>
-      </Modal>      
-    </Stack>
+          </>
+        );
+      }}
+    </DashboardShell>
   );
 }

@@ -1,0 +1,539 @@
+import { ReactNode, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { clearTokens } from "../shared/auth/tokens";
+import { useMe } from "../shared/auth/useMe";
+import { hasPermission } from "../shared/auth/useCan";
+
+type Language = "en" | "ar";
+type ThemeMode = "light" | "dark";
+
+type Content = {
+  brand: string;
+  welcome: string;
+  subtitle: string;
+  searchPlaceholder: string;
+  languageLabel: string;
+  themeLabel: string;
+  navigationLabel: string;
+  logoutLabel: string;
+  footer: string;
+  userFallback: string;
+  nav: {
+    dashboard: string;
+    users: string;
+    attendanceSelf: string;
+    leaveBalance: string;
+    leaveRequest: string;
+    leaveMyRequests: string;
+    employees: string;
+    departments: string;
+    jobTitles: string;
+    hrAttendance: string;
+    leaveInbox: string;
+    policies: string;
+    hrActions: string;
+    payroll: string;
+    accountingSetup: string;
+    journalEntries: string;
+    expenses: string;
+    collections: string;
+    trialBalance: string;
+    generalLedger: string;
+    profitLoss: string;
+    balanceSheet: string;
+    agingReport: string;
+    customers: string;
+    newCustomer: string;
+    invoices: string;
+    newInvoice: string;
+    alertsCenter: string;
+    cashForecast: string;
+    ceoDashboard: string;
+    financeDashboard: string;
+    hrDashboard: string;
+    copilot: string;
+    auditLogs: string;
+    setupTemplates: string;
+    setupProgress: string;
+  };
+};
+
+const contentMap: Record<Language, Content> = {
+  en: {
+    brand: "managora",
+    welcome: "Welcome back",
+    subtitle: "A smart dashboard that blends motion, clarity, and insight.",
+    searchPlaceholder: "Search dashboards, teams, workflows...",
+    languageLabel: "Language",
+    themeLabel: "Theme",
+    navigationLabel: "Navigation",
+    logoutLabel: "Logout",
+    footer: "This system is produced by Creativity Code.",
+    userFallback: "Explorer",
+    nav: {
+      dashboard: "Dashboard",
+      users: "Users",
+      attendanceSelf: "My Attendance",
+      leaveBalance: "Leave Balance",
+      leaveRequest: "Leave Request",
+      leaveMyRequests: "My Leave Requests",
+      employees: "Employees",
+      departments: "Departments",
+      jobTitles: "Job Titles",
+      hrAttendance: "HR Attendance",
+      leaveInbox: "Leave Inbox",
+      policies: "Policies",
+      hrActions: "HR Actions",
+      payroll: "Payroll",
+      accountingSetup: "Accounting Setup",
+      journalEntries: "Journal Entries",
+      expenses: "Expenses",
+      collections: "Collections",
+      trialBalance: "Trial Balance",
+      generalLedger: "General Ledger",
+      profitLoss: "Profit & Loss",
+      balanceSheet: "Balance Sheet",
+      agingReport: "AR Aging",
+      customers: "Customers",
+      newCustomer: "New Customer",
+      invoices: "Invoices",
+      newInvoice: "New Invoice",
+      alertsCenter: "Alerts Center",
+      cashForecast: "Cash Forecast",
+      ceoDashboard: "CEO Dashboard",
+      financeDashboard: "Finance Dashboard",
+      hrDashboard: "HR Dashboard",
+      copilot: "Copilot",
+      auditLogs: "Audit Logs",
+      setupTemplates: "Setup Templates",
+      setupProgress: "Setup Progress",
+    },
+  },
+  ar: {
+    brand: "ماناجورا",
+    welcome: "أهلًا بعودتك",
+    subtitle: "لوحة ذكية تجمع الحركة والوضوح والرؤية التحليلية.",
+    searchPlaceholder: "ابحث عن اللوحات أو الفرق أو التدفقات...",
+    languageLabel: "اللغة",
+    themeLabel: "المظهر",
+    navigationLabel: "التنقل",
+    logoutLabel: "تسجيل الخروج",
+    footer: "هذا السيستم من انتاج كريتفيتي كود",
+    userFallback: "ضيف",
+    nav: {
+      dashboard: "لوحة التحكم",
+      users: "المستخدمون",
+      attendanceSelf: "حضوري",
+      leaveBalance: "رصيد الإجازات",
+      leaveRequest: "طلب إجازة",
+      leaveMyRequests: "طلباتي",
+      employees: "الموظفون",
+      departments: "الأقسام",
+      jobTitles: "المسميات الوظيفية",
+      hrAttendance: "حضور الموارد البشرية",
+      leaveInbox: "وارد الإجازات",
+      policies: "السياسات",
+      hrActions: "إجراءات الموارد البشرية",
+      payroll: "الرواتب",
+      accountingSetup: "إعداد المحاسبة",
+      journalEntries: "قيود اليومية",
+      expenses: "المصروفات",
+      collections: "التحصيلات",
+      trialBalance: "ميزان المراجعة",
+      generalLedger: "دفتر الأستاذ",
+      profitLoss: "الأرباح والخسائر",
+      balanceSheet: "الميزانية العمومية",
+      agingReport: "أعمار الديون",
+      customers: "العملاء",
+      newCustomer: "عميل جديد",
+      invoices: "الفواتير",
+      newInvoice: "فاتورة جديدة",
+      alertsCenter: "مركز التنبيهات",
+      cashForecast: "توقعات النقد",
+      ceoDashboard: "لوحة CEO",
+      financeDashboard: "لوحة المالية",
+      hrDashboard: "لوحة الموارد البشرية",
+      copilot: "المساعد",
+      auditLogs: "سجل التدقيق",
+      setupTemplates: "قوالب الإعداد",
+      setupProgress: "تقدم الإعداد",
+    },
+  },
+};
+
+type DashboardShellCopy = {
+  title: string;
+  subtitle: string;
+  helper?: string;
+  tags?: string[];
+};
+
+type DashboardShellProps = {
+  copy: Record<Language, DashboardShellCopy>;
+  actions?: (context: { language: Language; theme: ThemeMode; isArabic: boolean }) => ReactNode;
+  children: (context: { language: Language; theme: ThemeMode; isArabic: boolean }) => ReactNode;
+  className?: string;
+};
+
+export function DashboardShell({ copy, actions, children, className }: DashboardShellProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { data, isLoading, isError } = useMe();
+  const [language, setLanguage] = useState<Language>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-language")
+        : null;
+    return stored === "en" || stored === "ar" ? stored : "ar";
+  });
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const stored =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("managora-theme")
+        : null;
+    return stored === "light" || stored === "dark" ? stored : "light";
+  });
+  const [searchTerm, setSearchTerm] = useState("");
+  const content = useMemo(() => contentMap[language], [language]);
+  const pageCopy = copy[language];
+  const isArabic = language === "ar";
+  const userPermissions = data?.permissions ?? [];
+  const userName =
+    data?.user.first_name || data?.user.username || content.userFallback;
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-language", language);
+  }, [language]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-theme", theme);
+  }, [theme]);
+
+  const navLinks = useMemo(
+    () => [
+      { path: "/dashboard", label: content.nav.dashboard, icon: "🏠" },
+      { path: "/users", label: content.nav.users, icon: "👥", permissions: ["users.view"] },
+      {
+        path: "/attendance/self",
+        label: content.nav.attendanceSelf,
+        icon: "🕒",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/leaves/balance",
+        label: content.nav.leaveBalance,
+        icon: "📅",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/leaves/request",
+        label: content.nav.leaveRequest,
+        icon: "📝",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/leaves/my",
+        label: content.nav.leaveMyRequests,
+        icon: "📌",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/hr/employees",
+        label: content.nav.employees,
+        icon: "🧑‍💼",
+        permissions: ["employees.*", "hr.employees.view"],
+      },
+      {
+        path: "/hr/departments",
+        label: content.nav.departments,
+        icon: "🏢",
+        permissions: ["hr.departments.view"],
+      },
+      {
+        path: "/hr/job-titles",
+        label: content.nav.jobTitles,
+        icon: "🧩",
+        permissions: ["hr.job_titles.view"],
+      },
+      {
+        path: "/hr/attendance",
+        label: content.nav.hrAttendance,
+        icon: "📍",
+        permissions: ["attendance.*", "attendance.view_team"],
+      },
+      {
+        path: "/hr/leaves/inbox",
+        label: content.nav.leaveInbox,
+        icon: "📥",
+        permissions: ["leaves.*"],
+      },
+      {
+        path: "/hr/policies",
+        label: content.nav.policies,
+        icon: "📚",
+        permissions: ["employees.*"],
+      },
+      {
+        path: "/hr/actions",
+        label: content.nav.hrActions,
+        icon: "✅",
+        permissions: ["approvals.*"],
+      },
+      {
+        path: "/payroll",
+        label: content.nav.payroll,
+        icon: "💸",
+        permissions: ["hr.payroll.view", "hr.payroll.*"],
+      },
+      {
+        path: "/accounting/setup",
+        label: content.nav.accountingSetup,
+        icon: "⚙️",
+        permissions: ["accounting.manage_coa", "accounting.*"],
+      },
+      {
+        path: "/accounting/journal-entries",
+        label: content.nav.journalEntries,
+        icon: "📒",
+        permissions: ["accounting.journal.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/expenses",
+        label: content.nav.expenses,
+        icon: "🧾",
+        permissions: ["expenses.view", "expenses.*"],
+      },
+      {
+        path: "/collections",
+        label: content.nav.collections,
+        icon: "💼",
+        permissions: ["accounting.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/trial-balance",
+        label: content.nav.trialBalance,
+        icon: "📈",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/general-ledger",
+        label: content.nav.generalLedger,
+        icon: "📊",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/pnl",
+        label: content.nav.profitLoss,
+        icon: "📉",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/balance-sheet",
+        label: content.nav.balanceSheet,
+        icon: "🧮",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/accounting/reports/ar-aging",
+        label: content.nav.agingReport,
+        icon: "⏳",
+        permissions: ["accounting.reports.view", "accounting.*"],
+      },
+      {
+        path: "/customers",
+        label: content.nav.customers,
+        icon: "🤝",
+        permissions: ["customers.view", "customers.*"],
+      },
+      {
+        path: "/customers/new",
+        label: content.nav.newCustomer,
+        icon: "➕",
+        permissions: ["customers.create", "customers.*"],
+      },
+      {
+        path: "/invoices",
+        label: content.nav.invoices,
+        icon: "📄",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/invoices/new",
+        label: content.nav.newInvoice,
+        icon: "🧾",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/analytics/alerts",
+        label: content.nav.alertsCenter,
+        icon: "🚨",
+        permissions: ["analytics.alerts.view", "analytics.alerts.manage"],
+      },
+      { path: "/analytics/cash-forecast", label: content.nav.cashForecast, icon: "💡" },
+      { path: "/analytics/ceo", label: content.nav.ceoDashboard, icon: "📌" },
+      { path: "/analytics/finance", label: content.nav.financeDashboard, icon: "💹" },
+      { path: "/analytics/hr", label: content.nav.hrDashboard, icon: "🧑‍💻" },
+      { path: "/copilot", label: content.nav.copilot, icon: "🤖" },
+      {
+        path: "/admin/audit-logs",
+        label: content.nav.auditLogs,
+        icon: "🛡️",
+        permissions: ["audit.view"],
+      },
+      { path: "/setup/templates", label: content.nav.setupTemplates, icon: "🧱" },
+      { path: "/setup/progress", label: content.nav.setupProgress, icon: "🚀" },
+    ],
+    [content.nav]
+  );
+
+  const visibleNavLinks = useMemo(() => {
+    return navLinks.filter((link) => {
+      if (!link.permissions || link.permissions.length === 0) {
+        return true;
+      }
+      return link.permissions.some((permission) =>
+        hasPermission(userPermissions, permission)
+      );
+    });
+  }, [navLinks, userPermissions]);
+
+  function handleLogout() {
+    clearTokens();
+    navigate("/login", { replace: true });
+  }
+
+  return (
+    <div
+      className={`dashboard-page${className ? ` ${className}` : ""}`}
+      data-theme={theme}
+      dir={isArabic ? "rtl" : "ltr"}
+      lang={language}
+    >
+      <div className="dashboard-page__glow" aria-hidden="true" />
+      <header className="dashboard-topbar">
+        <div className="dashboard-brand">
+          <img src="/managora-logo.svg" alt="Managora logo" />
+          <div>
+            <span className="dashboard-brand__title">{content.brand}</span>
+            <span className="dashboard-brand__subtitle">{content.subtitle}</span>
+          </div>
+        </div>
+        <div className="dashboard-search">
+          <span aria-hidden="true">⌕</span>
+          <input
+            type="text"
+            placeholder={content.searchPlaceholder}
+            aria-label={content.searchPlaceholder}
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+        </div>
+      </header>
+
+      <div className="dashboard-shell">
+        <aside className="dashboard-sidebar">
+          <div className="sidebar-card">
+            <p>{content.welcome}</p>
+            <strong>{userName}</strong>
+            {isLoading && (
+              <span className="sidebar-note">...loading profile</span>
+            )}
+            {isError && (
+              <span className="sidebar-note sidebar-note--error">
+                {isArabic
+                  ? "تعذر تحميل بيانات الحساب."
+                  : "Unable to load account data."}
+              </span>
+            )}
+          </div>
+          <nav className="sidebar-nav" aria-label={content.navigationLabel}>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() =>
+                setLanguage((prev) => (prev === "en" ? "ar" : "en"))
+              }
+            >
+              <span className="nav-icon" aria-hidden="true">
+                🌐
+              </span>
+              {content.languageLabel} • {isArabic ? "EN" : "AR"}
+            </button>
+            <button
+              type="button"
+              className="nav-item"
+              onClick={() =>
+                setTheme((prev) => (prev === "light" ? "dark" : "light"))
+              }
+            >
+              <span className="nav-icon" aria-hidden="true">
+                {theme === "light" ? "🌙" : "☀️"}
+              </span>
+              {content.themeLabel} • {theme === "light" ? "Dark" : "Light"}
+            </button>
+            <div className="sidebar-links">
+              <span className="sidebar-links__title">
+                {content.navigationLabel}
+              </span>
+              {visibleNavLinks.map((link) => (
+                <button
+                  key={link.path}
+                  type="button"
+                  className={`nav-item${
+                    location.pathname === link.path ? " nav-item--active" : ""
+                  }`}
+                  onClick={() => navigate(link.path)}
+                >
+                  <span className="nav-icon" aria-hidden="true">
+                    {link.icon}
+                  </span>
+                  {link.label}
+                </button>
+              ))}
+            </div>
+          </nav>
+          <div className="sidebar-footer">
+            <button type="button" className="pill-button" onClick={handleLogout}>
+              {content.logoutLabel}
+            </button>
+          </div>
+        </aside>
+
+        <main className="dashboard-main">
+          <section className="hero-panel">
+            <div className="hero-panel__intro">
+              <h1>{pageCopy.title}</h1>
+              <p>{pageCopy.subtitle}</p>
+              {pageCopy.helper && (
+                <p className="helper-text">{pageCopy.helper}</p>
+              )}
+              {pageCopy.tags && pageCopy.tags.length > 0 && (
+                <div className="hero-tags">
+                  {pageCopy.tags.map((tag) => (
+                    <span key={tag} className="pill">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            {actions && (
+              <div className="panel-actions panel-actions--right">
+                {actions({ language, theme, isArabic })}
+              </div>
+            )}
+          </section>
+          {children({ language, theme, isArabic })}
+        </main>
+      </div>
+
+      <footer className="dashboard-footer">{content.footer}</footer>
+    </div>
+  );
+}

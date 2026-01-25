@@ -1,0 +1,62 @@
+@import "../DashboardPage.css";
+
+.invoices-page .hero-panel {
+  align-items: flex-start;
+}
+
+.invoices-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.invoices-summary__grid div {
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.invoices-summary__grid strong {
+  font-size: 1.4rem;
+}
+
+.invoice-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.status-pill--gray {
+  background: rgba(120, 120, 120, 0.2);
+  color: #6b7391;
+}
+
+.status-pill--blue {
+  background: rgba(47, 107, 255, 0.18);
+  color: #2f6bff;
+}
+
+.status-pill--yellow {
+  background: rgba(255, 195, 0, 0.2);
+  color: #b07a00;
+}
+
+.status-pill--green {
+  background: rgba(50, 180, 120, 0.2);
+  color: #2fa46a;
+}
+
+.status-pill--red {
+  background: rgba(255, 85, 85, 0.2);
+  color: #ff5555;
+}
+
+@media (max-width: 720px) {
+  .invoices-summary__grid {
+    grid-template-columns: 1fr;
+  }
+}

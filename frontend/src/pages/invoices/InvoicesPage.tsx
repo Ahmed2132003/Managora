@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { Badge, Button, Card, Group, Stack, Table, Text, Title } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
 import { isForbiddenError } from "../../shared/api/errors";
 import { useCan } from "../../shared/auth/useCan";
 import { useCustomers } from "../../shared/customers/hooks";
 import { useInvoices } from "../../shared/invoices/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
+import { DashboardShell } from "../DashboardShell";
+import "./InvoicesPage.css";
 
 const statusColors: Record<string, string> = {
   draft: "gray",
@@ -37,74 +38,205 @@ export function InvoicesPage() {
     return <AccessDenied />;
   }
 
-  return (
-    <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={3}>Invoices</Title>
-        {canManage && (
-          <Button onClick={() => navigate("/invoices/new")}>New Invoice</Button>
-        )}
-      </Group>
+  const headerCopy = {
+    en: {
+      title: "Invoices",
+      subtitle: "Track billing, collections, and invoice lifecycle.",
+      helper: "Monitor status changes and keep receivables visible.",
+      tags: ["Billing", "Collections"],
+    },
+    ar: {
+      title: "الفواتير",
+      subtitle: "تابع الفوترة والتحصيل ودورة حياة الفاتورة.",
+      helper: "راقب الحالات وابقَ على اطلاع بالذمم.",
+      tags: ["الفوترة", "التحصيل"],
+    },
+  };
 
-      <Card withBorder radius="md" p="md">
-        {invoicesQuery.isLoading ? (
-          <Text c="dimmed">Loading invoices...</Text>
-        ) : (
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Invoice #</Table.Th>
-                <Table.Th>Customer</Table.Th>
-                <Table.Th>Issue Date</Table.Th>
-                <Table.Th>Due Date</Table.Th>
-                <Table.Th>Status</Table.Th>
-                <Table.Th>Total</Table.Th>
-                <Table.Th>Actions</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {(invoicesQuery.data ?? []).length === 0 ? (
-                <Table.Tr>
-                  <Table.Td colSpan={7}>
-                    <Text c="dimmed">No invoices found.</Text>
-                  </Table.Td>
-                </Table.Tr>
+  const pageContent = {
+    en: {
+      newInvoice: "New Invoice",
+      loading: "Loading invoices...",
+      empty: "No invoices found.",
+      stats: {
+        total: "Total invoices",
+        overdue: "Overdue",
+        open: "Open balance",
+      },
+      table: {
+        invoice: "Invoice #",
+        customer: "Customer",
+        issueDate: "Issue Date",
+        dueDate: "Due Date",
+        status: "Status",
+        total: "Total",
+        actions: "Actions",
+        view: "View",
+        overdueLabel: "Overdue",
+      },
+    },
+    ar: {
+      newInvoice: "فاتورة جديدة",
+      loading: "جاري تحميل الفواتير...",
+      empty: "لا توجد فواتير.",
+      stats: {
+        total: "إجمالي الفواتير",
+        overdue: "المتأخرة",
+        open: "الرصيد المفتوح",
+      },
+      table: {
+        invoice: "رقم الفاتورة",
+        customer: "العميل",
+        issueDate: "تاريخ الإصدار",
+        dueDate: "تاريخ الاستحقاق",
+        status: "الحالة",
+        total: "الإجمالي",
+        actions: "الإجراءات",
+        view: "عرض",
+        overdueLabel: "متأخرة",
+      },
+    },
+  } as const;
+
+  const summary = useMemo(() => {
+    const invoices = invoicesQuery.data ?? [];
+    const total = invoices.length;
+    const overdue = invoices.filter(isInvoiceOverdue).length;
+    const openBalance = invoices.reduce(
+      (sum, invoice) => sum + Number(invoice.remaining_balance || 0),
+      0
+    );
+    return { total, overdue, openBalance };
+  }, [invoicesQuery.data]);
+
+  return (
+    <DashboardShell
+      copy={headerCopy}
+      className="invoices-page"
+      actions={({ language }) => {
+        if (!canManage) {
+          return null;
+        }
+        return (
+          <button
+            type="button"
+            className="action-button"
+            onClick={() => navigate("/invoices/new")}
+          >
+            {pageContent[language].newInvoice}
+          </button>
+        );
+      }}
+    >
+      {({ language }) => {
+        const labels = pageContent[language];
+        return (
+          <>
+            <section className="panel invoices-summary">
+              <div className="panel__header">
+                <div>
+                  <h2>{language === "ar" ? "ملخص الفواتير" : "Invoices Summary"}</h2>
+                  <p className="helper-text">
+                    {language === "ar"
+                      ? "حالة الفوترة الحالية خلال الفترة الأخيرة."
+                      : "Current billing status at a glance."}
+                  </p>
+                </div>
+              </div>
+              <div className="invoices-summary__grid">
+                <div>
+                  <span>{labels.stats.total}</span>
+                  <strong>{summary.total}</strong>
+                </div>
+                <div>
+                  <span>{labels.stats.overdue}</span>
+                  <strong>{summary.overdue}</strong>
+                </div>
+                <div>
+                  <span>{labels.stats.open}</span>
+                  <strong>{summary.openBalance.toFixed(2)}</strong>
+                </div>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{language === "ar" ? "سجل الفواتير" : "Invoice Log"}</h2>
+                  <p className="helper-text">
+                    {language === "ar"
+                      ? "راجع حالة الفواتير والتواريخ المستحقة."
+                      : "Review status, due dates, and totals."}
+                  </p>
+                </div>
+              </div>
+              {invoicesQuery.isLoading ? (
+                <p className="helper-text">{labels.loading}</p>
               ) : (
-                (invoicesQuery.data ?? []).map((invoice) => (
-                  <Table.Tr key={invoice.id}>
-                    <Table.Td>{invoice.invoice_number}</Table.Td>
-                    <Table.Td>{customerMap.get(invoice.customer)?.name ?? "-"}</Table.Td>
-                    <Table.Td>{invoice.issue_date}</Table.Td>
-                    <Table.Td>{invoice.due_date}</Table.Td>
-                    <Table.Td>
-                      <Group gap="xs">
-                        <Badge color={statusColors[invoice.status] || "gray"}>
-                          {invoice.status.replace("_", " ")}
-                        </Badge>
-                        {isInvoiceOverdue(invoice) && (
-                          <Badge color="red" variant="light">
-                            overdue
-                          </Badge>
-                        )}
-                      </Group>
-                    </Table.Td>                    
-                    <Table.Td>{invoice.total_amount}</Table.Td>
-                    <Table.Td>
-                      <Button
-                        size="xs"
-                        variant="light"
-                        onClick={() => navigate(`/invoices/${invoice.id}`)}
-                      >
-                        View
-                      </Button>
-                    </Table.Td>
-                  </Table.Tr>
-                ))
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>{labels.table.invoice}</th>
+                        <th>{labels.table.customer}</th>
+                        <th>{labels.table.issueDate}</th>
+                        <th>{labels.table.dueDate}</th>
+                        <th>{labels.table.status}</th>
+                        <th>{labels.table.total}</th>
+                        <th>{labels.table.actions}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(invoicesQuery.data ?? []).length === 0 ? (
+                        <tr>
+                          <td colSpan={7}>
+                            <span className="helper-text">{labels.empty}</span>
+                          </td>
+                        </tr>
+                      ) : (
+                        (invoicesQuery.data ?? []).map((invoice) => (
+                          <tr key={invoice.id}>
+                            <td>{invoice.invoice_number}</td>
+                            <td>{customerMap.get(invoice.customer)?.name ?? "-"}</td>
+                            <td>{invoice.issue_date}</td>
+                            <td>{invoice.due_date}</td>
+                            <td>
+                              <div className="invoice-status">
+                                <span
+                                  className={`status-pill status-pill--${
+                                    statusColors[invoice.status] || "gray"
+                                  }`}
+                                >
+                                  {invoice.status.replace("_", " ")}
+                                </span>
+                                {isInvoiceOverdue(invoice) && (
+                                  <span className="status-pill status-pill--red">
+                                    {labels.table.overdueLabel}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td>{invoice.total_amount}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="table-action"
+                                onClick={() => navigate(`/invoices/${invoice.id}`)}
+                              >
+                                {labels.table.view}
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               )}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Card>
-    </Stack>
+            </section>
+          </>
+        );
+      }}
+    </DashboardShell>
   );
 }

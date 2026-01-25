@@ -1,0 +1,64 @@
+@import "../DashboardPage.css";
+
+.aging-report-page .hero-panel {
+  align-items: flex-start;
+}
+
+.aging-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.aging-summary__grid div {
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aging-summary__grid strong {
+  font-size: 1.4rem;
+}
+
+.link-button {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.link-button:hover {
+  color: var(--primary);
+}
+
+.status-pill--green {
+  background: rgba(50, 180, 120, 0.2);
+  color: #2fa46a;
+}
+
+.status-pill--yellow {
+  background: rgba(255, 195, 0, 0.2);
+  color: #b07a00;
+}
+
+.status-pill--orange {
+  background: rgba(255, 149, 40, 0.2);
+  color: #c96f14;
+}
+
+.status-pill--red {
+  background: rgba(255, 85, 85, 0.2);
+  color: #ff5555;
+}
+
+@media (max-width: 720px) {
+  .aging-summary__grid {
+    grid-template-columns: 1fr;
+  }
+}

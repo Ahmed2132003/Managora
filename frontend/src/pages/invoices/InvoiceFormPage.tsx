@@ -1,24 +1,12 @@
 import { useMemo, useState } from "react";
-import {
-  Button,
-  Card,
-  Divider,
-  Group,
-  NumberInput,
-  Select,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-  Textarea,
-  Title,
-} from "@mantine/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { isForbiddenError } from "../../shared/api/errors";
 import { useCustomers } from "../../shared/customers/hooks";
 import { useCreateInvoice, useIssueInvoice } from "../../shared/invoices/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
+import { DashboardShell } from "../DashboardShell";
+import "./InvoiceFormPage.css";
 
 const createEmptyLine = () => ({
   description: "",
@@ -134,150 +122,256 @@ export function InvoiceFormPage() {
   }
 
   return (
-    <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={3}>New Invoice</Title>
-        <Button variant="default" onClick={() => navigate("/invoices")}>Back to Invoices</Button>
-      </Group>
+    <DashboardShell
+      copy={{
+        en: {
+          title: "New Invoice",
+          subtitle: "Draft, review, and issue a customer invoice.",
+          helper: "Fill the required fields and preview totals instantly.",
+          tags: ["Billing", "Draft"],
+        },
+        ar: {
+          title: "فاتورة جديدة",
+          subtitle: "قم بإعداد ومراجعة وإصدار فاتورة للعميل.",
+          helper: "املأ الحقول المطلوبة وتحقق من الإجمالي مباشرة.",
+          tags: ["الفوترة", "مسودة"],
+        },
+      }}
+      className="invoice-form-page"
+      actions={({ language }) => (
+        <button
+          type="button"
+          className="action-button action-button--ghost"
+          onClick={() => navigate("/invoices")}
+        >
+          {language === "ar" ? "العودة للفواتير" : "Back to Invoices"}
+        </button>
+      )}
+    >
+      {({ language }) => (
+        <>
+          <section className="panel">
+            <div className="panel__header">
+              <div>
+                <h2>{language === "ar" ? "تفاصيل الفاتورة" : "Invoice Details"}</h2>
+                <p className="helper-text">
+                  {language === "ar"
+                    ? "أدخل بيانات الفاتورة الأساسية قبل إضافة البنود."
+                    : "Enter core details before adding line items."}
+                </p>
+              </div>
+            </div>
+            <div className="filters-grid invoice-form-grid">
+              <label className="field">
+                <span>{language === "ar" ? "رقم الفاتورة" : "Invoice Number"}</span>
+                <input
+                  type="text"
+                  placeholder="INV-0001"
+                  value={invoiceNumber}
+                  onChange={(event) => setInvoiceNumber(event.currentTarget.value)}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>{language === "ar" ? "العميل" : "Customer"}</span>
+                <select
+                  value={customerId ?? ""}
+                  onChange={(event) =>
+                    setCustomerId(event.target.value ? event.target.value : null)
+                  }
+                  required
+                >
+                  <option value="">
+                    {language === "ar" ? "اختر العميل" : "Select customer"}
+                  </option>
+                  {customerOptions.map((customer) => (
+                    <option key={customer.value} value={customer.value}>
+                      {customer.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>{language === "ar" ? "تاريخ الإصدار" : "Issue Date"}</span>
+                <input
+                  type="date"
+                  value={issueDate}
+                  onChange={(event) => setIssueDate(event.currentTarget.value)}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>{language === "ar" ? "تاريخ الاستحقاق" : "Due Date (preview)"}</span>
+                <input type="text" value={dueDatePreview} readOnly />
+              </label>
+            </div>
+          </section>
 
-      <Card withBorder radius="md" p="md">
-        <Stack gap="md">
-          <Group grow align="end">
-            <TextInput
-              label="Invoice Number"
-              placeholder="INV-0001"
-              value={invoiceNumber}
-              onChange={(event) => setInvoiceNumber(event.currentTarget.value)}
-              required
-            />
-            <Select
-              label="Customer"
-              placeholder="Select customer"
-              data={customerOptions}
-              value={customerId}
-              onChange={setCustomerId}
-              required
-            />
-            <TextInput
-              label="Issue Date"
-              type="date"
-              value={issueDate}
-              onChange={(event) => setIssueDate(event.currentTarget.value)}
-              required
-            />
-            <TextInput
-              label="Due Date (preview)"
-              value={dueDatePreview}
-              readOnly
-            />
-          </Group>
+          <section className="panel">
+            <div className="panel__header">
+              <div>
+                <h2>{language === "ar" ? "بنود الفاتورة" : "Line Items"}</h2>
+                <p className="helper-text">
+                  {language === "ar"
+                    ? "أضف الخدمات أو المنتجات مع الكمية والسعر."
+                    : "Add services or products with quantity and price."}
+                </p>
+              </div>
+              <div className="panel-actions panel-actions--right">
+                <button type="button" className="action-button" onClick={addLine}>
+                  {language === "ar" ? "إضافة بند" : "Add Line"}
+                </button>
+              </div>
+            </div>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>{language === "ar" ? "الوصف" : "Description"}</th>
+                    <th>{language === "ar" ? "الكمية" : "Quantity"}</th>
+                    <th>{language === "ar" ? "سعر الوحدة" : "Unit Price"}</th>
+                    <th>{language === "ar" ? "إجمالي البند" : "Line Total"}</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((line, index) => (
+                    <tr key={index}>
+                      <td>
+                        <input
+                          type="text"
+                          placeholder={language === "ar" ? "خدمة" : "Service"}
+                          value={line.description}
+                          onChange={(event) =>
+                            updateLine(index, { description: event.currentTarget.value })
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          min={0}
+                          value={line.quantity}
+                          onChange={(event) =>
+                            updateLine(index, {
+                              quantity: Number(event.currentTarget.value) || 0,
+                            })
+                          }
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          min={0}
+                          value={line.unit_price}
+                          onChange={(event) =>
+                            updateLine(index, {
+                              unit_price: Number(event.currentTarget.value) || 0,
+                            })
+                          }
+                        />
+                      </td>
+                      <td>{lineTotals[index].toFixed(2)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="table-action table-action--danger"
+                          onClick={() => removeLine(index)}
+                          disabled={lines.length === 1}
+                        >
+                          {language === "ar" ? "حذف" : "Remove"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
-          <Divider label="Line Items" />
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Description</Table.Th>
-                <Table.Th>Quantity</Table.Th>
-                <Table.Th>Unit Price</Table.Th>
-                <Table.Th>Line Total</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {lines.map((line, index) => (
-                <Table.Tr key={index}>
-                  <Table.Td>
-                    <TextInput
-                      placeholder="Service"
-                      value={line.description}
-                      onChange={(event) =>
-                        updateLine(index, { description: event.currentTarget.value })
-                      }
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <NumberInput
-                      value={line.quantity}
-                      min={0}
-                      onChange={(value) =>
-                        updateLine(index, { quantity: Number(value) || 0 })
-                      }
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <NumberInput
-                      value={line.unit_price}
-                      min={0}
-                      onChange={(value) =>
-                        updateLine(index, { unit_price: Number(value) || 0 })
-                      }
-                    />
-                  </Table.Td>
-                  <Table.Td>{lineTotals[index].toFixed(2)}</Table.Td>
-                  <Table.Td>
-                    <Button
-                      size="xs"
-                      color="red"
-                      variant="subtle"
-                      onClick={() => removeLine(index)}
-                      disabled={lines.length === 1}
-                    >
-                      Remove
-                    </Button>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-          <Button variant="light" onClick={addLine}>
-            Add Line
-          </Button>
+          <section className="panel">
+            <div className="panel__header">
+              <div>
+                <h2>{language === "ar" ? "القيمة والإجمالي" : "Totals & Notes"}</h2>
+                <p className="helper-text">
+                  {language === "ar"
+                    ? "راجع الضرائب والإجمالي قبل إصدار الفاتورة."
+                    : "Review tax and totals before issuing."}
+                </p>
+              </div>
+            </div>
+            <div className="filters-grid invoice-form-grid">
+              <label className="field">
+                <span>{language === "ar" ? "الضريبة" : "Tax"}</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={taxAmount}
+                  onChange={(event) =>
+                    setTaxAmount(
+                      event.currentTarget.value === ""
+                        ? ""
+                        : Number(event.currentTarget.value)
+                    )
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>{language === "ar" ? "الإجمالي الفرعي" : "Subtotal"}</span>
+                <input type="text" value={subtotal.toFixed(2)} readOnly />
+              </label>
+              <label className="field">
+                <span>{language === "ar" ? "الإجمالي" : "Total"}</span>
+                <input type="text" value={totalAmount.toFixed(2)} readOnly />
+              </label>
+              <label className="field field--full">
+                <span>{language === "ar" ? "ملاحظات" : "Notes"}</span>
+                <textarea
+                  placeholder={language === "ar" ? "ملاحظات إضافية" : "Additional notes"}
+                  value={notes}
+                  onChange={(event) => setNotes(event.currentTarget.value)}
+                />
+              </label>
+            </div>
 
-          <Group grow align="end">
-            <NumberInput
-              label="Tax"
-              value={taxAmount}
-              min={0}
-              onChange={setTaxAmount}
-            />
-            <TextInput label="Subtotal" value={subtotal.toFixed(2)} readOnly />
-            <TextInput label="Total" value={totalAmount.toFixed(2)} readOnly />
-          </Group>
+            {submitMutation.error && (
+              <p className="helper-text helper-text--error">
+                {(submitMutation.error as Error).message}
+              </p>
+            )}
 
-          <Textarea
-            label="Notes"
-            placeholder="Additional notes"
-            value={notes}
-            onChange={(event) => setNotes(event.currentTarget.value)}
-          />
-
-          {submitMutation.error && (
-            <Text c="red">{(submitMutation.error as Error).message}</Text>
-          )}
-
-          <Group justify="flex-end">
-            <Button
-              variant="default"
-              onClick={() => submitMutation.mutate("draft")}
-              loading={submitMutation.isPending}
-            >
-              Save Draft
-            </Button>
-            <Button
-              onClick={() => {
-                if (!window.confirm("Issue this invoice now?")) {
-                  return;
-                }
-                submitMutation.mutate("issue");
-              }}
-              loading={submitMutation.isPending}
-              disabled={!canIssue}
-            >
-              Issue Invoice
-            </Button>
-          </Group>          
-        </Stack>
-      </Card>
-    </Stack>
+            <div className="panel-actions panel-actions--right invoice-form-actions">
+              <button
+                type="button"
+                className="action-button action-button--ghost"
+                onClick={() => submitMutation.mutate("draft")}
+                disabled={submitMutation.isPending}
+              >
+                {language === "ar" ? "حفظ كمسودة" : "Save Draft"}
+              </button>
+              <button
+                type="button"
+                className={`action-button${!canIssue ? " action-button--disabled" : ""}`}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      language === "ar"
+                        ? "هل تريد إصدار هذه الفاتورة الآن؟"
+                        : "Issue this invoice now?"
+                    )
+                  ) {
+                    return;
+                  }
+                  submitMutation.mutate("issue");
+                }}
+                disabled={!canIssue || submitMutation.isPending}
+              >
+                {language === "ar" ? "إصدار الفاتورة" : "Issue Invoice"}
+              </button>
+            </div>
+          </section>
+        </>
+      )}
+    </DashboardShell>
   );
 }

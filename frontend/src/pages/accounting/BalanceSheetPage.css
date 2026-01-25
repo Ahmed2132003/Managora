@@ -1,0 +1,44 @@
+@import "../DashboardPage.css";
+
+.balance-sheet-page .hero-panel {
+  align-items: flex-start;
+}
+
+.balance-sheet-page .hero-panel__intro {
+  max-width: 640px;
+}
+
+.balance-sheet-grid {
+  display: grid;
+  gap: 20px;
+}
+
+.balance-sheet-section .panel__header p {
+  margin-top: 6px;
+}
+
+.balance-sheet-totals__values {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.balance-sheet-totals__values div {
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.balance-sheet-totals__values strong {
+  font-size: 1.3rem;
+}
+
+@media (max-width: 720px) {
+  .balance-sheet-page .hero-panel {
+    gap: 16px;
+  }
+}
