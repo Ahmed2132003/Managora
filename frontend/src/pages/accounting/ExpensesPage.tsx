@@ -336,15 +336,13 @@ export function ExpensesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
-  const userPermissions = data?.permissions ?? [];
+  const userPermissions = useMemo(() => data?.permissions ?? [], [data?.permissions]);  
   const userName =
     data?.user.first_name || data?.user.username || content.userFallback;
 
   // Filters
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [vendor, setVendor] = useState("");
-
   const [amountMin, setAmountMin] = useState<string | number>("");
   const [amountMax, setAmountMax] = useState<string | number>("");
 
@@ -375,7 +373,7 @@ export function ExpensesPage() {
     window.localStorage.setItem("managora-theme", theme);
   }, [theme]);
 
-  const activeVendor = searchTerm.trim() || vendor;
+  const activeVendor = searchTerm.trim();  
   const filters = useMemo(
     () => ({
       dateFrom: dateFrom || undefined,
@@ -437,14 +435,6 @@ export function ExpensesPage() {
       setCreateOpen(false);
     },
   });
-
-  if (
-    isForbiddenError(expensesQuery.error) ||
-    isForbiddenError(accountsQuery.error) ||
-    isForbiddenError(costCentersQuery.error)
-  ) {
-    return <AccessDenied />;
-  }
 
   const accountOptions = (accountsQuery.data ?? []).map((account) => ({
     value: String(account.id),
@@ -649,6 +639,14 @@ export function ExpensesPage() {
       );
     });
   }, [navLinks, userPermissions]);
+
+  if (
+    isForbiddenError(expensesQuery.error) ||
+    isForbiddenError(accountsQuery.error) ||
+    isForbiddenError(costCentersQuery.error)
+  ) {
+    return <AccessDenied />;
+  }
 
   function handleLogout() {
     clearTokens();
