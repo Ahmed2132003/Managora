@@ -295,7 +295,10 @@ export function JournalEntriesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
-  const userPermissions = data?.permissions ?? [];
+  const userPermissions = useMemo(
+    () => data?.permissions ?? [],
+    [data?.permissions]
+  );  
   const userName =
     data?.user.first_name || data?.user.username || content.userFallback;
 
@@ -323,19 +326,7 @@ export function JournalEntriesPage() {
     [dateFrom, dateTo, referenceType, searchTerm]
   );
 
-  const entriesQuery = useJournalEntries(filters);
-
-  if (isForbiddenError(entriesQuery.error)) {
-    return <AccessDenied />;
-  }
-
-  const totalEntries = entriesQuery.data?.length ?? 0;
-  const postedEntries =
-    entriesQuery.data?.filter((entry) => entry.status === "posted").length ?? 0;
-  const draftEntries =
-    entriesQuery.data?.filter((entry) => entry.status === "draft").length ?? 0;
-
-  const navLinks = useMemo(
+  const navLinks = useMemo(    
     () => [
       { path: "/dashboard", label: content.nav.dashboard, icon: "🏠" },
       { path: "/users", label: content.nav.users, icon: "👥", permissions: ["users.view"] },
@@ -523,6 +514,18 @@ export function JournalEntriesPage() {
     });
   }, [navLinks, userPermissions]);
 
+  const entriesQuery = useJournalEntries(filters);
+
+  if (isForbiddenError(entriesQuery.error)) {
+    return <AccessDenied />;
+  }
+
+  const totalEntries = entriesQuery.data?.length ?? 0;
+  const postedEntries =
+    entriesQuery.data?.filter((entry) => entry.status === "posted").length ?? 0;
+  const draftEntries =
+    entriesQuery.data?.filter((entry) => entry.status === "draft").length ?? 0;
+    
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });
