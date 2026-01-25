@@ -260,10 +260,18 @@ export function useEmployees({ filters, search, page }: UseEmployeesParams) {
       if (filters?.departmentId) params.department = filters.departmentId;
       if (filters?.jobTitleId) params.job_title = filters.jobTitleId;
       if (page) params.page = page;
-      const response = await http.get<EmployeeSummary[]>(endpoints.hr.employees, {
+      const response = await http.get<
+        EmployeeSummary[] | { results: EmployeeSummary[] }
+      >(endpoints.hr.employees, {
         params,
       });
-      return response.data;
+      if (Array.isArray(response.data)) {
+        return response.data;
+      }
+      if ("results" in response.data && Array.isArray(response.data.results)) {
+        return response.data.results;
+      }
+      return [];
     },
   });
 }
