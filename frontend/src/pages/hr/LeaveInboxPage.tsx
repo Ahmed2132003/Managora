@@ -396,7 +396,7 @@ export function LeaveInboxPage() {
   }, [requests, searchTerm]);
 
   const stats = useMemo(() => {
-    const totalDays = requests.reduce((sum, request) => sum + request.days, 0);
+    const totalDays = requests.reduce((sum, request) => sum + Number(request.days ?? 0), 0);    
     const uniqueEmployees = new Set(
       requests.map((request) => request.employee?.id ?? request.employee?.full_name)
     );
