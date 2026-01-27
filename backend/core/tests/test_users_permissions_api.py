@@ -22,9 +22,11 @@ class UsersPermissionsApiTests(APITestCase):
         # roles
         self.admin_role = Role.objects.create(company=self.c1, name="Admin")
         self.hr_role = Role.objects.create(company=self.c1, name="HR")
+        self.accountant_role = Role.objects.create(company=self.c1, name="Accountant")
+        self.manager_role = Role.objects.create(company=self.c1, name="Manager")
         UserRole.objects.create(user=self.admin, role=self.admin_role)
         UserRole.objects.create(user=self.hr, role=self.hr_role)
-
+        
         # permissions rows
         self.p_view = Permission.objects.create(code="users.view", name="View users")
         self.p_create = Permission.objects.create(code="users.create", name="Create users")
@@ -58,9 +60,27 @@ class UsersPermissionsApiTests(APITestCase):
     def test_hr_can_create_user(self):        
         self.auth("hr")
         url = reverse("user-list")
-        res = self.client.post(url, {"username": "blocked", "password": "pass12345"}, format="json")
+        res = self.client.post(
+            url,
+            {
+                "username": "accountant-user",
+                "password": "pass12345",
+                "role_ids": [self.accountant_role.id],
+            },
+            format="json",
+        )
         self.assertIn(res.status_code, (status.HTTP_201_CREATED, status.HTTP_200_OK))
-        
+
+    def test_hr_cannot_create_manager(self):
+        self.auth("hr")
+        url = reverse("user-list")
+        res = self.client.post(
+            url,
+            {"username": "mgr", "password": "pass12345", "role_ids": [self.manager_role.id]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+                
     def test_hr_can_list_users_but_only_same_company(self):
         self.auth("hr")
         url = reverse("user-list")

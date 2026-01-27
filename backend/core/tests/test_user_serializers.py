@@ -18,6 +18,8 @@ class UserSerializerValidationTests(APITestCase):
             company=self.company,
             email="admin@example.com",
         )
+        self.admin.is_superuser = True
+        self.admin.save(update_fields=["is_superuser"])        
         self.other = User.objects.create_user(
             username="other",
             password="pass12345",

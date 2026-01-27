@@ -41,11 +41,17 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
     }
     
     def get_queryset(self):
-        queryset = super().get_queryset().filter(company=self.request.user.company)
+        queryset = super().get_queryset()
+        if not self.request.user.is_superuser:
+            queryset = queryset.filter(company=self.request.user.company)
+        else:
+            company_id = self.request.query_params.get("company")
+            if company_id:
+                queryset = queryset.filter(company_id=company_id)
         role_id = self.request.query_params.get("role")
         is_active = self.request.query_params.get("is_active")
         search = self.request.query_params.get("search")
-
+        
         if role_id:
             queryset = queryset.filter(roles__id=role_id)
         if is_active is not None:
@@ -73,15 +79,19 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
 
         role_names = {name.lower() for name in user.roles.values_list("name", flat=True)}
         if "manager" in role_names:
-            return {"manager", "hr", "accountant", "employee"}        
+            return {"hr", "accountant", "employee"}        
         if "hr" in role_names:
             return {"accountant", "employee"}
         return set()
 
     def _ensure_roles_allowed(self, roles):
+        if not self.request.user.is_superuser and any(
+            role.name.lower() == "manager" for role in roles
+        ):
+            raise PermissionDenied("Only superusers can assign the Manager role.")
         allowed = self._allowed_role_names(self.request.user)
         if allowed is None:
-            return
+            return        
         if not allowed:
             raise PermissionDenied("You are not allowed to assign roles.")
 

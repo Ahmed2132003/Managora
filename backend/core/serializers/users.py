@@ -67,9 +67,19 @@ class UserCreateSerializer(serializers.ModelSerializer):
         if request:
             creator = request.user
 
-            # If role_ids provided, validate them
             if role_ids:
-                # Superuser/Admin can assign any roles
+                requested_roles = Role.objects.filter(id__in=role_ids)
+                if requested_roles.count() != len(set(role_ids)):
+                    raise serializers.ValidationError(
+                        {"role_ids": "One or more role_ids are invalid."}
+                    )
+
+                if not creator.is_superuser and requested_roles.filter(name="Manager").exists():
+                    raise serializers.ValidationError(
+                        {"role_ids": "Only superusers can assign the Manager role."}
+                    )
+
+                # Superuser/Admin can assign any roles (except Manager restriction above)
                 if not is_admin_user(creator):
                     creator_role_names = set(creator.roles.values_list("name", flat=True))
 
@@ -86,12 +96,6 @@ class UserCreateSerializer(serializers.ModelSerializer):
                             {"detail": "You do not have permission to create users."}
                         )
 
-                    requested_roles = Role.objects.filter(id__in=role_ids)
-                    if requested_roles.count() != len(set(role_ids)):
-                        raise serializers.ValidationError(
-                            {"role_ids": "One or more role_ids are invalid."}
-                        )
-
                     requested_names = set(requested_roles.values_list("name", flat=True))
                     if not requested_names.issubset(allowed_names):
                         raise serializers.ValidationError(
@@ -102,9 +106,14 @@ class UserCreateSerializer(serializers.ModelSerializer):
                                 )
                             }
                         )
+            else:
+                if not is_admin_user(creator):
+                    raise serializers.ValidationError(
+                        {"role_ids": "You must assign a role when creating users."}
+                    )
 
         return attrs
-
+    
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, allow_blank=False)
