@@ -74,6 +74,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if request and User.objects.filter(
             company=request.user.company, email__iexact=value
+            
         ).exclude(id=self.instance.id).exists():
             raise serializers.ValidationError(
                 "Email is already used by another user in this company."

@@ -648,7 +648,7 @@ export function UsersPage() {
       (data?.roles ?? []).map((role) => role.name.toLowerCase())
     );
     if (roleNames.has("manager")) {
-      return new Set(["hr", "accountant", "employee"]);
+      return new Set(["manager", "hr", "accountant", "employee"]);      
     }
     if (roleNames.has("hr")) {
       return new Set(["accountant", "employee"]);

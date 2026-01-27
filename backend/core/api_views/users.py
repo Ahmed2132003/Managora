@@ -11,7 +11,7 @@ from django.forms.models import model_to_dict
 
 from core.audit import get_audit_context
 from core.models import AuditLog, Role, User, UserRole
-from core.permissions import PermissionByActionMixin
+from core.permissions import PermissionByActionMixin, is_admin_user
 from core.serializers.users import (
     UserCreateSerializer,
     UserSerializer,
@@ -68,12 +68,12 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         return UserSerializer
 
     def _allowed_role_names(self, user):
-        if user.is_superuser:
+        if is_admin_user(user):            
             return None
 
         role_names = {name.lower() for name in user.roles.values_list("name", flat=True)}
         if "manager" in role_names:
-            return {"hr", "accountant", "employee"}
+            return {"manager", "hr", "accountant", "employee"}        
         if "hr" in role_names:
             return {"accountant", "employee"}
         return set()
