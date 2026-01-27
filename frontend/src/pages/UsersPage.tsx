@@ -5,6 +5,7 @@ import {
   Modal,
   MultiSelect,
   PasswordInput,
+  Select,
   Stack,
   Switch,
   TextInput,
@@ -36,10 +37,15 @@ type Role = {
   slug: string;
 };
 
+type Company = {
+  id: number;
+  name: string;
+};
+
 type User = {
   id: number;
   username: string;
-  email: string;
+  email: string;  
   is_active: boolean;
   roles: Role[];
   date_joined: string;
@@ -137,11 +143,15 @@ type Content = {
     passwordOptional: string;
     roles: string;
     rolesPlaceholder: string;
+    company: string;
+    companyPlaceholder: string;
+    companyName: string;
+    createCompany: string;
     active: string;
     create: string;
     save: string;
     confirmDelete: (name: string) => string;
-  };
+  };  
 };
 
 const contentMap: Record<Language, Content> = {
@@ -229,14 +239,17 @@ const contentMap: Record<Language, Content> = {
       editTitle: "Edit user",
       username: "Username",
       email: "Email",
-      password: "Password",
       passwordOptional: "New password (optional)",
       roles: "Roles",
       rolesPlaceholder: "Select roles",
+      company: "Company",
+      companyPlaceholder: "Select company",
+      companyName: "Company name",
+      createCompany: "Create company",
       active: "Active",
       create: "Create",
       save: "Save",
-      confirmDelete: (name) => `Delete user ${name}?`,
+      confirmDelete: (name) => `Delete user ${name}?`,      
     },
   },
   ar: {
@@ -327,10 +340,14 @@ const contentMap: Record<Language, Content> = {
       passwordOptional: "كلمة مرور جديدة (اختياري)",
       roles: "الأدوار",
       rolesPlaceholder: "اختر الأدوار",
+      company: "الشركة",
+      companyPlaceholder: "اختر الشركة",
+      companyName: "اسم الشركة",
+      createCompany: "إنشاء شركة",
       active: "نشط",
       create: "إضافة",
       save: "حفظ",
-      confirmDelete: (name) => `حذف المستخدم ${name}?`,
+      confirmDelete: (name) => `حذف المستخدم ${name}?`,      
     },
   },
 };
@@ -351,6 +368,7 @@ const createSchema = z.object({
     .min(8, "Password must be at least 8 characters / كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
   is_active: z.boolean(),
   role_ids: z.array(z.string()).default([]),
+  company_id: z.string().optional(),
 });
 
 const editSchema = z.object({
@@ -386,8 +404,10 @@ const defaultCreateValues: CreateFormValues = {
   username: "",
   email: "",
   password: "",
+
   is_active: true,
   role_ids: [],
+  company_id: undefined,
 };
 
 const defaultEditValues: EditFormValues = {
@@ -406,6 +426,7 @@ export function UsersPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { data, isLoading, isError } = useMe();
+  const isSuperuser = Boolean(data?.user.is_superuser);
 
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
@@ -433,6 +454,7 @@ export function UsersPage() {
   const canCreate = useCan("users.create");
   const canEdit = useCan("users.edit");
   const canDelete = useCan("users.delete");
+  const canView = useCan("users.view");
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -447,13 +469,21 @@ export function UsersPage() {
     }
     window.localStorage.setItem("managora-theme", theme);
   }, [theme]);
-  
+
+  useEffect(() => {
+    if (!isLoading && data && !canView) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [canView, data, isLoading, navigate]);
+
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
   const [createOpened, setCreateOpened] = useState(false);
   const [editOpened, setEditOpened] = useState(false);
+  const [companyModalOpen, setCompanyModalOpen] = useState(false);
+  const [companyName, setCompanyName] = useState("");
 
   const createForm = useForm<CreateFormValues>({
     resolver: zodResolver(createSchema),
@@ -475,6 +505,15 @@ export function UsersPage() {
     },
   });
 
+  const companiesQuery = useQuery({
+    queryKey: ["companies"],
+    queryFn: async () => {
+      const res = await http.get<Company[]>(endpoints.companies);
+      return res.data;
+    },
+    enabled: isSuperuser,
+  });
+
   const usersQuery = useQuery({
     queryKey: ["users", { search, roleFilter, activeFilter }],
     queryFn: async () => {
@@ -492,26 +531,23 @@ export function UsersPage() {
 
   const createMutation = useMutation({
     mutationFn: async (values: CreateFormValues) => {
-      const res = await http.post(endpoints.users, {
+      const payload: Record<string, string | boolean | number[] | undefined> = {
         username: values.username,
         email: values.email ?? "",
         password: values.password,
         is_active: values.is_active,
-      });
-
-      const roleIds = (values.role_ids ?? []).map(Number);
-      if (roleIds.length > 0) {
-        await http.post(`${endpoints.users}${res.data.id}/roles/`, {
-          role_ids: roleIds,
-        });
+        role_ids: (values.role_ids ?? []).map(Number),
+      };
+      if (isSuperuser) {
+        payload.company = values.company_id ? Number(values.company_id) : undefined;
       }
-
+      const res = await http.post(endpoints.users, payload);
       return res.data;
     },
     onSuccess: () => {
       notifications.show({
         title: "User created",
-        message: "تم إنشاء المستخدم بنجاح",
+        message: "تم إنشاء المستخدم بنجاح",        
       });
       setCreateOpened(false);
       createForm.reset(defaultCreateValues);
@@ -520,6 +556,32 @@ export function UsersPage() {
     onError: (err: unknown) => {
       notifications.show({
         title: "Create failed",
+        message: String(err),
+        color: "red",
+      });
+    },
+  });
+
+  const createCompanyMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await http.post<Company>(endpoints.companies, { name });
+      return res.data;
+    },
+    onSuccess: (company) => {
+      notifications.show({
+        title: "Company created",
+        message: isArabic ? "تم إنشاء الشركة بنجاح" : "Company created successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["companies"] });
+      createForm.setValue("company_id", String(company.id), {
+        shouldValidate: true,
+      });
+      setCompanyModalOpen(false);
+      setCompanyName("");
+    },
+    onError: (err: unknown) => {
+      notifications.show({
+        title: "Company creation failed",
         message: String(err),
         color: "red",
       });
@@ -574,6 +636,22 @@ export function UsersPage() {
 
   /* ================= Helpers ================= */
 
+  const allowedRoleNames = useMemo(() => {
+    if (isSuperuser) {
+      return null;
+    }
+    const roleNames = new Set(
+      (data?.roles ?? []).map((role) => role.name.toLowerCase())
+    );
+    if (roleNames.has("manager")) {
+      return new Set(["hr", "accountant", "employee"]);
+    }
+    if (roleNames.has("hr")) {
+      return new Set(["accountant", "employee"]);
+    }
+    return new Set();
+  }, [data?.roles, isSuperuser]);
+
   const roleOptions = useMemo(
     () =>
       (rolesQuery.data ?? []).map((role) => ({
@@ -581,6 +659,34 @@ export function UsersPage() {
         label: role.name,
       })),
     [rolesQuery.data]
+  );
+
+  const assignableRoleOptions = useMemo(
+    () =>
+      (rolesQuery.data ?? [])
+        .filter((role) => {
+          if (!allowedRoleNames) {
+            return true;
+          }
+          if (allowedRoleNames.size === 0) {
+            return false;
+          }
+          return allowedRoleNames.has(role.name.toLowerCase());
+        })
+        .map((role) => ({
+          value: String(role.id),
+          label: role.name,
+        })),
+    [allowedRoleNames, rolesQuery.data]
+  );
+
+  const companyOptions = useMemo(
+    () =>
+      (companiesQuery.data ?? []).map((company) => ({
+        value: String(company.id),
+        label: company.name,
+      })),
+    [companiesQuery.data]
   );
 
   function openEdit(user: User) {
@@ -1141,9 +1247,18 @@ export function UsersPage() {
         }}
       >
         <form
-          onSubmit={createForm.handleSubmit((values: CreateFormValues) =>
-            createMutation.mutate(values)
-          )}
+          onSubmit={createForm.handleSubmit((values: CreateFormValues) => {
+            if (isSuperuser && !values.company_id) {
+              createForm.setError("company_id", {
+                type: "manual",
+                message: isArabic
+                  ? "الشركة مطلوبة لإنشاء المستخدم."
+                  : "Company is required to create a user.",
+              });
+              return;
+            }
+            createMutation.mutate(values);
+          })}
         >
           <Stack gap="md">
             <TextInput
@@ -1152,11 +1267,37 @@ export function UsersPage() {
               error={createForm.formState.errors.username?.message}
               required
             />
+            {isSuperuser && (
+              <Controller
+                control={createForm.control}
+                name="company_id"
+                render={({ field }) => (
+                  <Stack gap="xs">
+                    <Select
+                      label={content.form.company}
+                      placeholder={content.form.companyPlaceholder}
+                      data={companyOptions}
+                      value={field.value ?? null}
+                      onChange={field.onChange}
+                      error={createForm.formState.errors.company_id?.message}
+                      required
+                    />
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      onClick={() => setCompanyModalOpen(true)}
+                    >
+                      {content.form.createCompany}
+                    </Button>
+                  </Stack>
+                )}
+              />
+            )}
             <TextInput
               label={content.form.email}
               {...createForm.register("email")}
               error={createForm.formState.errors.email?.message}
-            />
+            />            
             <PasswordInput
               label={content.form.password}
               {...createForm.register("password")}
@@ -1175,7 +1316,7 @@ export function UsersPage() {
                 <MultiSelect
                   label={content.form.roles}
                   placeholder={content.form.rolesPlaceholder}
-                  data={roleOptions}
+                  data={assignableRoleOptions}                  
                   value={field.value ?? []}
                   onChange={field.onChange}
                 />
@@ -1201,6 +1342,37 @@ export function UsersPage() {
             <Group justify="flex-end">
               <Button type="submit" loading={createMutation.isPending}>
                 {content.form.create}
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+
+      <Modal
+        opened={companyModalOpen}
+        title={content.form.createCompany}
+        centered
+        onClose={() => setCompanyModalOpen(false)}
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!companyName.trim()) {
+              return;
+            }
+            createCompanyMutation.mutate(companyName.trim());
+          }}
+        >
+          <Stack gap="md">
+            <TextInput
+              label={content.form.companyName}
+              value={companyName}
+              onChange={(event) => setCompanyName(event.currentTarget.value)}
+              required
+            />
+            <Group justify="flex-end">
+              <Button type="submit" loading={createCompanyMutation.isPending}>
+                {content.form.createCompany}
               </Button>
             </Group>
           </Stack>
@@ -1251,7 +1423,7 @@ export function UsersPage() {
                 <MultiSelect
                   label={content.form.roles}
                   placeholder={content.form.rolesPlaceholder}
-                  data={roleOptions}
+                  data={assignableRoleOptions}                  
                   value={field.value ?? []}
                   onChange={field.onChange}
                 />

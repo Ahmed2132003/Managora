@@ -4,6 +4,7 @@ export const endpoints = {
     refresh: "/api/auth/refresh/",
   },
   me: "/api/me/",
+  companies: "/api/companies/",  
   auditLogs: "/api/audit/logs/",
   users: "/api/users/",
   roles: "/api/roles/",

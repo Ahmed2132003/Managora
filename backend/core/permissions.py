@@ -74,11 +74,12 @@ ROLE_PERMISSION_MAP = {
         "attendance.*",
         "leaves.*",
         "users.view",
+        "users.create",
         "hr.departments.*",
         "hr.job_titles.*",
         "hr.employees.*",
         "hr.documents.*",
-        "hr.payroll.*",
+        "hr.payroll.*",        
         "analytics.view_hr",
         "copilot.attendance_report",
         "copilot.top_late_employees",
@@ -113,9 +114,10 @@ ROLE_PERMISSION_MAP = {
         "attendance.view_team",
         "employees.view_team",        
         "hr.employees.view",
+        "users.view",
+        "users.create",
     ],
 }    
-
 
 
 def _permission_code_matches(granted_code, required_code):

@@ -5,6 +5,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from core.api_views.auth import LoginView
 from core.api_views.audit import AuditLogListView
 from core.api_views.copilot import CopilotQueryView
+from core.api_views.companies import CompanyListCreateView
 from core.api_views.me import MeView
 from core.api_views.roles import RoleListView
 from core.api_views.setup import ApplySetupTemplateView, SetupTemplateListView
@@ -31,7 +32,10 @@ urlpatterns = [
     # Copilot
     path("copilot/query/", CopilotQueryView.as_view(), name="copilot-query"),
 
-    # Setup    
+    # Companies
+    path("companies/", CompanyListCreateView.as_view(), name="companies"),
+
+    # Setup        
     path("setup/templates/", SetupTemplateListView.as_view(), name="setup-templates"),
     path("setup/apply-template/", ApplySetupTemplateView.as_view(), name="setup-apply-template"),
 ]

@@ -25,12 +25,15 @@ class MeView(APIView):
             return Response({"detail": "User is not linked to a company."}, status=status.HTTP_400_BAD_REQUEST)
 
         roles = user.roles.order_by("name")
-        permissions = (
-            Permission.objects.filter(roles__users=user)
-            .values_list("code", flat=True)
-            .distinct()
-            .order_by("code")
-        )
+        if user.is_superuser:
+            permissions = ["*"]
+        else:
+            permissions = (
+                Permission.objects.filter(roles__users=user)
+                .values_list("code", flat=True)
+                .distinct()
+                .order_by("code")
+            )        
         employee = getattr(user, "employee_profile", None)
 
         data = {

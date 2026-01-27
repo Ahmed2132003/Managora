@@ -37,9 +37,10 @@ class UsersPermissionsApiTests(APITestCase):
         RolePermission.objects.create(role=self.admin_role, permission=self.p_edit)
         RolePermission.objects.create(role=self.admin_role, permission=self.p_delete)
 
-        # HR has ONLY view (زي الخطة)
+        # HR has view + create
         RolePermission.objects.create(role=self.hr_role, permission=self.p_view)
-
+        RolePermission.objects.create(role=self.hr_role, permission=self.p_create)
+        
     def auth(self, username):
         url = reverse("token_obtain_pair")
         res = self.client.post(url, {"username": username, "password": "pass12345"}, format="json")
@@ -54,12 +55,12 @@ class UsersPermissionsApiTests(APITestCase):
         created = User.objects.get(username="new")
         self.assertEqual(created.company, self.c1)
         
-    def test_hr_cannot_create_user_403(self):
+    def test_hr_can_create_user(self):        
         self.auth("hr")
         url = reverse("user-list")
         res = self.client.post(url, {"username": "blocked", "password": "pass12345"}, format="json")
-        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
-
+        self.assertIn(res.status_code, (status.HTTP_201_CREATED, status.HTTP_200_OK))
+        
     def test_hr_can_list_users_but_only_same_company(self):
         self.auth("hr")
         url = reverse("user-list")

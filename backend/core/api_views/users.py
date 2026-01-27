@@ -1,6 +1,7 @@
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -66,19 +67,57 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
             return UserUpdateSerializer
         return UserSerializer
 
+    def _allowed_role_names(self, user):
+        if user.is_superuser:
+            return None
+
+        role_names = {name.lower() for name in user.roles.values_list("name", flat=True)}
+        if "manager" in role_names:
+            return {"hr", "accountant", "employee"}
+        if "hr" in role_names:
+            return {"accountant", "employee"}
+        return set()
+
+    def _ensure_roles_allowed(self, roles):
+        allowed = self._allowed_role_names(self.request.user)
+        if allowed is None:
+            return
+        if not allowed:
+            raise PermissionDenied("You are not allowed to assign roles.")
+
+        invalid = [role for role in roles if role.name.lower() not in allowed]
+        if invalid:
+            raise PermissionDenied("You are not allowed to assign one or more roles.")
+
     def perform_create(self, serializer):
+        role_ids = serializer.validated_data.pop("role_ids", [])
+        company = serializer.validated_data.pop("company", None)
         password = serializer.validated_data.pop("password")
-        user = serializer.save(company=self.request.user.company)
+        if not self.request.user.is_superuser:
+            company = self.request.user.company
+
+        roles = Role.objects.filter(id__in=role_ids, company=company)
+        if role_ids and len(role_ids) != roles.count():
+            raise PermissionDenied("One or more roles are invalid for this company.")
+        if roles:
+            self._ensure_roles_allowed(list(roles))
+
+        user = serializer.save(company=company)
         user.set_password(password)
         user.save(update_fields=["password"])
+        if roles:
+            UserRole.objects.bulk_create(
+                [UserRole(user=user, role=role) for role in roles],
+                ignore_conflicts=True,
+            )
         audit_context = get_audit_context()
         AuditLog.objects.create(
-            company=self.request.user.company,
+            company=company,
             actor=self.request.user,
             action="users.create",
             entity="user",
             entity_id=str(user.id),
-            before={},
+            before={},            
             after=model_to_dict(user, fields=["id", "username", "email", "is_active"]),
             payload={
                 "username": user.username,
@@ -151,7 +190,8 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
                 {"detail": "One or more roles are invalid for this company."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
+        self._ensure_roles_allowed(list(roles))
+        
         UserRole.objects.filter(user=user).delete()
         UserRole.objects.bulk_create(
             [UserRole(user=user, role=role) for role in roles],

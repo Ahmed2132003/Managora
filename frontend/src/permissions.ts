@@ -61,8 +61,9 @@ export const ROLE_PERMISSIONS = {
     "attendance.*",
     "leaves.*",
     "users.view",
+    "users.create",
     "hr.payroll.*",
-  ],  
+  ],      
   Accountant: [
     "accounting.*",
     "expenses.*",
@@ -72,7 +73,13 @@ export const ROLE_PERMISSIONS = {
     "export.accounting",
   ],  
   Sales: ["customers.view"],  
-  Manager: ["approvals.*", "attendance.view_team", "employees.view_team"],
+  Manager: [
+    "approvals.*",
+    "attendance.view_team",
+    "employees.view_team",
+    "users.view",
+    "users.create",
+  ],
 } as const;
 
 export type PermissionCode = (typeof PERMISSION_CODES)[number];
