@@ -14,8 +14,8 @@ class AccountingApiTests(APITestCase):
         self.company_a = Company.objects.create(name="Company A")
         self.company_b = Company.objects.create(name="Company B")
 
-        self.admin = User.objects.create_user(
-            username="admin",
+        self.manager = User.objects.create_user(
+            username="manager",
             password="pass12345",
             company=self.company_a,
         )
@@ -25,9 +25,9 @@ class AccountingApiTests(APITestCase):
             company=self.company_a,
         )
 
-        self.admin_role = Role.objects.create(company=self.company_a, name="Admin")
+        self.manager_role = Role.objects.create(company=self.company_a, name="Manager")
         self.hr_role = Role.objects.create(company=self.company_a, name="HR")
-        UserRole.objects.create(user=self.admin, role=self.admin_role)
+        UserRole.objects.create(user=self.manager, role=self.manager_role)
         UserRole.objects.create(user=self.hr, role=self.hr_role)
 
         self.permissions = {
@@ -38,10 +38,10 @@ class AccountingApiTests(APITestCase):
             ]
         }
         RolePermission.objects.create(
-            role=self.admin_role, permission=self.permissions["accounting.view"]
+            role=self.manager_role, permission=self.permissions["accounting.view"]
         )
         RolePermission.objects.create(
-            role=self.admin_role, permission=self.permissions["accounting.manage_coa"]
+            role=self.manager_role, permission=self.permissions["accounting.manage_coa"]
         )
 
     def auth(self, username):
@@ -66,7 +66,7 @@ class AccountingApiTests(APITestCase):
             type=Account.Type.INCOME,
         )
 
-        self.auth("admin")
+        self.auth("manager")
         url = reverse("accounting-account-list")
         res = self.client.get(url)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
@@ -74,7 +74,7 @@ class AccountingApiTests(APITestCase):
         self.assertEqual(res.data[0]["code"], "4100")
 
     def test_apply_template_creates_accounts(self):
-        self.auth("admin")
+        self.auth("manager")
         url = reverse("coa-apply-template")
         res = self.client.post(url, {"template_key": "services_small"}, format="json")
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)

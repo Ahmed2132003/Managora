@@ -14,11 +14,6 @@ class HrApiTests(APITestCase):
         self.c1 = Company.objects.create(name="C1")
         self.c2 = Company.objects.create(name="C2")
 
-        self.admin = User.objects.create_user(
-            username="admin",
-            password="pass12345",
-            company=self.c1,
-        )
         self.hr = User.objects.create_user(
             username="hr",
             password="pass12345",
@@ -30,10 +25,8 @@ class HrApiTests(APITestCase):
             company=self.c1,
         )
 
-        self.admin_role = Role.objects.create(company=self.c1, name="Admin")
         self.hr_role = Role.objects.create(company=self.c1, name="HR")
         self.manager_role = Role.objects.create(company=self.c1, name="Manager")
-        UserRole.objects.create(user=self.admin, role=self.admin_role)
         UserRole.objects.create(user=self.hr, role=self.hr_role)
         UserRole.objects.create(user=self.manager, role=self.manager_role)
 
@@ -55,7 +48,7 @@ class HrApiTests(APITestCase):
             ]
         }
         for permission in self.permissions.values():
-            RolePermission.objects.create(role=self.admin_role, permission=permission)
+            RolePermission.objects.create(role=self.manager_role, permission=permission)
             RolePermission.objects.create(role=self.hr_role, permission=permission)
 
         RolePermission.objects.create(
@@ -128,12 +121,9 @@ class HrApiTests(APITestCase):
         self.assertIn(self.department.name, names)
         self.assertNotIn(self.other_department.name, names)
         
-    def test_manager_can_only_view_employees(self):
+    def test_manager_can_create_employees(self):
         self.auth("manager")
         list_url = reverse("employee-list")
-        res = self.client.get(list_url)
-        self.assertEqual(res.status_code, status.HTTP_200_OK)
-
         res = self.client.post(
             list_url,
             {
@@ -144,7 +134,7 @@ class HrApiTests(APITestCase):
             },
             format="json",
         )
-        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
 
     def test_employee_list_filters_and_search(self):
         self.auth("hr")

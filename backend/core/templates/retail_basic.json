@@ -1,17 +1,17 @@
 {
   "roles": [
-    {"name": "Admin", "permissions": ["*"]},
+    {"name": "Manager", "permissions": ["*"]},
     {
-      "name": "Store Manager",
-      "permissions": ["attendance.view_team", "employees.view_team", "approvals.*", "customers.view"]
-    },
-    {
-      "name": "Cashier",
-      "permissions": ["customers.view", "invoices.*"]
+      "name": "HR",
+      "permissions": ["employees.*", "attendance.*", "leaves.*", "users.view", "hr.employees.*", "hr.documents.*"]
     },
     {
       "name": "Accountant",
       "permissions": ["accounting.*", "expenses.*", "customers.view", "customers.create", "customers.edit"]
+    },
+    {
+      "name": "Employee",
+      "permissions": ["expenses.create"]
     }
   ],
   "attendance": {

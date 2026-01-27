@@ -5,7 +5,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.models import SetupTemplate, TemplateApplyLog
-from core.permissions import is_admin_user
 from core.serializers.setup_serializers import (
     CompanySetupStateSerializer,
     SetupTemplateSerializer,
@@ -44,7 +43,10 @@ class ApplySetupTemplateView(APIView):
         summary="Apply setup template",
     )
     def post(self, request):
-        if not is_admin_user(request.user):
+        if not (
+            request.user.is_superuser
+            or request.user.roles.filter(name="Manager").exists()
+        ):
             return Response(
                 {"detail": "You do not have permission to perform this action."},
                 status=status.HTTP_403_FORBIDDEN,

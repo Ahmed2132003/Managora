@@ -11,22 +11,22 @@ User = get_user_model()
 class ResetPasswordApiTests(APITestCase):
     def setUp(self):
         self.company = Company.objects.create(name="Acme")
-        self.admin = User.objects.create_user(
-            username="admin", password="pass12345", company=self.company
+        self.manager = User.objects.create_user(
+            username="manager", password="pass12345", company=self.company
         )
         self.hr = User.objects.create_user(
             username="hr", password="pass12345", company=self.company
         )
 
-        self.admin_role = Role.objects.create(company=self.company, name="Admin")
+        self.manager_role = Role.objects.create(company=self.company, name="Manager")
         self.hr_role = Role.objects.create(company=self.company, name="HR")
-        UserRole.objects.create(user=self.admin, role=self.admin_role)
+        UserRole.objects.create(user=self.manager, role=self.manager_role)
         UserRole.objects.create(user=self.hr, role=self.hr_role)
 
         self.reset_perm = Permission.objects.create(
             code="users.reset_password", name="Reset user passwords"
         )
-        RolePermission.objects.create(role=self.admin_role, permission=self.reset_perm)
+        RolePermission.objects.create(role=self.manager_role, permission=self.reset_perm)
 
     def auth(self, username):
         url = reverse("token_obtain_pair")
@@ -36,8 +36,8 @@ class ResetPasswordApiTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {res.data['access']}")
 
-    def test_admin_can_reset_password(self):
-        self.auth("admin")
+    def test_manager_can_reset_password(self):
+        self.auth("manager")
         url = reverse("user-reset-password", kwargs={"pk": self.hr.id})
         res = self.client.post(url, {"new_password": "newpass123"}, format="json")
         self.assertEqual(res.status_code, status.HTTP_200_OK)
@@ -46,12 +46,12 @@ class ResetPasswordApiTests(APITestCase):
 
     def test_hr_cannot_reset_password(self):
         self.auth("hr")
-        url = reverse("user-reset-password", kwargs={"pk": self.admin.id})
+        url = reverse("user-reset-password", kwargs={"pk": self.manager.id})
         res = self.client.post(url, {"new_password": "newpass123"}, format="json")
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_reset_password_requires_new_password(self):
-        self.auth("admin")
+        self.auth("manager")
         url = reverse("user-reset-password", kwargs={"pk": self.hr.id})
         res = self.client.post(url, {"new_password": ""}, format="json")
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)

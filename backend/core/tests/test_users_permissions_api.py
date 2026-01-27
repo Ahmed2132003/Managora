@@ -15,16 +15,16 @@ class UsersPermissionsApiTests(APITestCase):
         self.c2 = Company.objects.create(name="C2")
 
         # users
-        self.admin = User.objects.create_user(username="admin", password="pass12345", company=self.c1)
+        self.manager = User.objects.create_user(username="manager", password="pass12345", company=self.c1)
         self.hr = User.objects.create_user(username="hr", password="pass12345", company=self.c1)
         self.other_company_user = User.objects.create_user(username="x", password="pass12345", company=self.c2)
 
         # roles
-        self.admin_role = Role.objects.create(company=self.c1, name="Admin")
+        self.manager_role = Role.objects.create(company=self.c1, name="Manager")
         self.hr_role = Role.objects.create(company=self.c1, name="HR")
         self.accountant_role = Role.objects.create(company=self.c1, name="Accountant")
-        self.manager_role = Role.objects.create(company=self.c1, name="Manager")
-        UserRole.objects.create(user=self.admin, role=self.admin_role)
+        self.employee_role = Role.objects.create(company=self.c1, name="Employee")
+        UserRole.objects.create(user=self.manager, role=self.manager_role)
         UserRole.objects.create(user=self.hr, role=self.hr_role)
         
         # permissions rows
@@ -33,11 +33,11 @@ class UsersPermissionsApiTests(APITestCase):
         self.p_edit = Permission.objects.create(code="users.edit", name="Edit users")
         self.p_delete = Permission.objects.create(code="users.delete", name="Delete users")
 
-        # admin has all
-        RolePermission.objects.create(role=self.admin_role, permission=self.p_view)
-        RolePermission.objects.create(role=self.admin_role, permission=self.p_create)
-        RolePermission.objects.create(role=self.admin_role, permission=self.p_edit)
-        RolePermission.objects.create(role=self.admin_role, permission=self.p_delete)
+        # manager has all
+        RolePermission.objects.create(role=self.manager_role, permission=self.p_view)
+        RolePermission.objects.create(role=self.manager_role, permission=self.p_create)
+        RolePermission.objects.create(role=self.manager_role, permission=self.p_edit)
+        RolePermission.objects.create(role=self.manager_role, permission=self.p_delete)
 
         # HR has view + create
         RolePermission.objects.create(role=self.hr_role, permission=self.p_view)
@@ -49,10 +49,18 @@ class UsersPermissionsApiTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {res.data['access']}")
 
-    def test_admin_can_create_user(self):
-        self.auth("admin")
+    def test_manager_can_create_user(self):
+        self.auth("manager")
         url = reverse("user-list")  # لازم يكون اسم الراوت في router بتاع UsersViewSet
-        res = self.client.post(url, {"username": "new", "password": "pass12345"}, format="json")
+        res = self.client.post(
+            url,
+            {
+                "username": "new",
+                "password": "pass12345",
+                "role_ids": [self.employee_role.id],
+            },
+            format="json",
+        )
         self.assertIn(res.status_code, (status.HTTP_201_CREATED, status.HTTP_200_OK))
         created = User.objects.get(username="new")
         self.assertEqual(created.company, self.c1)
@@ -88,20 +96,20 @@ class UsersPermissionsApiTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         
         usernames = [u["username"] for u in res.data]
-        self.assertIn("admin", usernames)
+        self.assertIn("manager", usernames)
         self.assertIn("hr", usernames)
         self.assertNotIn("x", usernames)  # tenant boundary
 
     def test_assign_roles_to_user(self):
-        self.auth("admin")
+        self.auth("manager")
         url = reverse("user-assign-roles", kwargs={"pk": self.hr.id})
-        res = self.client.post(url, {"role_ids": [self.admin_role.id]}, format="json")
+        res = self.client.post(url, {"role_ids": [self.hr_role.id]}, format="json")
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.hr.refresh_from_db()
-        self.assertTrue(self.hr.roles.filter(id=self.admin_role.id).exists())
+        self.assertTrue(self.hr.roles.filter(id=self.hr_role.id).exists())
 
     def test_assign_roles_rejects_other_company(self):
-        self.auth("admin")
+        self.auth("manager")
         other_role = Role.objects.create(company=self.c2, name="Other")
         url = reverse("user-assign-roles", kwargs={"pk": self.hr.id})
         res = self.client.post(url, {"role_ids": [other_role.id]}, format="json")

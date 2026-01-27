@@ -11,8 +11,8 @@ User = get_user_model()
 class RolesApiTests(APITestCase):
     def setUp(self):
         self.company = Company.objects.create(name="TestCo")
-        self.admin = User.objects.create_user(
-            username="admin",
+        self.manager = User.objects.create_user(
+            username="manager",
             password="pass12345",
             company=self.company,
         )
@@ -21,11 +21,19 @@ class RolesApiTests(APITestCase):
             password="pass12345",
             company=self.company,
         )
+        self.accountant = User.objects.create_user(
+            username="accountant",
+            password="pass12345",
+            company=self.company,
+        )
 
-        self.admin_role = Role.objects.create(company=self.company, name="Admin")
+        self.manager_role = Role.objects.create(company=self.company, name="Manager")
         self.hr_role = Role.objects.create(company=self.company, name="HR")
-        UserRole.objects.create(user=self.admin, role=self.admin_role)
+        self.accountant_role = Role.objects.create(company=self.company, name="Accountant")
+        self.employee_role = Role.objects.create(company=self.company, name="Employee")
+        UserRole.objects.create(user=self.manager, role=self.manager_role)
         UserRole.objects.create(user=self.hr, role=self.hr_role)
+        UserRole.objects.create(user=self.accountant, role=self.accountant_role)
 
         self.permission = Permission.objects.create(
             code="users.view",
@@ -43,19 +51,26 @@ class RolesApiTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {res.data['access']}")
 
-    def test_roles_list_admin_only(self):
-        self.authenticate("admin")
+    def test_roles_list_allows_manager(self):
+        self.authenticate("manager")
         url = reverse("roles")
         res = self.client.get(url)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data[0]["name"], "Admin")
+        role_names = {role["name"] for role in res.data}
+        self.assertEqual(role_names, {"HR", "Accountant", "Employee"})
 
         self.authenticate("hr")
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        role_names = {role["name"] for role in res.data}
+        self.assertEqual(role_names, {"Accountant", "Employee"})
+
+        self.authenticate("accountant")
         res = self.client.get(url)
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_roles_list_includes_permissions(self):
-        self.authenticate("admin")
+        self.authenticate("manager")
         url = reverse("roles")
         res = self.client.get(url)
         hr_role = next(role for role in res.data if role["name"] == "HR")

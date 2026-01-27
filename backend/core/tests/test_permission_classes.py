@@ -28,8 +28,8 @@ class PermissionClassTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
         self.company = Company.objects.create(name="TestCo")
-        self.admin = User.objects.create_user(
-            username="admin",
+        self.manager = User.objects.create_user(
+            username="manager",
             password="pass12345",
             company=self.company,
         )
@@ -39,20 +39,20 @@ class PermissionClassTests(TestCase):
             company=self.company,
         )
 
-        self.admin_role = Role.objects.create(company=self.company, name="Admin")
+        self.manager_role = Role.objects.create(company=self.company, name="Manager")
         self.hr_role = Role.objects.create(company=self.company, name="HR")
-        UserRole.objects.create(user=self.admin, role=self.admin_role)
+        UserRole.objects.create(user=self.manager, role=self.manager_role)
         UserRole.objects.create(user=self.hr, role=self.hr_role)
 
         self.permission = Permission.objects.create(
             code="users.create",
             name="Create users",
         )
-        RolePermission.objects.create(role=self.admin_role, permission=self.permission)
+        RolePermission.objects.create(role=self.manager_role, permission=self.permission)
 
-    def test_admin_can_create(self):
+    def test_manager_can_create(self):
         request = self.factory.post("/api/dummy/")
-        force_authenticate(request, user=self.admin)
+        force_authenticate(request, user=self.manager)
         response = DummyCreateView.as_view()(request)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 

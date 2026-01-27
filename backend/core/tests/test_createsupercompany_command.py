@@ -7,7 +7,7 @@ from core.permissions import PERMISSION_DEFINITIONS, ROLE_PERMISSION_MAP
 
 
 class CreateSuperCompanyCommandTests(TestCase):
-    def test_createsupercompany_seeds_roles_permissions_and_admin_role(self):
+    def test_createsupercompany_seeds_roles_permissions_and_superuser(self):
         call_command(
             "createsupercompany",
             company="Seed Co",
@@ -21,7 +21,7 @@ class CreateSuperCompanyCommandTests(TestCase):
         admin_user = user_model.objects.get(username="admin_user")
 
         self.assertEqual(admin_user.company, company)
-        self.assertTrue(admin_user.roles.filter(name="Admin").exists())
+        self.assertTrue(admin_user.is_superuser)
 
         roles = Role.objects.filter(company=company).values_list("name", flat=True)
         for role_name in ROLE_PERMISSION_MAP.keys():

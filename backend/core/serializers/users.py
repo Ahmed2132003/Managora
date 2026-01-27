@@ -79,7 +79,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
                         {"role_ids": "Only superusers can assign the Manager role."}
                     )
 
-                # Superuser/Admin can assign any roles (except Manager restriction above)
+                # Superuser can assign any roles (except Manager restriction above)
                 if not is_admin_user(creator):
                     creator_role_names = set(creator.roles.values_list("name", flat=True))
 

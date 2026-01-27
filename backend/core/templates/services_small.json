@@ -1,6 +1,6 @@
 {
   "roles": [
-    {"name": "Admin", "permissions": ["*"]},
+    {"name": "Manager", "permissions": ["*"]},
     {
       "name": "HR",
       "permissions": ["employees.*", "attendance.*", "leaves.*", "users.view", "hr.employees.*", "hr.documents.*"]
@@ -8,6 +8,10 @@
     {
       "name": "Accountant",
       "permissions": ["accounting.*", "expenses.*", "invoices.*", "customers.view", "customers.create", "customers.edit"]
+    },
+    {
+      "name": "Employee",
+      "permissions": ["expenses.create"]
     }
   ],
   "attendance": {

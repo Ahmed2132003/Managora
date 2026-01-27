@@ -37,9 +37,10 @@ FALLBACK_ACCOUNT_TYPES = {
 BUILTIN_TEMPLATE_BUNDLES = {
     "services_small": {
         "roles": [
-            {"name": "Admin", "permissions": ["*"]},
+            {"name": "Manager", "permissions": ["*"]},
             {"name": "HR", "permissions": ["*"]},
             {"name": "Accountant", "permissions": ["*"]},
+            {"name": "Employee", "permissions": ["expenses.create"]},
         ],
         "attendance": {
             "worksites": [

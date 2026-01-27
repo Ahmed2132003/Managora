@@ -68,7 +68,7 @@ PERMISSION_DEFINITIONS = {
 }
 
 ROLE_PERMISSION_MAP = {
-    "Admin": list(PERMISSION_DEFINITIONS.keys()),
+    "Manager": list(PERMISSION_DEFINITIONS.keys()),
     "HR": [
         "employees.*",
         "attendance.*",
@@ -105,16 +105,8 @@ ROLE_PERMISSION_MAP = {
         "copilot.top_debtors",
         "copilot.profit_change_explain",
     ],
-    "Sales": [
-        "customers.view",
-    ],
-    "Manager": [
-        "approvals.*",
-        "attendance.view_team",
-        "employees.view_team",
-        "hr.employees.view",
-        "users.view",
-        "users.create",
+    "Employee": [
+        "expenses.create",
     ],
 }
 
@@ -164,7 +156,7 @@ def user_has_permission(user, required_code):
 
 
 def is_admin_user(user):
-    return user and (user.is_superuser or user.roles.filter(name="Admin").exists())
+    return user and user.is_superuser
 
 
 class HasPermission(BasePermission):

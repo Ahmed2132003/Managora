@@ -12,8 +12,8 @@ User = get_user_model()
 class SetupTemplateApiTests(APITestCase):
     def setUp(self):
         self.company = Company.objects.create(name="Setup Co")
-        self.admin = User.objects.create_user(
-            username="admin",
+        self.manager = User.objects.create_user(
+            username="manager",
             password="pass12345",
             company=self.company,
         )
@@ -22,9 +22,9 @@ class SetupTemplateApiTests(APITestCase):
             password="pass12345",
             company=self.company,
         )
-        self.admin_role = Role.objects.create(company=self.company, name="Admin")
+        self.manager_role = Role.objects.create(company=self.company, name="Manager")
         self.hr_role = Role.objects.create(company=self.company, name="HR")
-        UserRole.objects.create(user=self.admin, role=self.admin_role)
+        UserRole.objects.create(user=self.manager, role=self.manager_role)
         UserRole.objects.create(user=self.hr_user, role=self.hr_role)
         SetupTemplate.objects.get_or_create(
             code="services_small",
@@ -47,8 +47,8 @@ class SetupTemplateApiTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {res.data['access']}")
 
-    def test_admin_can_apply_template(self):
-        self.authenticate("admin")
+    def test_manager_can_apply_template(self):
+        self.authenticate("manager")
         url = reverse("setup-apply-template")
         res = self.client.post(url, {"template_code": "services_small"}, format="json")
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
@@ -56,14 +56,14 @@ class SetupTemplateApiTests(APITestCase):
         self.assertTrue(WorkSite.objects.filter(company=self.company).exists())
         self.assertTrue(Shift.objects.filter(company=self.company).exists())
 
-    def test_non_admin_cannot_apply_template(self):
+    def test_non_manager_cannot_apply_template(self):
         self.authenticate("hr")
         url = reverse("setup-apply-template")
         res = self.client.post(url, {"template_code": "services_small"}, format="json")
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_apply_template_is_idempotent(self):
-        self.authenticate("admin")
+        self.authenticate("manager")
         url = reverse("setup-apply-template")
         first = self.client.post(url, {"template_code": "services_small"}, format="json")
         self.assertEqual(first.status_code, status.HTTP_201_CREATED)

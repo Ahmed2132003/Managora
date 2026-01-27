@@ -1,17 +1,17 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 
-from core.models import Company, Permission, Role, RolePermission, UserRole
+from core.models import Company, Permission, Role, RolePermission
 from core.permissions import PERMISSION_DEFINITIONS, ROLE_PERMISSION_MAP
 
 class Command(BaseCommand):
-    help = "Create initial Company (tenant) and an admin superuser linked to it."
+    help = "Create initial Company (tenant) and a superuser linked to it."
 
     def add_arguments(self, parser):
         parser.add_argument("--company", type=str, help="Company name")
-        parser.add_argument("--username", type=str, help="Admin username")
-        parser.add_argument("--email", type=str, help="Admin email")
-        parser.add_argument("--password", type=str, help="Admin password")
+        parser.add_argument("--username", type=str, help="Superuser username")
+        parser.add_argument("--email", type=str, help="Superuser email")
+        parser.add_argument("--password", type=str, help="Superuser password")
 
     def handle(self, *args, **options):
         company_name = options.get("company") or "Demo Company"        
@@ -31,7 +31,7 @@ class Command(BaseCommand):
                 f"Company created: {company.name} (id={company.id})"
             ))
 
-        # 2) Create or reuse admin user
+        # 2) Create or reuse superuser
         User = get_user_model()
         
         if User.objects.filter(username=username).exists():
@@ -57,7 +57,7 @@ class Command(BaseCommand):
             user.is_staff = True
             user.is_superuser = True
             self.stdout.write(self.style.SUCCESS(
-                f"Admin user created: {username}"
+                f"Superuser created: {username}"
             ))
 
         # 3) Seed permissions
@@ -94,11 +94,6 @@ class Command(BaseCommand):
                     role=role,
                     permission=permission,
                 )
-
-        # 5) Assign Admin role to admin user
-        admin_role = role_objects.get("Admin")
-        if admin_role:
-            UserRole.objects.get_or_create(user=user, role=admin_role)
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Seed completed ✅"))        
