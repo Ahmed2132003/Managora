@@ -239,9 +239,10 @@ const contentMap: Record<Language, Content> = {
       editTitle: "Edit user",
       username: "Username",
       email: "Email",
+      password: "Password",
       passwordOptional: "New password (optional)",
       roles: "Roles",
-      rolesPlaceholder: "Select roles",
+      rolesPlaceholder: "Select roles",      
       company: "Company",
       companyPlaceholder: "Select company",
       companyName: "Company name",
@@ -531,10 +532,13 @@ export function UsersPage() {
 
   const createMutation = useMutation({
     mutationFn: async (values: CreateFormValues) => {
-      const payload: Record<string, string | boolean | number[] | undefined> = {
+      const payload: Record<
+        string,
+        string | boolean | number | number[] | undefined
+      > = {
         username: values.username,
         email: values.email ?? "",
-        password: values.password,
+        password: values.password,        
         is_active: values.is_active,
         role_ids: (values.role_ids ?? []).map(Number),
       };
