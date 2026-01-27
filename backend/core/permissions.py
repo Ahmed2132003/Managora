@@ -132,9 +132,14 @@ def user_permission_codes(user):
     # 2) Fallback source: derive permissions from ROLE_PERMISSION_MAP
     # This makes the system work even if the DB role-permission M2M was not seeded yet.
     # DB permissions (if present) always override/extend the derived ones.
-    role_names = list(user.roles.values_list("name", flat=True))
+    normalized_role_map = {
+        role_name.lower(): permissions for role_name, permissions in ROLE_PERMISSION_MAP.items()
+    }
+    role_names = [
+        name.strip().lower() for name in user.roles.values_list("name", flat=True)
+    ]
     for role_name in role_names:
-        derived = ROLE_PERMISSION_MAP.get(role_name)
+        derived = normalized_role_map.get(role_name)        
         if not derived:
             continue
         if "*" in derived:

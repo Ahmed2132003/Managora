@@ -74,34 +74,46 @@ class UserCreateSerializer(serializers.ModelSerializer):
                         {"role_ids": "One or more role_ids are invalid."}
                     )
 
-                if not creator.is_superuser and requested_roles.filter(name="Manager").exists():
+                if (
+                    not creator.is_superuser
+                    and requested_roles.filter(name__iexact="Manager").exists()
+                ):
                     raise serializers.ValidationError(
                         {"role_ids": "Only superusers can assign the Manager role."}
                     )
-
+                    
                 # Superuser can assign any roles (except Manager restriction above)
                 if not is_admin_user(creator):
-                    creator_role_names = set(creator.roles.values_list("name", flat=True))
-
+                    creator_role_names = {
+                        name.strip().lower()
+                        for name in creator.roles.values_list("name", flat=True)
+                    }
                     # Rules requested:
                     # - Manager: can create HR / Accountant / Employee only
                     # - HR: can create Accountant / Employee only
                     # - Accountant/Employee: cannot create at all
-                    if "Manager" in creator_role_names:
+                    if "manager" in creator_role_names:                        
                         allowed_names = {"HR", "Accountant", "Employee"}
-                    elif "HR" in creator_role_names:
+                    elif "hr" in creator_role_names:                        
                         allowed_names = {"Accountant", "Employee"}
+                        
                     else:
                         raise serializers.ValidationError(
                             {"detail": "You do not have permission to create users."}
                         )
 
-                    requested_names = set(requested_roles.values_list("name", flat=True))
-                    if not requested_names.issubset(allowed_names):
+                    requested_names = {
+                        name.strip().lower()
+                        for name in requested_roles.values_list("name", flat=True)
+                    }
+                    normalized_allowed_names = {
+                        name.strip().lower() for name in allowed_names
+                    }
+                    if not requested_names.issubset(normalized_allowed_names):
                         raise serializers.ValidationError(
                             {
                                 "role_ids": (
-                                    "You can only assign these roles: "
+                                    "You can only assign these roles: "                                    
                                     + ", ".join(sorted(allowed_names))
                                 )
                             }
