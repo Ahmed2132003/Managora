@@ -3,7 +3,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 
 from core.models import Company
-from core.serializers.companies import CompanySerializer
+from core.serializers import CompanySerializer
 
 
 class CompanyListCreateView(generics.ListCreateAPIView):
