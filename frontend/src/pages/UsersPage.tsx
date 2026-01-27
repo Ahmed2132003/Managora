@@ -47,8 +47,8 @@ type User = {
   username: string;
   email: string;  
   is_active: boolean;
-  roles: Role[];
-  date_joined: string;
+  roles?: Role[] | null;
+  date_joined?: string | null;  
 };
 
 type Language = "en" | "ar";
@@ -1177,12 +1177,12 @@ export function UsersPage() {
                         <td>{user.email || "-"}</td>
                         <td>
                           <div className="role-list">
-                            {user.roles.length === 0 ? (
+                            {(user.roles ?? []).length === 0 ? (                              
                               <span className="role-pill role-pill--empty">
                                 -
                               </span>
                             ) : (
-                              user.roles.map((role) => (
+                              (user.roles ?? []).map((role) => (                                
                                 <span key={role.id} className="role-pill">
                                   {role.name}
                                 </span>
@@ -1202,10 +1202,19 @@ export function UsersPage() {
                           </span>
                         </td>
                         <td>
-                          {new Date(user.date_joined).toLocaleDateString(
-                            isArabic ? "ar-EG" : "en-GB"
-                          )}
-                        </td>
+                          {(() => {
+                            if (!user.date_joined) {
+                              return "-";
+                            }
+                            const parsedDate = new Date(user.date_joined);
+                            if (Number.isNaN(parsedDate.getTime())) {
+                              return "-";
+                            }
+                            return parsedDate.toLocaleDateString(
+                              isArabic ? "ar-EG" : "en-GB"
+                            );
+                          })()}
+                        </td>                        
                         <td>
                           <div className="table-actions">
                             {canEdit && (
