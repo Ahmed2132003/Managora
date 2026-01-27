@@ -6,17 +6,22 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from django.db.models import Q
-
 from django.forms.models import model_to_dict
 
 from core.audit import get_audit_context
 from core.models import AuditLog, Role, User, UserRole
-from core.permissions import PermissionByActionMixin, is_admin_user
+from core.permissions import PermissionByActionMixin
 from core.serializers.users import (
     UserCreateSerializer,
     UserSerializer,
     UserUpdateSerializer,
 )
+
+
+def _role_names(user) -> set[str]:
+    if not user or not getattr(user, "is_authenticated", False):
+        return set()
+    return {name.strip().lower() for name in user.roles.values_list("name", flat=True)}
 
 
 @extend_schema_view(
@@ -27,6 +32,16 @@ from core.serializers.users import (
     destroy=extend_schema(tags=["Users"], summary="Delete user"),
 )
 class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
+    """
+    Users API (multi-tenant).
+
+    قواعد الإنشاء حسب المطلوب:
+    - Superuser: يقدر ينشئ لأي شركة + أي Role من الأربع (Manager/HR/Accountant/Employee).
+    - Manager (داخل الشركة): يقدر ينشئ HR/Accountant/Employee.
+    - HR (داخل الشركة): يقدر ينشئ Accountant/Employee.
+    - Accountant/Employee: ممنوع ينشئوا users.
+    """
+
     queryset = User.objects.select_related("company").prefetch_related("roles")
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
@@ -39,26 +54,32 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         "assign_roles": "users.edit",
         "reset_password": "users.reset_password",
     }
-    
+
     def get_queryset(self):
         queryset = super().get_queryset()
+
+        # Multi-tenant: non-superuser يرى شركته فقط
         if not self.request.user.is_superuser:
             queryset = queryset.filter(company=self.request.user.company)
         else:
+            # superuser optional filter by company id
             company_id = self.request.query_params.get("company")
             if company_id:
                 queryset = queryset.filter(company_id=company_id)
+
         role_id = self.request.query_params.get("role")
         is_active = self.request.query_params.get("is_active")
         search = self.request.query_params.get("search")
-        
+
         if role_id:
             queryset = queryset.filter(roles__id=role_id)
+
         if is_active is not None:
-            if is_active.lower() in {"true", "1", "yes"}:
+            if str(is_active).lower() in {"true", "1", "yes"}:
                 queryset = queryset.filter(is_active=True)
-            elif is_active.lower() in {"false", "0", "no"}:
+            elif str(is_active).lower() in {"false", "0", "no"}:
                 queryset = queryset.filter(is_active=False)
+
         if search:
             queryset = queryset.filter(
                 Q(username__icontains=search) | Q(email__icontains=search)
@@ -73,29 +94,38 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
             return UserUpdateSerializer
         return UserSerializer
 
-    def _allowed_role_names(self, user):
-        if is_admin_user(user):            
-            return None
+    def _allowed_role_names_for_creator(self, creator) -> set[str]:
+        """
+        Returns allowed target role names (lowercase) for create/assign.
+        """
+        if creator.is_superuser:
+            return {"manager", "hr", "accountant", "employee"}
 
-        role_names = {name.lower() for name in user.roles.values_list("name", flat=True)}
-        if "manager" in role_names:
-            return {"hr", "accountant", "employee"}        
-        if "hr" in role_names:
+        creator_roles = _role_names(creator)
+        if "manager" in creator_roles:
+            return {"hr", "accountant", "employee"}
+        if "hr" in creator_roles:
             return {"accountant", "employee"}
         return set()
 
-    def _ensure_roles_allowed(self, roles):
-        if not is_admin_user(self.request.user) and any(            
-            role.name.lower() == "manager" for role in roles
-        ):
-            raise PermissionDenied("Only superusers can assign the Manager role.")
-        allowed = self._allowed_role_names(self.request.user)
-        if allowed is None:
-            return        
+    def _ensure_exactly_one_role(self, role_ids):
+        if not isinstance(role_ids, list):
+            raise PermissionDenied("role_ids must be a list.")
+        if len(role_ids) != 1:
+            raise PermissionDenied(
+                "Assign exactly one role (Manager, HR, Accountant, Employee)."
+            )
+
+    def _ensure_roles_allowed(self, creator, roles):
+        # roles: list[Role] (already filtered by company)
+        if creator.is_superuser:
+            return
+
+        allowed = self._allowed_role_names_for_creator(creator)
         if not allowed:
             raise PermissionDenied("You are not allowed to assign roles.")
 
-        invalid = [role for role in roles if role.name.lower() not in allowed]
+        invalid = [role for role in roles if role.name.strip().lower() not in allowed]
         if invalid:
             raise PermissionDenied("You are not allowed to assign one or more roles.")
 
@@ -103,23 +133,35 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         role_ids = serializer.validated_data.pop("role_ids", [])
         company = serializer.validated_data.pop("company", None)
         password = serializer.validated_data.pop("password")
-        if not self.request.user.is_superuser:
-            company = self.request.user.company
 
-        roles = Role.objects.filter(id__in=role_ids, company=company)
-        if role_ids and len(role_ids) != roles.count():
-            raise PermissionDenied("One or more roles are invalid for this company.")
-        if roles:
-            self._ensure_roles_allowed(list(roles))
+        self._ensure_exactly_one_role(role_ids)
+
+        # company rules
+        if self.request.user.is_superuser:
+            if company is None:
+                raise PermissionDenied("company is required for superuser user creation.")
+        else:
+            company = self.request.user.company  # ignore any provided company
+
+        # role must belong to the same company
+        roles = list(Role.objects.filter(id__in=role_ids, company=company))
+        if len(roles) != 1:
+            raise PermissionDenied("Role is invalid for this company.")
+
+        # creator rules
+        self._ensure_roles_allowed(self.request.user, roles)
 
         user = serializer.save(company=company)
         user.set_password(password)
         user.save(update_fields=["password"])
-        if roles:
-            UserRole.objects.bulk_create(
-                [UserRole(user=user, role=role) for role in roles],
-                ignore_conflicts=True,
-            )
+
+        # Assign role (exactly one)
+        UserRole.objects.filter(user=user).delete()
+        UserRole.objects.bulk_create(
+            [UserRole(user=user, role=roles[0])],
+            ignore_conflicts=True,
+        )
+
         audit_context = get_audit_context()
         AuditLog.objects.create(
             company=company,
@@ -127,12 +169,13 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
             action="users.create",
             entity="user",
             entity_id=str(user.id),
-            before={},            
+            before={},
             after=model_to_dict(user, fields=["id", "username", "email", "is_active"]),
             payload={
                 "username": user.username,
                 "email": user.email,
                 "is_active": user.is_active,
+                "role_id": roles[0].id,
             },
             ip_address=audit_context.ip_address if audit_context else None,
             user_agent=audit_context.user_agent if audit_context else "",
@@ -148,9 +191,10 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         if password:
             user.set_password(password)
             user.save(update_fields=["password"])
+
         audit_context = get_audit_context()
         AuditLog.objects.create(
-            company=self.request.user.company,
+            company=user.company,
             actor=self.request.user,
             action="users.update",
             entity="user",
@@ -165,7 +209,7 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         audit_context = get_audit_context()
         AuditLog.objects.create(
-            company=self.request.user.company,
+            company=instance.company,
             actor=self.request.user,
             action="users.delete",
             entity="user",
@@ -177,43 +221,48 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
             user_agent=audit_context.user_agent if audit_context else "",
         )
         super().perform_destroy(instance)
-                
+
     @extend_schema(
         tags=["Users"],
-        summary="Assign roles to user",
-        request={"application/json": {"type": "object", "properties": {"role_ids": {"type": "array", "items": {"type": "integer"}}}, "required": ["role_ids"]}},
+        summary="Assign role to user (exactly one role)",
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {"role_ids": {"type": "array", "items": {"type": "integer"}}},
+                "required": ["role_ids"],
+            }
+        },
         responses={200: UserSerializer},
     )
     @action(detail=True, methods=["post"], url_path="roles")
-    def assign_roles(self, request, pk=None):        
+    def assign_roles(self, request, pk=None):
         user = self.get_object()
+
         role_ids = request.data.get("role_ids", [])
-        if not isinstance(role_ids, list):
+        self._ensure_exactly_one_role(role_ids)
+
+        roles = list(Role.objects.filter(id__in=role_ids, company=user.company))
+        if len(roles) != 1:
             return Response(
-                {"detail": "role_ids must be a list."},
+                {"detail": "Role is invalid for this user's company."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        roles = Role.objects.filter(id__in=role_ids, company=request.user.company)
-        if len(role_ids) != roles.count():
-            return Response(
-                {"detail": "One or more roles are invalid for this company."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        self._ensure_roles_allowed(list(roles))
-        
+        self._ensure_roles_allowed(request.user, roles)
+
         UserRole.objects.filter(user=user).delete()
         UserRole.objects.bulk_create(
-            [UserRole(user=user, role=role) for role in roles],
+            [UserRole(user=user, role=roles[0])],
             ignore_conflicts=True,
         )
+
         AuditLog.objects.create(
-            company=request.user.company,
+            company=user.company,
             actor=request.user,
             action="roles.assign",
             entity="user",
             entity_id=str(user.id),
-            payload={"role_ids": [role.id for role in roles]},
+            payload={"role_id": roles[0].id},
         )
 
         serializer = UserSerializer(user)
@@ -222,12 +271,19 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
     @extend_schema(
         tags=["Users"],
         summary="Reset user password",
-        request={"application/json": {"type": "object", "properties": {"new_password": {"type": "string"}}, "required": ["new_password"]}},
+        request={
+            "application/json": {
+                "type": "object",
+                "properties": {"new_password": {"type": "string"}},
+                "required": ["new_password"],
+            }
+        },
         responses={200: {"type": "object", "properties": {"detail": {"type": "string"}}}},
     )
     @action(detail=True, methods=["post"], url_path="reset-password")
     def reset_password(self, request, pk=None):
         user = self.get_object()
+
         new_password = request.data.get("new_password")
         if not new_password:
             return Response(
@@ -237,8 +293,9 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
 
         user.set_password(new_password)
         user.save(update_fields=["password"])
+
         AuditLog.objects.create(
-            company=request.user.company,
+            company=user.company,
             actor=request.user,
             action="users.reset_password",
             entity="user",

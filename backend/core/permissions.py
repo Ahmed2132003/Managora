@@ -68,8 +68,12 @@ PERMISSION_DEFINITIONS = {
 }
 
 ROLE_PERMISSION_MAP = {
+    # NOTE:
+    # المنتج عندك فيه 4 أدوار أساسية داخل الشركة (غير السوبر يوزر):
+    # Manager / HR / Accountant / Employee
+    # أبقينا "Admin" كـ backward-compatibility لو عندك بيانات قديمة.
     "Admin": list(PERMISSION_DEFINITIONS.keys()),
-    "Manager": list(PERMISSION_DEFINITIONS.keys()),    
+    "Manager": list(PERMISSION_DEFINITIONS.keys()),
     "HR": [
         "employees.*",
         "attendance.*",
@@ -140,7 +144,7 @@ def user_permission_codes(user):
         name.strip().lower() for name in user.roles.values_list("name", flat=True)
     ]
     for role_name in role_names:
-        derived = normalized_role_map.get(role_name)        
+        derived = normalized_role_map.get(role_name)
         if not derived:
             continue
         if "*" in derived:
@@ -166,7 +170,10 @@ def is_admin_user(user):
         return False
     if user.is_superuser:
         return True
-    return user.roles.filter(name__iexact="admin").exists()
+    # Backward compatible: Admin/Manager كلاهم يعتبروا "إدارة" داخل الشركة.
+    return user.roles.filter(name__iexact="admin").exists() or user.roles.filter(
+        name__iexact="manager"
+    ).exists()
 
 
 class HasPermission(BasePermission):

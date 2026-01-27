@@ -86,14 +86,14 @@ class RolePermission(models.Model):
 
 class UserManager(BaseUserManager):
     use_in_migrations = True
-    def create_user(self, username, email=None, password=None, **extra_fields):
-        user = self.model(username=username, email=email, **extra_fields)
-        user.set_password(password)
-        user.save(using=self._db)
-        return user
 
     def create_user(self, username, email=None, password=None, **extra_fields):
-        # مهم: email في AbstractUser غالبًا NOT NULL، فممنوع ندخل None
+        """Create a normal user.
+
+        Notes:
+        - AbstractUser.email غالباً بيكون required في بعض الإعدادات، فبنمنع None.
+        - company مطلوب عندك لكل الحسابات (حتى السوبر يوزر) حسب تصميم النظام.
+        """
         if email is None:
             email = ""
         else:
@@ -103,6 +103,7 @@ class UserManager(BaseUserManager):
         user.set_password(password)
         user.save(using=self._db)
         return user
+
     def create_superuser(self, username, email=None, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
@@ -128,8 +129,9 @@ class User(AbstractUser):
         through="core.UserRole",
         related_name="users",
         blank=True,
-    )    
+    )
     objects = UserManager()
+
     def __str__(self):
         return self.username
 

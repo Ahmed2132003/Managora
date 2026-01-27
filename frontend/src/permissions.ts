@@ -55,7 +55,8 @@ export const PERMISSION_CODES = [
 ] as const;
 
 export const ROLE_PERMISSIONS = {
-  Admin: ["*"],
+  // 4 roles inside company (غير السوبر يوزر):
+  Manager: ["*"],
   HR: [
     "employees.*",
     "attendance.*",
@@ -63,22 +64,20 @@ export const ROLE_PERMISSIONS = {
     "users.view",
     "users.create",
     "hr.payroll.*",
-  ],      
+  ],
   Accountant: [
     "accounting.*",
     "expenses.*",
     "invoices.*",
-    "customers.*",
+    "customers.view",
+    "customers.create",
+    "customers.edit",
     "export.analytics",
     "export.accounting",
-  ],  
-  Sales: ["customers.view"],  
-  Manager: [
-    "approvals.*",
-    "attendance.view_team",
-    "employees.view_team",
-    "users.view",
-    "users.create",
+  ],
+  Employee: [
+    // MVP: أقل صلاحيات (زوّدها حسب اللي عندك)
+    "expenses.create",
   ],
 } as const;
 

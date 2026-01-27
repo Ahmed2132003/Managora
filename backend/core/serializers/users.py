@@ -4,6 +4,12 @@ from core.models import Company, Role, User
 from core.permissions import is_admin_user
 
 
+def _user_role_names(user) -> set[str]:
+    if not user or not getattr(user, "is_authenticated", False):
+        return set()
+    return {name.strip().lower() for name in user.roles.values_list("name", flat=True)}
+
+
 class RoleMiniSerializer(serializers.ModelSerializer):
     class Meta:
         model = Role
@@ -62,69 +68,85 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
         attrs["company"] = company
 
-        # Role assignment rules
+        # Role assignment rules (الـ4 أدوار الأساسية فقط داخل الشركة)
         role_ids = attrs.get("role_ids") or []
         if request:
             creator = request.user
+            creator_roles = _user_role_names(creator)
 
-            if role_ids:
-                requested_roles = Role.objects.filter(id__in=role_ids)
-                if requested_roles.count() != len(set(role_ids)):
+            # مين مسموح له ينشئ users أصلاً؟
+            if not creator.is_superuser:
+                if "manager" not in creator_roles and "hr" not in creator_roles and not is_admin_user(creator):
                     raise serializers.ValidationError(
-                        {"role_ids": "One or more role_ids are invalid."}
+                        {"detail": "You do not have permission to create users."}
                     )
 
-                if (
-                    not is_admin_user(creator)                    
-                    and requested_roles.filter(name__iexact="Manager").exists()
-                ):
-                    raise serializers.ValidationError(
-                        {"role_ids": "Only superusers can assign the Manager role."}
-                    )
-                    
-                # Superuser can assign any roles (except Manager restriction above)
-                if not is_admin_user(creator):
-                    creator_role_names = {
-                        name.strip().lower()
-                        for name in creator.roles.values_list("name", flat=True)
-                    }
-                    # Rules requested:
-                    # - Manager: can create HR / Accountant / Employee only
-                    # - HR: can create Accountant / Employee only
-                    # - Accountant/Employee: cannot create at all
-                    if "manager" in creator_role_names:                        
-                        allowed_names = {"HR", "Accountant", "Employee"}
-                    elif "hr" in creator_role_names:                        
-                        allowed_names = {"Accountant", "Employee"}
-                        
-                    else:
-                        raise serializers.ValidationError(
-                            {"detail": "You do not have permission to create users."}
-                        )
+            # لازم role واحد (نوع حساب واحد)
+            if not role_ids:
+                raise serializers.ValidationError(
+                    {"role_ids": "You must assign exactly one role when creating a user."}
+                )
+            if len(role_ids) != 1:
+                raise serializers.ValidationError(
+                    {"role_ids": "Assign exactly one role (Manager, HR, Accountant, Employee)."}
+                )
 
-                    requested_names = {
-                        name.strip().lower()
-                        for name in requested_roles.values_list("name", flat=True)
-                    }
-                    normalized_allowed_names = {
-                        name.strip().lower() for name in allowed_names
-                    }
-                    if not requested_names.issubset(normalized_allowed_names):
-                        raise serializers.ValidationError(
-                            {
-                                "role_ids": (
-                                    "You can only assign these roles: "                                    
-                                    + ", ".join(sorted(allowed_names))
-                                )
-                            }
-                        )
+            requested_roles = Role.objects.filter(id__in=role_ids)
+            if requested_roles.count() != 1:
+                raise serializers.ValidationError(
+                    {"role_ids": "One or more role_ids are invalid."}
+                )
+
+            requested_role = requested_roles.first()
+
+            # role لازم يكون من نفس الشركة اللي اليوزر هيتربط بيها
+            if requested_role.company_id != company.id:
+                raise serializers.ValidationError(
+                    {"role_ids": "Role must belong to the same company as the user."}
+                )
+
+            requested_name = (requested_role.name or "").strip().lower()
+            allowed = set()
+
+            # سوبر يوزر يقدر يضيف لأي شركة + أي نوع (Manager/HR/Accountant/Employee)
+            if creator.is_superuser:
+                allowed = {"manager", "hr", "accountant", "employee"}
             else:
-                if not is_admin_user(creator):
-                    raise serializers.ValidationError(
-                        {"role_ids": "You must assign a role when creating users."}
-                    )
+                # داخل الشركة: Manager يضيف HR/Accountant/Employee
+                if "manager" in creator_roles or is_admin_user(creator):
+                    allowed = {"hr", "accountant", "employee"}
+                # HR يضيف Accountant/Employee
+                elif "hr" in creator_roles:
+                    allowed = {"accountant", "employee"}
+                else:
+                    # Accountant/Employee ممنوع
+                    allowed = set()
+
+            if requested_name not in allowed:
+                raise serializers.ValidationError(
+                    {
+                        "role_ids": (
+                            "You can only create users with these roles: "
+                            + ", ".join(sorted({name.title() for name in allowed}))
+                        )
+                    }
+                )
 
         return attrs
+
+    def create(self, validated_data):
+        role_ids = validated_data.pop("role_ids", [])
+        password = validated_data.pop("password")
+
+        user = User(**validated_data)
+        user.set_password(password)
+        user.save()
+
+        if role_ids:
+            roles = Role.objects.filter(id__in=role_ids)
+            user.roles.set(roles)
+
+        return user
     
 
 class UserUpdateSerializer(serializers.ModelSerializer):

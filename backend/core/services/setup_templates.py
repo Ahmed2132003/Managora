@@ -9,7 +9,7 @@ from accounting.models import Account, AccountMapping, ChartOfAccounts
 from accounting.services.seed import TEMPLATES, seed_coa_template
 
 from core.models import CompanySetupState, Permission, Role, RolePermission
-from core.permissions import PERMISSION_DEFINITIONS
+from core.permissions import PERMISSION_DEFINITIONS, ROLE_PERMISSION_MAP
 from hr.models import PolicyRule, Shift, WorkSite
 
 
@@ -33,13 +33,14 @@ FALLBACK_ACCOUNT_TYPES = {
     AccountMapping.Key.SALES_REVENUE: Account.Type.INCOME,
 }
 
-# ✅ Fallback bundle (لو JSON مش موجود) + لازم Accountant/WorkSite/Shift للتست
+# ✅ Fallback bundle (لو JSON مش موجود)
+# IMPORTANT: roles permissions هنا مجرد "marker" — الصلاحيات الحقيقية بتيجي من ROLE_PERMISSION_MAP
 BUILTIN_TEMPLATE_BUNDLES = {
     "services_small": {
         "roles": [
-            {"name": "Manager", "permissions": ["*"]},
-            {"name": "HR", "permissions": ["*"]},
-            {"name": "Accountant", "permissions": ["*"]},
+            {"name": "Manager", "permissions": ["__AUTO__"]},
+            {"name": "HR", "permissions": ["__AUTO__"]},
+            {"name": "Accountant", "permissions": ["__AUTO__"]},
             {"name": "Employee", "permissions": ["expenses.create"]},
         ],
         "attendance": {
@@ -49,7 +50,7 @@ BUILTIN_TEMPLATE_BUNDLES = {
             "shifts": [
                 {
                     "name": "Morning",
-                    "start_time": "09:00",  # ✅ strings (NOT datetime.time)
+                    "start_time": "09:00",
                     "end_time": "17:00",
                     "grace_minutes": 15,
                 }
@@ -113,29 +114,69 @@ def _ensure_permissions(company, permission_codes):
 
 
 def apply_roles(company, roles_data):
+    """Create/update the 4 core roles for the company and sync their permissions.
+
+    Roles (inside company): Manager / HR / Accountant / Employee
+
+    Notes:
+    - Backward compatibility: لو template فيه roles زيادة، هننشئها برضه.
+    - الـ4 core roles دايمًا موجودين.
+    - Sync idempotent.
+    """
     all_permission_codes = set(PERMISSION_DEFINITIONS.keys())
-    template_codes = set()
 
-    for role in roles_data:
-        permissions = role.get("permissions", [])
-        if "*" in permissions:
-            template_codes.update(all_permission_codes)
-        else:
-            template_codes.update(permissions)
+    def desired_codes_for_role(role_name: str, template_permissions: list[str] | None = None) -> set[str]:
+        # 1) Prefer product-defined ROLE_PERMISSION_MAP
+        map_codes = ROLE_PERMISSION_MAP.get(role_name)
+        if map_codes:
+            if "*" in map_codes:
+                return set(all_permission_codes)
+            return set(map_codes)
 
-    permission_objects = _ensure_permissions(company, template_codes)
+        # 2) Fallback: template permissions
+        template_permissions = template_permissions or []
+        if "*" in template_permissions:
+            return set(all_permission_codes)
+        if "__AUTO__" in template_permissions:
+            # Safe default: Manager gets everything, the rest can be tuned from ROLE_PERMISSION_MAP anyway
+            return set(all_permission_codes)
+        return set(template_permissions)
 
-    for role_data in roles_data:
-        role, _ = Role.objects.get_or_create(company=company, name=role_data["name"])
+    role_rows = list(roles_data or [])
 
-        requested_permissions = role_data.get("permissions", [])
-        if "*" in requested_permissions:
-            requested_permissions = list(all_permission_codes)
+    core_names = {"Manager", "HR", "Accountant", "Employee"}
+    existing_names = {str(r.get("name", "")).strip() for r in role_rows if isinstance(r, dict)}
+    for core in core_names:
+        if core not in existing_names:
+            role_rows.append({"name": core, "permissions": ["__AUTO__"]})
 
-        for code in requested_permissions:
-            permission = permission_objects.get(code)
-            if permission:
-                RolePermission.objects.get_or_create(role=role, permission=permission)
+    needed_codes = set()
+    for row in role_rows:
+        name = (row.get("name") or "").strip()
+        perms = row.get("permissions", [])
+        needed_codes.update(desired_codes_for_role(name, perms))
+
+    permission_objects = _ensure_permissions(company, needed_codes)
+
+    for row in role_rows:
+        role_name = (row.get("name") or "").strip()
+        role, _ = Role.objects.get_or_create(company=company, name=role_name)
+
+        desired_codes = desired_codes_for_role(role_name, row.get("permissions", []))
+        desired_perms = [permission_objects[c] for c in desired_codes if c in permission_objects]
+
+        RolePermission.objects.filter(role=role).exclude(permission__in=desired_perms).delete()
+
+        existing_perm_ids = set(
+            RolePermission.objects.filter(role=role).values_list("permission_id", flat=True)
+        )
+        to_create = [
+            RolePermission(role=role, permission=p)
+            for p in desired_perms
+            if p.id not in existing_perm_ids
+        ]
+        if to_create:
+            RolePermission.objects.bulk_create(to_create, ignore_conflicts=True)
 
 
 def apply_attendance(company, attendance_data):
@@ -151,15 +192,13 @@ def apply_attendance(company, attendance_data):
             },
         )
 
-    # ✅ هنا الإصلاح: ممنوع parse_time (بيرجع datetime.time)
-    # نخلي start_time/end_time strings عشان مايحصلش JSON serialization error
     for shift in attendance_data.get("shifts", []):
         Shift.objects.update_or_create(
             company=company,
             name=shift["name"],
             defaults={
-                "start_time": shift["start_time"],  # ✅ string
-                "end_time": shift["end_time"],      # ✅ string
+                "start_time": shift["start_time"],  # string
+                "end_time": shift["end_time"],      # string
                 "grace_minutes": shift.get("grace_minutes", 0),
                 "is_active": True,
             },

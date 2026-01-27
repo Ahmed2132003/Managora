@@ -3,7 +3,6 @@ import {
   Button,
   Group,
   Modal,
-  MultiSelect,
   PasswordInput,
   Select,
   Stack,
@@ -368,7 +367,7 @@ const createSchema = z.object({
     .string()
     .min(8, "Password must be at least 8 characters / كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
   is_active: z.boolean(),
-  role_ids: z.array(z.string()).default([]),
+  role_id: z.string().min(1, "Role is required / الدور مطلوب"),
   company_id: z.string().optional(),
 });
 
@@ -390,7 +389,7 @@ const editSchema = z.object({
         "Password must be at least 8 characters / كلمة المرور يجب أن تكون 8 أحرف على الأقل",
     }),
   is_active: z.boolean(),
-  role_ids: z.array(z.string()).default([]),
+  role_id: z.string().min(1, "Role is required / الدور مطلوب"),
 });
 
 /**
@@ -407,7 +406,7 @@ const defaultCreateValues: CreateFormValues = {
   password: "",
 
   is_active: true,
-  role_ids: [],
+  role_id: "",
   company_id: undefined,
 };
 
@@ -417,7 +416,7 @@ const defaultEditValues: EditFormValues = {
   email: "",
   password: "",
   is_active: true,
-  role_ids: [],
+  role_id: "",
 };
 
 /* ================= Page ================= */
@@ -540,7 +539,7 @@ export function UsersPage() {
         email: values.email ?? "",
         password: values.password,        
         is_active: values.is_active,
-        role_ids: (values.role_ids ?? []).map(Number),
+        role_ids: values.role_id ? [Number(values.role_id)] : [],
       };
       if (isSuperuser) {
         payload.company = values.company_id ? Number(values.company_id) : undefined;
@@ -603,7 +602,7 @@ export function UsersPage() {
 
       await http.patch(`${endpoints.users}${values.id}/`, payload);
       await http.post(`${endpoints.users}${values.id}/roles/`, {
-        role_ids: (values.role_ids ?? []).map(Number),
+        role_ids: values.role_id ? [Number(values.role_id)] : [],
       });
     },
     onSuccess: () => {
@@ -648,7 +647,7 @@ export function UsersPage() {
       (data?.roles ?? []).map((role) => role.name.toLowerCase())
     );
     if (roleNames.has("manager")) {
-      return new Set(["manager", "hr", "accountant", "employee"]);      
+      return new Set(["hr", "accountant", "employee"]);      
     }
     if (roleNames.has("hr")) {
       return new Set(["accountant", "employee"]);
@@ -700,7 +699,7 @@ export function UsersPage() {
       email: user.email ?? "",
       password: "",
       is_active: user.is_active,
-      role_ids: (user.roles ?? []).map((role) => String(role.id)),
+      role_id: user.roles && user.roles.length ? String(user.roles[0].id) : "",
     });
     setEditOpened(true);
   }
@@ -1320,18 +1319,20 @@ export function UsersPage() {
 
             <Controller
               control={createForm.control}
-              name="role_ids"
+              name="role_id"
               render={({
                 field,
               }: {
-                field: ControllerRenderProps<CreateFormValues, "role_ids">;
+                field: ControllerRenderProps<CreateFormValues, "role_id">;
               }) => (
-                <MultiSelect
+                <Select
                   label={content.form.roles}
                   placeholder={content.form.rolesPlaceholder}
-                  data={assignableRoleOptions}                  
-                  value={field.value ?? []}
+                  data={assignableRoleOptions}
+                  value={field.value ?? null}
                   onChange={field.onChange}
+                  error={createForm.formState.errors.role_id?.message}
+                  required
                 />
               )}
             />
@@ -1427,18 +1428,20 @@ export function UsersPage() {
 
             <Controller
               control={editForm.control}
-              name="role_ids"
+              name="role_id"
               render={({
                 field,
               }: {
-                field: ControllerRenderProps<EditFormValues, "role_ids">;
+                field: ControllerRenderProps<EditFormValues, "role_id">;
               }) => (
-                <MultiSelect
+                <Select
                   label={content.form.roles}
                   placeholder={content.form.rolesPlaceholder}
-                  data={assignableRoleOptions}                  
-                  value={field.value ?? []}
+                  data={assignableRoleOptions}
+                  value={field.value ?? null}
                   onChange={field.onChange}
+                  error={editForm.formState.errors.role_id?.message}
+                  required
                 />
               )}
             />
