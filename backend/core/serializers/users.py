@@ -75,7 +75,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
                     )
 
                 if (
-                    not creator.is_superuser
+                    not is_admin_user(creator)                    
                     and requested_roles.filter(name__iexact="Manager").exists()
                 ):
                     raise serializers.ValidationError(

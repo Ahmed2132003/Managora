@@ -68,7 +68,8 @@ PERMISSION_DEFINITIONS = {
 }
 
 ROLE_PERMISSION_MAP = {
-    "Manager": list(PERMISSION_DEFINITIONS.keys()),
+    "Admin": list(PERMISSION_DEFINITIONS.keys()),
+    "Manager": list(PERMISSION_DEFINITIONS.keys()),    
     "HR": [
         "employees.*",
         "attendance.*",
@@ -161,7 +162,11 @@ def user_has_permission(user, required_code):
 
 
 def is_admin_user(user):
-    return user and user.is_superuser
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    return user.roles.filter(name__iexact="admin").exists()
 
 
 class HasPermission(BasePermission):

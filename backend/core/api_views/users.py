@@ -85,7 +85,7 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         return set()
 
     def _ensure_roles_allowed(self, roles):
-        if not self.request.user.is_superuser and any(
+        if not is_admin_user(self.request.user) and any(            
             role.name.lower() == "manager" for role in roles
         ):
             raise PermissionDenied("Only superusers can assign the Manager role.")
