@@ -20,11 +20,13 @@ const refreshClient = axios.create({
   },
 });
 
+let refreshPromise: Promise<string | null> | null = null;
+
 http.interceptors.request.use((config) => {
   const accessToken = getAccessToken();
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
-  }
+  }  
   return config;
 });
 
@@ -44,21 +46,41 @@ http.interceptors.response.use(
       });
     }
 
-    if (status === 401 && refreshToken && !originalRequest?._retry) {
+    if (
+      status === 401 &&
+      refreshToken &&
+      !originalRequest?._retry &&
+      !originalRequest?.url?.includes(endpoints.auth.refresh)
+    ) {
       originalRequest._retry = true;
       try {
-        const refreshResponse = await refreshClient.post(endpoints.auth.refresh, {
-          refresh: refreshToken,
-        });
-        const newAccess = refreshResponse.data?.access;
+        if (!refreshPromise) {
+          refreshPromise = refreshClient
+            .post(endpoints.auth.refresh, {
+              refresh: refreshToken,
+            })
+            .then((refreshResponse) => {
+              const newAccess = refreshResponse.data?.access;
+              if (!newAccess) {
+                return null;
+              }
+              setTokens({ access: newAccess, refresh: refreshToken });
+              return newAccess;
+            })
+            .finally(() => {
+              refreshPromise = null;
+            });
+        }
+
+        const newAccess = await refreshPromise;
 
         if (newAccess) {
-          setTokens({ access: newAccess, refresh: refreshToken });
+          originalRequest.headers = originalRequest.headers ?? {};
           originalRequest.headers.Authorization = `Bearer ${newAccess}`;
           return http(originalRequest);
         }
       } catch (refreshError) {
-        clearTokens();
+        clearTokens();        
         return Promise.reject(refreshError);
       }
     }
