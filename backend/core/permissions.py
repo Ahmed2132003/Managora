@@ -8,7 +8,7 @@ PERMISSION_DEFINITIONS = {
     "users.create": "Create users",
     "users.edit": "Edit users",
     "users.delete": "Delete users",
-    "users.reset_password": "Reset user passwords",    
+    "users.reset_password": "Reset user passwords",
     "employees.*": "Manage employees",
     "employees.view_team": "View team employees",
     "attendance.*": "Manage attendance",
@@ -18,17 +18,17 @@ PERMISSION_DEFINITIONS = {
     "accounting.view": "View chart of accounts",
     "accounting.manage_coa": "Manage chart of accounts",
     "accounting.journal.view": "View journal entries",
-    "accounting.journal.post": "Post journal entries",    
+    "accounting.journal.post": "Post journal entries",
     "accounting.reports.view": "View accounting reports",
-    "expenses.*": "Manage expenses",    
+    "expenses.*": "Manage expenses",
     "expenses.view": "View expenses",
     "expenses.create": "Create expenses",
     "expenses.approve": "Approve expenses",
-    "invoices.*": "Manage invoices",    
+    "invoices.*": "Manage invoices",
     "customers.view": "View customers",
     "customers.create": "Create customers",
     "customers.edit": "Edit customers",
-    "approvals.*": "Manage approvals",        
+    "approvals.*": "Manage approvals",
     "hr.departments.view": "View departments",
     "hr.departments.create": "Create departments",
     "hr.departments.edit": "Edit departments",
@@ -79,13 +79,12 @@ ROLE_PERMISSION_MAP = {
         "hr.job_titles.*",
         "hr.employees.*",
         "hr.documents.*",
-        "hr.payroll.*",        
+        "hr.payroll.*",
         "analytics.view_hr",
         "copilot.attendance_report",
         "copilot.top_late_employees",
         "copilot.payroll_summary",
-    ],     
-            
+    ],
     "Accountant": [
         "accounting.*",
         "accounting.view",
@@ -104,20 +103,20 @@ ROLE_PERMISSION_MAP = {
         "export.accounting",
         "copilot.payroll_summary",
         "copilot.top_debtors",
-        "copilot.profit_change_explain",        
-    ],                                                                                                                                                                      
+        "copilot.profit_change_explain",
+    ],
     "Sales": [
         "customers.view",
     ],
     "Manager": [
         "approvals.*",
         "attendance.view_team",
-        "employees.view_team",        
+        "employees.view_team",
         "hr.employees.view",
         "users.view",
         "users.create",
     ],
-}    
+}
 
 
 def _permission_code_matches(granted_code, required_code):
@@ -133,9 +132,25 @@ def user_permission_codes(user):
     if not user or not user.is_authenticated:
         return set()
 
-    return set(
+    # 1) Primary source: permissions stored in DB (Role <-> Permission M2M)
+    codes = set(
         Permission.objects.filter(roles__users=user).values_list("code", flat=True)
     )
+
+    # 2) Fallback source: derive permissions from ROLE_PERMISSION_MAP
+    # This makes the system work even if the DB role-permission M2M was not seeded yet.
+    # DB permissions (if present) always override/extend the derived ones.
+    role_names = list(user.roles.values_list("name", flat=True))
+    for role_name in role_names:
+        derived = ROLE_PERMISSION_MAP.get(role_name)
+        if not derived:
+            continue
+        if "*" in derived:
+            codes.update(PERMISSION_DEFINITIONS.keys())
+        else:
+            codes.update(derived)
+
+    return codes
 
 
 def user_has_permission(user, required_code):
@@ -145,13 +160,12 @@ def user_has_permission(user, required_code):
         return True
 
     codes = user_permission_codes(user)
-    return any(
-        _permission_code_matches(code, required_code) for code in codes
-    )
+    return any(_permission_code_matches(code, required_code) for code in codes)
 
 
 def is_admin_user(user):
     return user and (user.is_superuser or user.roles.filter(name="Admin").exists())
+
 
 class HasPermission(BasePermission):
     message = "You do not have permission to perform this action."
@@ -170,14 +184,12 @@ class HasAnyPermission(BasePermission):
         self.permission_codes = permission_codes
 
     def has_permission(self, request, view):
-        return any(
-            user_has_permission(request.user, code) for code in self.permission_codes
-        )
+        return any(user_has_permission(request.user, code) for code in self.permission_codes)
 
 
 class PermissionByActionMixin:
     permission_map = {}
-    
+
     def get_permissions(self):
         permissions = [permission() for permission in self.permission_classes]
         permission_code = self.permission_map.get(getattr(self, "action", None))
