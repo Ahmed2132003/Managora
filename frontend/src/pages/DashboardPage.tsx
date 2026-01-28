@@ -54,8 +54,9 @@ type Content = {
   loadingLabel: string;
   nav: {
     dashboard: string;
+    adminPanel: string;
     users: string;
-    attendanceSelf: string;
+    attendanceSelf: string;    
     leaveBalance: string;
     leaveRequest: string;
     leaveMyRequests: string;
@@ -135,7 +136,8 @@ const contentMap: Record<Language, Content> = {
     loadingLabel: "Loading...",
     nav: {
       dashboard: "Dashboard",
-      users: "Users",
+      adminPanel: "Admin",
+      users: "Users",      
       attendanceSelf: "My Attendance",
       leaveBalance: "Leave Balance",
       leaveRequest: "Leave Request",
@@ -214,7 +216,8 @@ const contentMap: Record<Language, Content> = {
     loadingLabel: "جاري التحميل...",
     nav: {
       dashboard: "لوحة التحكم",
-      users: "المستخدمون",
+      adminPanel: "الإدارة",
+      users: "المستخدمون",      
       attendanceSelf: "حضوري",
       leaveBalance: "رصيد الإجازات",
       leaveRequest: "طلب إجازة",
@@ -257,7 +260,8 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { data, isLoading, isError } = useMe();
-  const [language, setLanguage] = useState<Language>(() => {
+  const isSuperuser = Boolean(data?.user.is_superuser);
+  const [language, setLanguage] = useState<Language>(() => {    
     const stored =
       typeof window !== "undefined"
         ? window.localStorage.getItem("managora-language")
@@ -454,10 +458,26 @@ export function DashboardPage() {
     navigate("/login", { replace: true });
   }
 
-  const navLinks = useMemo(
+  type NavLink = {
+    path: string;
+    label: string;
+    icon: string;
+    permissions?: string[];
+    superuserOnly?: boolean;
+    external?: boolean;
+  };
+
+  const navLinks = useMemo<NavLink[]>(
     () => [
       { path: "/dashboard", label: content.nav.dashboard, icon: "🏠" },
-      { path: "/users", label: content.nav.users, icon: "👥", permissions: ["users.view"] },
+      {
+        path: "/admin/",
+        label: content.nav.adminPanel,
+        icon: "🛠️",
+        superuserOnly: true,
+        external: true,
+      },
+      { path: "/users", label: content.nav.users, icon: "👥", permissions: ["users.view"] },      
       {
         path: "/attendance/self",
         label: content.nav.attendanceSelf,
@@ -633,6 +653,9 @@ export function DashboardPage() {
 
   const visibleNavLinks = useMemo(() => {
     return navLinks.filter((link) => {
+      if (link.superuserOnly && !isSuperuser) {
+        return false;
+      }
       if (!link.permissions || link.permissions.length === 0) {
         return true;
       }
@@ -640,7 +663,7 @@ export function DashboardPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
+  }, [isSuperuser, navLinks, userPermissions]);
 
   return (
     <div
@@ -724,8 +747,14 @@ export function DashboardPage() {
                   className={`nav-item${
                     location.pathname === link.path ? " nav-item--active" : ""
                   }`}
-                  onClick={() => navigate(link.path)}
-                >
+                  onClick={() => {
+                    if (link.external) {
+                      window.location.assign(link.path);
+                      return;
+                    }
+                    navigate(link.path);
+                  }}
+                >                  
                   <span className="nav-icon" aria-hidden="true">
                     {link.icon}
                   </span>
