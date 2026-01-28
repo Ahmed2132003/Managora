@@ -22,22 +22,27 @@ class MeView(APIView):
         company = getattr(user, "company", None)
 
         if company is None:
-            return Response({"detail": "User is not linked to a company."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "User is not linked to a company."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         roles = user.roles.order_by("name")
+
         if user.is_superuser:
             permissions = ["*"]
         else:
             permissions = sorted(user_permission_codes(user))
-                               
+
         employee = getattr(user, "employee_profile", None)
 
-        data = {
+        payload = {
             "user": user,
             "company": company,
             "roles": roles,
             "permissions": list(permissions),
             "employee": employee,
         }
-        serializer = MeSerializer(data)
+
+        serializer = MeSerializer(payload, context={"request": request})
         return Response(serializer.data)

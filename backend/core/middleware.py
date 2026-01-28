@@ -1,51 +1,59 @@
-import logging
 import time
-from uuid import uuid4
+import uuid
 
-from core.audit import clear_audit_context, get_audit_context, get_client_ip, set_audit_context
+from django.utils.deprecation import MiddlewareMixin
 
 
-class AuditContextMiddleware:    
-    def __init__(self, get_response):
-        self.get_response = get_response
+class AuditContextMiddleware(MiddlewareMixin):
+    """Attach request-scoped audit context attributes.
 
-    def __call__(self, request):
-        request_id = request.META.get("HTTP_X_REQUEST_ID") or str(uuid4())
-        set_audit_context(
-            user=getattr(request, "user", None),
-            ip_address=get_client_ip(request),
-            user_agent=request.META.get("HTTP_USER_AGENT"),
-            request_id=request_id,
-        )
+    We keep this middleware very defensive so it never breaks request handling.
+    """
+
+    def process_request(self, request):
+        request.request_id = request.META.get("HTTP_X_REQUEST_ID") or str(uuid.uuid4())
+
+        user = getattr(request, "user", None)
+        if user and getattr(user, "is_authenticated", False):
+            # Determine the active company for this request.
+            company_id = getattr(user, "company_id", None)
+
+            # Optional: allow superuser to override for debugging via header
+            # Example header: X-Company-ID: 7
+            if getattr(user, "is_superuser", False):
+                hdr_company = request.META.get("HTTP_X_COMPANY_ID")
+                if hdr_company:
+                    try:
+                        company_id = int(hdr_company)
+                    except (TypeError, ValueError):
+                        pass
+
+            request.company_id = company_id
+        else:
+            request.company_id = None
+
+        # Helpful for downstream usage (optional)
+        request.actor_id = getattr(user, "id", None) if user and getattr(user, "is_authenticated", False) else None
+
+
+class RequestLoggingMiddleware(MiddlewareMixin):
+    """Lightweight request timing/logging middleware.
+
+    Your project logger (core.logging.JsonFormatter) will pick up these fields if configured.
+    This class must exist because it's referenced in settings.MIDDLEWARE.
+    """
+
+    def process_request(self, request):
+        request._start_time = time.time()
+
+    def process_response(self, request, response):
         try:
-            response = self.get_response(request)
-        finally:
-            clear_audit_context()
-        return response
-
-
-class RequestLoggingMiddleware:
-    def __init__(self, get_response):
-        self.get_response = get_response
-        self.logger = logging.getLogger("managora.request")
-
-    def __call__(self, request):
-        start_time = time.monotonic()
-        response = self.get_response(request)
-        latency_ms = round((time.monotonic() - start_time) * 1000, 2)
-        audit_context = get_audit_context()
-        request_id = audit_context.request_id if audit_context else None
-        response["X-Request-ID"] = request_id or ""
-        self.logger.info(
-            "request_completed",
-            extra={
-                "request_id": request_id,
-                "company_id": audit_context.company_id if audit_context else None,
-                "user_id": audit_context.user_id if audit_context else None,
-                "method": request.method,
-                "endpoint": request.path,
-                "status_code": response.status_code,
-                "latency_ms": latency_ms,
-            },
-        )
+            start = getattr(request, "_start_time", None)
+            if start is not None:
+                latency_ms = (time.time() - start) * 1000.0
+                response["X-Request-ID"] = getattr(request, "request_id", "")
+                response["X-Latency-ms"] = f"{latency_ms:.2f}"
+        except Exception:
+            # Never break responses because of logging headers
+            pass
         return response

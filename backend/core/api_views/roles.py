@@ -2,37 +2,43 @@ from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework import status
 
 from core.models import Role
 from core.serializers.roles import RoleSerializer
 
 
+def _user_is_company_admin(user) -> bool:
+    """Returns True if the user should be able to see/admin all roles in their company."""
+    if getattr(user, "is_superuser", False):
+        return True
+
+    roles_rel = getattr(user, "roles", None)
+    if roles_rel is None:
+        return False
+
+    # Support both name and slug.
+    return roles_rel.filter(name__iexact="admin").exists() or roles_rel.filter(slug__iexact="admin").exists()
+
+
+@extend_schema(tags=["Auth"], summary="List roles (company scoped)")
 class RoleListView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(
-        tags=["Roles"],
-        summary="List roles",
-        description="Return roles for the authenticated user's company.",
-        responses={200: RoleSerializer(many=True)},
-    )
     def get(self, request):
-        if request.user.is_superuser:
-            roles = Role.objects.filter(company=request.user.company)
-        else:
-            role_names = {name.lower() for name in request.user.roles.values_list("name", flat=True)}
-            if "manager" in role_names:
-                allowed = {"hr", "accountant", "employee"}                               
-            elif "hr" in role_names:
-                allowed = {"accountant", "employee"}
-            else:
-                return Response(
-                    {"detail": "You do not have permission to perform this action."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            roles = Role.objects.filter(company=request.user.company, name__in=allowed)
+        user = request.user
+        company_id = getattr(user, "company_id", None)
 
-        roles = roles.prefetch_related("permissions").order_by("name")
-        serializer = RoleSerializer(roles, many=True)
-        return Response(serializer.data)
+        if not company_id:
+            return Response([])
+
+        qs = Role.objects.filter(company_id=company_id).order_by("name")
+
+        # Manager / non-admin should not see the Admin role.
+        if not _user_is_company_admin(user):
+            qs = qs.exclude(slug__iexact="admin").exclude(name__iexact="admin")
+
+        return Response(RoleSerializer(qs, many=True).data)
+
+
+# Backward/forward compatibility if somewhere imports RolesListView
+RolesListView = RoleListView

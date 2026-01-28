@@ -66,6 +66,16 @@ function formatApiError(err: unknown): string {
   return String(data);
 }
 
+
+function isUnauthorized(err: unknown): boolean {
+  const maybe = err as {
+    response?: { status?: number };
+    status?: number;
+  };
+  const status = maybe?.response?.status ?? maybe?.status;
+  return status === 401;
+}
+
 /* ================= Types ================= */
 
 type Role = {
@@ -465,6 +475,7 @@ export function UsersPage() {
   const location = useLocation();
   const { data, isLoading, isError } = useMe();
   const isSuperuser = Boolean(data?.user.is_superuser);
+  const companyId = data?.company?.id;
 
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
@@ -533,27 +544,45 @@ export function UsersPage() {
     defaultValues: defaultEditValues,
   });
 
+
+  const handleUnauthorized = (err: unknown) => {
+    if (!isUnauthorized(err)) return;
+    notifications.show({
+      title: "Session expired",
+      message: language === "ar" ? "انتهت الجلسة. برجاء تسجيل الدخول مرة أخرى." : "Your session has expired. Please log in again.",
+      color: "red",
+    });
+    clearTokens();
+    queryClient.clear();
+    navigate("/login", { replace: true });
+  };
+
   /* ================= Queries ================= */
 
-  const rolesQuery = useQuery({
-    queryKey: ["roles"],
+  const rolesQuery = useQuery<Role[], unknown>({
+    queryKey: ["roles", companyId],
+    enabled: !isLoading && !isError,
+    retry: false,
     queryFn: async () => {
       const res = await http.get<Role[]>(endpoints.roles);
       return res.data;
     },
   });
 
-  const companiesQuery = useQuery({
+  const companiesQuery = useQuery<Company[], unknown>({
     queryKey: ["companies"],
+    enabled: isSuperuser && !isLoading && !isError,
+    retry: false,
     queryFn: async () => {
       const res = await http.get<Company[]>(endpoints.companies);
       return res.data;
     },
-    enabled: isSuperuser,
   });
 
-  const usersQuery = useQuery({
-    queryKey: ["users", { search, roleFilter, activeFilter }],
+  const usersQuery = useQuery<User[], unknown>({
+    queryKey: ["users", companyId, { search, roleFilter, activeFilter }],
+    enabled: !isLoading && !isError,
+    retry: false,
     queryFn: async () => {
       const params: Record<string, string> = {};
       if (search.trim()) params.search = search.trim();
@@ -565,7 +594,21 @@ export function UsersPage() {
     },
   });
 
-  /* ================= Mutations ================= */
+  
+// Handle auth errors (TanStack Query v5 removed onError callbacks in useQuery).
+useEffect(() => {
+  if (rolesQuery.isError) handleUnauthorized(rolesQuery.error);
+}, [rolesQuery.isError, rolesQuery.error]);
+
+useEffect(() => {
+  if (companiesQuery.isError) handleUnauthorized(companiesQuery.error);
+}, [companiesQuery.isError, companiesQuery.error]);
+
+useEffect(() => {
+  if (usersQuery.isError) handleUnauthorized(usersQuery.error);
+}, [usersQuery.isError, usersQuery.error]);
+
+/* ================= Mutations ================= */
 
   const createMutation = useMutation({
     mutationFn: async (values: CreateFormValues) => {
@@ -693,7 +736,7 @@ export function UsersPage() {
       return null;
     }
     const roleNames = new Set(
-      (data?.roles ?? []).map((role) => role.name.toLowerCase())
+      (data?.roles ?? []).map((role: Role) => role.name.toLowerCase())
     );
     if (roleNames.has("manager")) {
       return new Set(["hr", "accountant", "employee"]);         
@@ -706,7 +749,7 @@ export function UsersPage() {
 
   const roleOptions = useMemo(
     () =>
-      (rolesQuery.data ?? []).map((role) => ({
+      (rolesQuery.data ?? []).map((role: Role) => ({
         value: String(role.id),
         label: role.name,
       })),
@@ -716,7 +759,7 @@ export function UsersPage() {
   const assignableRoleOptions = useMemo(
     () =>
       (rolesQuery.data ?? [])
-        .filter((role) => {
+        .filter((role: Role) => {
           if (!allowedRoleNames) {
             return true;
           }
@@ -725,7 +768,7 @@ export function UsersPage() {
           }
           return allowedRoleNames.has(role.name.toLowerCase());
         })
-        .map((role) => ({
+        .map((role: Role) => ({
           value: String(role.id),
           label: role.name,
         })),
@@ -734,7 +777,7 @@ export function UsersPage() {
 
   const companyOptions = useMemo(
     () =>
-      (companiesQuery.data ?? []).map((company) => ({
+      (companiesQuery.data ?? []).map((company: Company) => ({
         value: String(company.id),
         label: company.name,
       })),
@@ -764,7 +807,7 @@ export function UsersPage() {
   }
 
   const users = usersQuery.data ?? [];
-  const activeUsers = users.filter((user) => user.is_active).length;
+  const activeUsers = users.filter((user: User) => user.is_active).length;
   const inactiveUsers = users.length - activeUsers;
 
   const navLinks = useMemo(
@@ -1149,7 +1192,7 @@ export function UsersPage() {
                   }
                 >
                   <option value="">{content.rolePlaceholder}</option>
-                  {roleOptions.map((option) => (
+                  {roleOptions.map((option: { value: string; label: string }) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -1214,7 +1257,7 @@ export function UsersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map((user) => (
+                    {users.map((user: User) => (
                       <tr key={user.id}>
                         <td>
                           <div className="user-cell">
@@ -1230,7 +1273,7 @@ export function UsersPage() {
                                 -
                               </span>
                             ) : (
-                              (user.roles ?? []).map((role) => (                                
+                              (user.roles ?? []).map((role: Role) => (                                
                                 <span key={role.id} className="role-pill">
                                   {role.name}
                                 </span>
