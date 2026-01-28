@@ -52,18 +52,12 @@ type Content = {
   qr: {
     title: string;
     subtitle: string;
-    worksiteLabel: string;
-    worksitePlaceholder: string;
-    shiftLabel: string;
-    shiftPlaceholder: string;
-    expiresLabel: string;
-    expiresPlaceholder: string;
     generate: string;
     tokenLabel: string;
-    expiresAt: string;
+    validFrom: string;
+    validUntil: string;
     worksite: string;
-    shift: string;
-  };
+  };  
   table: {
     title: string;
     subtitle: string;
@@ -82,11 +76,9 @@ type Content = {
   statusMap: Record<string, string>;
   methodMap: Record<string, string>;
   notifications: {
-    missingTitle: string;
-    missingMessage: string;
     qrTitle: string;
     qrMessage: string;
-    qrFailedTitle: string;
+    qrFailedTitle: string;    
     qrFailedMessage: string;
   };
   userFallback: string;
@@ -162,20 +154,14 @@ const contentMap: Record<Language, Content> = {
       absent: "Absent",
     },
     qr: {
-      title: "Generate QR token",
-      subtitle: "Instant attendance for onsite teams",
-      worksiteLabel: "Worksite ID",
-      worksitePlaceholder: "Example: 2",
-      shiftLabel: "Shift ID",
-      shiftPlaceholder: "Example: 1",
-      expiresLabel: "Expires (minutes)",
-      expiresPlaceholder: "60",
-      generate: "Generate",
+      title: "Company QR token",
+      subtitle: "Daily QR token based on the company schedule",
+      generate: "Refresh token",
       tokenLabel: "Token",
-      expiresAt: "Expires at",
+      validFrom: "Valid from",
+      validUntil: "Valid until",
       worksite: "Worksite",
-      shift: "Shift",
-    },
+    },    
     table: {
       title: "Attendance log",
       subtitle: "Live check-in and check-out status",
@@ -204,11 +190,9 @@ const contentMap: Record<Language, Content> = {
       gps: "GPS",
     },
     notifications: {
-      missingTitle: "Missing info",
-      missingMessage: "Please enter Worksite ID and Shift ID.",
       qrTitle: "QR generated",
       qrMessage: "QR token generated successfully.",
-      qrFailedTitle: "Failed to generate QR",
+      qrFailedTitle: "Failed to generate QR",      
       qrFailedMessage: "Something went wrong while creating the QR token.",
     },
     userFallback: "Explorer",
@@ -282,20 +266,14 @@ const contentMap: Record<Language, Content> = {
       absent: "غائب",
     },
     qr: {
-      title: "إنشاء رمز QR",
-      subtitle: "تسجيل فوري للحضور داخل الموقع",
-      worksiteLabel: "رقم الموقع",
-      worksitePlaceholder: "مثال: 2",
-      shiftLabel: "رقم الشيفت",
-      shiftPlaceholder: "مثال: 1",
-      expiresLabel: "الانتهاء (دقيقة)",
-      expiresPlaceholder: "60",
-      generate: "إنشاء",
+      title: "رمز QR الخاص بالشركة",
+      subtitle: "رمز يومي مرتبط بجدول الشركة",
+      generate: "تحديث الرمز",
       tokenLabel: "الرمز",
-      expiresAt: "ينتهي في",
+      validFrom: "بداية الصلاحية",
+      validUntil: "نهاية الصلاحية",
       worksite: "الموقع",
-      shift: "الشيفت",
-    },
+    },    
     table: {
       title: "سجل الحضور",
       subtitle: "تفاصيل الدخول والخروج المباشرة",
@@ -324,11 +302,9 @@ const contentMap: Record<Language, Content> = {
       gps: "GPS",
     },
     notifications: {
-      missingTitle: "بيانات ناقصة",
-      missingMessage: "من فضلك أدخل رقم الموقع ورقم الشيفت.",
       qrTitle: "تم إنشاء الكود",
       qrMessage: "تم إنشاء كود QR بنجاح.",
-      qrFailedTitle: "تعذر إنشاء الكود",
+      qrFailedTitle: "تعذر إنشاء الكود",      
       qrFailedMessage: "حدث خطأ أثناء إنشاء كود QR.",
     },
     userFallback: "ضيف",
@@ -389,15 +365,12 @@ export function HRAttendancePage() {
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [status, setStatus] = useState<string | null>(null);
-  const [qrWorksiteId, setQrWorksiteId] = useState<number | undefined>(undefined);
-  const [qrShiftId, setQrShiftId] = useState<number | undefined>(undefined);
-  const [qrExpiryMinutes, setQrExpiryMinutes] = useState<number | undefined>(60);
   const [qrToken, setQrToken] = useState<{
     token: string;
-    expires_at: string;
+    valid_from: string;
+    valid_until: string;
     worksite_id: number;
-    shift_id: number;
-  } | null>(null);
+  } | null>(null);  
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
       typeof window !== "undefined"
@@ -680,25 +653,12 @@ export function HRAttendancePage() {
   }
 
   async function handleGenerateQr() {
-    if (!qrWorksiteId || !qrShiftId) {
-      notifications.show({
-        title: content.notifications.missingTitle,
-        message: content.notifications.missingMessage,
-        color: "red",
-      });
-      return;
-    }
-
     try {
-      const token = await qrGenerateMutation.mutateAsync({
-        worksite_id: qrWorksiteId,
-        shift_id: qrShiftId,
-        expires_in_minutes: qrExpiryMinutes,
-      });
+      const token = await qrGenerateMutation.mutateAsync();
       setQrToken(token);
       notifications.show({
         title: content.notifications.qrTitle,
-        message: content.notifications.qrMessage,
+        message: content.notifications.qrMessage,        
       });
     } catch {
       notifications.show({
@@ -925,47 +885,10 @@ export function HRAttendancePage() {
               </div>
             </div>
             <div className="attendance-qr-grid">
-              <label className="filter-field">
-                {content.qr.worksiteLabel}
-                <input
-                  type="number"
-                  min={1}
-                  value={qrWorksiteId ?? ""}
-                  placeholder={content.qr.worksitePlaceholder}
-                  onChange={(event) =>
-                    setQrWorksiteId(event.target.value ? Number(event.target.value) : undefined)
-                  }
-                />
-              </label>
-              <label className="filter-field">
-                {content.qr.shiftLabel}
-                <input
-                  type="number"
-                  min={1}
-                  value={qrShiftId ?? ""}
-                  placeholder={content.qr.shiftPlaceholder}
-                  onChange={(event) =>
-                    setQrShiftId(event.target.value ? Number(event.target.value) : undefined)
-                  }
-                />
-              </label>
-              <label className="filter-field">
-                {content.qr.expiresLabel}
-                <input
-                  type="number"
-                  min={1}
-                  max={1440}
-                  value={qrExpiryMinutes ?? ""}
-                  placeholder={content.qr.expiresPlaceholder}
-                  onChange={(event) =>
-                    setQrExpiryMinutes(event.target.value ? Number(event.target.value) : undefined)
-                  }
-                />
-              </label>
               <button
                 type="button"
                 className="primary-button"
-                onClick={handleGenerateQr}
+                onClick={handleGenerateQr}                
                 disabled={qrGenerateMutation.isPending}
               >
                 {qrGenerateMutation.isPending ? `${content.qr.generate}...` : content.qr.generate}
@@ -979,14 +902,17 @@ export function HRAttendancePage() {
                 </label>
                 <div className="qr-token-meta">
                   <span>
-                    {content.qr.expiresAt}: {new Date(qrToken.expires_at).toLocaleString()}
+                    {content.qr.validFrom}: {new Date(qrToken.valid_from).toLocaleString()}
                   </span>
                   <span>
-                    {content.qr.worksite}: {qrToken.worksite_id} · {content.qr.shift}: {qrToken.shift_id}
+                    {content.qr.validUntil}: {new Date(qrToken.valid_until).toLocaleString()}
+                  </span>
+                  <span>
+                    {content.qr.worksite}: {qrToken.worksite_id}
                   </span>
                 </div>
               </div>
-            )}
+            )}            
           </section>
 
           <section className="panel hr-attendance-panel">

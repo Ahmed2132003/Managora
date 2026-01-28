@@ -46,6 +46,7 @@ class EmployeeAdmin(admin.ModelAdmin):
         "full_name",
         "company",
         "status",
+        "shift",
         "department",
         "job_title",
         "manager",
@@ -54,8 +55,8 @@ class EmployeeAdmin(admin.ModelAdmin):
     list_filter = ("company", "status", "is_deleted")
     search_fields = ("employee_code", "full_name", "national_id")
     ordering = ("company", "employee_code")
-    autocomplete_fields = ("department", "job_title", "manager", "user")
-
+    autocomplete_fields = ("department", "job_title", "manager", "user", "shift")
+    
 
 @admin.register(EmployeeDocument)
 class EmployeeDocumentAdmin(admin.ModelAdmin):

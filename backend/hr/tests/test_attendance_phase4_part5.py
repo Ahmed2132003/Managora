@@ -48,7 +48,19 @@ class AttendancePhase4Part5ServiceTests(TestCase):
             min_work_minutes=480,
             is_active=True,
         )
-
+        cls.employee.shift = cls.shift
+        cls.employee.save(update_fields=["shift"])
+        cls.company.attendance_qr_worksite = cls.worksite
+        cls.company.attendance_qr_start_time = time(8, 0)
+        cls.company.attendance_qr_end_time = time(18, 0)
+        cls.company.save(
+            update_fields=[
+                "attendance_qr_worksite",
+                "attendance_qr_start_time",
+                "attendance_qr_end_time",
+            ]
+        )
+        
     def test_check_in_creates_record_and_sets_company(self):
         fixed_now = timezone.make_aware(datetime(2025, 1, 5, 9, 0))
         payload = {
@@ -161,7 +173,19 @@ class AttendancePhase4Part5ApiTests(APITestCase):
             min_work_minutes=480,
             is_active=True,
         )
-
+        self.employee.shift = self.shift
+        self.employee.save(update_fields=["shift"])
+        self.company.attendance_qr_worksite = self.worksite
+        self.company.attendance_qr_start_time = time(8, 0)
+        self.company.attendance_qr_end_time = time(18, 0)
+        self.company.save(
+            update_fields=[
+                "attendance_qr_worksite",
+                "attendance_qr_start_time",
+                "attendance_qr_end_time",
+            ]
+        )
+        
     def auth(self, username):
         url = reverse("token_obtain_pair")
         res = self.client.post(
@@ -194,14 +218,14 @@ class AttendancePhase4Part5ApiTests(APITestCase):
         self.assertEqual(res.data[0]["employee"]["id"], self.employee.id)
 
     def test_employee_can_check_in_with_qr(self):
-        token_data = generate_qr_token(
-            self.hr_user, self.worksite, self.shift, expires_in_minutes=60
-        )
+        token_data = generate_qr_token(self.hr_user)
         fixed_now = timezone.make_aware(datetime(2025, 1, 10, 9, 0))
         payload = {
             "employee_id": self.employee.id,
             "method": AttendanceRecord.Method.QR,
             "qr_token": token_data["token"],
+            "lat": 30.044420,
+            "lng": 31.235712,            
         }
 
         self.auth("employee")

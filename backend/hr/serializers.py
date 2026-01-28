@@ -55,10 +55,17 @@ class ManagerMiniSerializer(serializers.ModelSerializer):
         fields = ("id", "full_name")
 
 
+class ShiftMiniSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Shift
+        fields = ("id", "name")
+
+
 class EmployeeSerializer(serializers.ModelSerializer):
     department = DepartmentMiniSerializer(read_only=True)
     job_title = JobTitleMiniSerializer(read_only=True)
     manager = ManagerMiniSerializer(read_only=True)
+    shift = ShiftMiniSerializer(read_only=True)
 
     class Meta:
         model = Employee
@@ -71,6 +78,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             "department",
             "job_title",
             "manager",
+            "shift",
         )
 
 
@@ -78,6 +86,7 @@ class EmployeeDetailSerializer(serializers.ModelSerializer):
     department = DepartmentMiniSerializer(read_only=True)
     job_title = JobTitleMiniSerializer(read_only=True)
     manager = ManagerMiniSerializer(read_only=True)
+    shift = ShiftMiniSerializer(read_only=True)
 
     class Meta:
         model = Employee
@@ -91,6 +100,7 @@ class EmployeeDetailSerializer(serializers.ModelSerializer):
             "department",
             "job_title",
             "manager",
+            "shift",
             "user",
         )
 
@@ -109,9 +119,10 @@ class EmployeeCreateUpdateSerializer(serializers.ModelSerializer):
             "job_title",
             "manager",
             "user",
+            "shift",
         )
         read_only_fields = ("id",)
-
+        
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         request = self.context.get("request")
@@ -125,7 +136,8 @@ class EmployeeCreateUpdateSerializer(serializers.ModelSerializer):
             )
             self.fields["manager"].queryset = Employee.objects.filter(company=company)
             self.fields["user"].queryset = User.objects.filter(company=company)
-
+            self.fields["shift"].queryset = Shift.objects.filter(company=company)
+            
     def validate(self, attrs):
         if "company" in self.initial_data:
             raise serializers.ValidationError({"company": "This field is not allowed."})
@@ -147,12 +159,16 @@ class EmployeeCreateUpdateSerializer(serializers.ModelSerializer):
         if job_title and job_title.company_id != company.id:
             raise serializers.ValidationError({"job_title": "Job title must belong to the same company."})
 
+        shift = attrs.get("shift")
+        if shift and shift.company_id != company.id:
+            raise serializers.ValidationError({"shift": "Shift must belong to the same company."})
+
         user = attrs.get("user")
         if user and user.company_id != company.id:
             raise serializers.ValidationError({"user": "User must belong to the same company."})
 
         return attrs
-
+    
     def validate_employee_code(self, value):
         if not value:
             raise serializers.ValidationError("employee_code is required.")
@@ -301,6 +317,9 @@ class AttendanceActionSerializer(serializers.Serializer):
         if (lat is None) ^ (lng is None):
             raise serializers.ValidationError({"location": "Both lat and lng are required."})
 
+        if method == AttendanceRecord.Method.QR and (lat is None or lng is None):
+            raise serializers.ValidationError({"location": "lat/lng is required for QR."})
+
         if method == AttendanceRecord.Method.GPS:
             if not worksite:
                 raise serializers.ValidationError({"worksite_id": "worksite_id is required for GPS."})
@@ -312,15 +331,15 @@ class AttendanceActionSerializer(serializers.Serializer):
 
 class AttendanceQrGenerateSerializer(serializers.Serializer):
     worksite_id = serializers.PrimaryKeyRelatedField(
-        source="worksite", queryset=WorkSite.objects.none()
+        source="worksite", queryset=WorkSite.objects.none(), required=False, allow_null=True
     )
     shift_id = serializers.PrimaryKeyRelatedField(
-        source="shift", queryset=Shift.objects.none()
+        source="shift", queryset=Shift.objects.none(), required=False, allow_null=True
     )
     expires_in_minutes = serializers.IntegerField(
         required=False, min_value=1, max_value=1440
     )
-
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         request = self.context.get("request")
@@ -336,10 +355,10 @@ class AttendanceQrGenerateSerializer(serializers.Serializer):
 
 class AttendanceQrTokenSerializer(serializers.Serializer):
     token = serializers.CharField()
-    expires_at = serializers.DateTimeField()
+    valid_from = serializers.DateTimeField()
+    valid_until = serializers.DateTimeField()
     worksite_id = serializers.IntegerField()
-    shift_id = serializers.IntegerField()
-
+    
 
 class LeaveTypeSerializer(serializers.ModelSerializer):
     class Meta:

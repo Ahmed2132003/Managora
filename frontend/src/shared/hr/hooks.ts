@@ -38,10 +38,12 @@ export type AttendanceActionPayload = {
 
 export type AttendanceQrToken = {
   token: string;
-  expires_at: string;
+  valid_from: string;
+  valid_until: string;
   worksite_id: number;
-  shift_id: number;
 };
+
+export type AttendanceCompanyQrToken = AttendanceQrToken;
 
 export type AttendanceFilters = {
   dateFrom?: string;
@@ -237,19 +239,32 @@ export function useAttendanceRecordsQuery(filters: AttendanceFilters) {
 
 export function useAttendanceQrGenerateMutation() {
   return useMutation({
-    mutationFn: async (payload: {
-      worksite_id: number;
-      shift_id: number;
+    mutationFn: async (payload?: {
+      worksite_id?: number;
+      shift_id?: number;
       expires_in_minutes?: number;
     }) => {
       const response = await http.post<AttendanceQrToken>(
         endpoints.hr.attendanceQrGenerate,
-        payload
+        payload ?? {}
       );
       return response.data;
     },
   });
 }
+
+export function useAttendanceCompanyQrQuery() {
+  return useQuery({
+    queryKey: ["attendance", "qr", "company"],
+    queryFn: async () => {
+      const response = await http.get<AttendanceCompanyQrToken>(
+        endpoints.hr.attendanceQrCompany
+      );
+      return response.data;
+    },
+  });
+}
+
 export function useEmployees({ filters, search, page }: UseEmployeesParams) {
   return useQuery({
     queryKey: ["hr", "employees", { filters, search, page }],

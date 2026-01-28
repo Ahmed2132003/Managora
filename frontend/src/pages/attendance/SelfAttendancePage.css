@@ -116,10 +116,63 @@
   gap: 12px;
 }
 
+.attendance-qr-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.attendance-qr-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) 1fr;
+  gap: 18px;
+  align-items: center;
+}
+
+.attendance-qr-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  border-radius: 16px;
+  border: 1px dashed var(--border);
+  background: var(--bg-alt);
+  text-align: center;
+  padding: 16px;
+}
+
+.attendance-qr-image img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px;
+}
+
+.attendance-qr-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.attendance-qr-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.attendance-qr-state {
+  font-size: 0.9rem;
+  color: var(--muted);
+  padding: 12px 0;
+}
+
 .primary-button {
   padding: 12px 18px;
   border-radius: 14px;
-  border: none;
+  border: none;  
   background: linear-gradient(120deg, var(--secondary), var(--primary));
   color: #fff;
   font-weight: 600;
@@ -156,5 +209,9 @@
   .attendance-actions .primary-button,
   .attendance-actions .ghost-button {
     width: 100%;
+  }
+
+  .attendance-qr-card {
+    grid-template-columns: 1fr;
   }
 }

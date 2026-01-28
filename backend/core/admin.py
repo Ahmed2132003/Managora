@@ -28,11 +28,21 @@ class UserRoleInline(admin.TabularInline):
 
 @admin.register(Company)
 class CompanyAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "slug", "is_active", "created_at")
+    list_display = (
+        "id",
+        "name",
+        "slug",
+        "is_active",
+        "attendance_qr_worksite",
+        "attendance_qr_start_time",
+        "attendance_qr_end_time",
+        "created_at",
+    )    
     search_fields = ("name", "slug")
     list_filter = ("is_active",)
     ordering = ("name",)
-
+    autocomplete_fields = ("attendance_qr_worksite",)
+    
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
     # نضيف company في شاشة التعديل

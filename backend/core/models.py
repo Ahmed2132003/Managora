@@ -7,7 +7,16 @@ class Company(models.Model):
     slug = models.SlugField(max_length=255, unique=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    attendance_qr_worksite = models.ForeignKey(
+        "hr.WorkSite",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="attendance_qr_companies",
+    )
+    attendance_qr_start_time = models.TimeField(null=True, blank=True)
+    attendance_qr_end_time = models.TimeField(null=True, blank=True)
+    
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)[:255]

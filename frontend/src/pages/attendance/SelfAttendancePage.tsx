@@ -9,6 +9,7 @@ import {
   type AttendanceRecord,
   useCheckInMutation,
   useCheckOutMutation,
+  useAttendanceCompanyQrQuery,
   useMyAttendanceQuery,
 } from "../../shared/hr/hooks";
 import { useMe } from "../../shared/auth/useMe";
@@ -39,9 +40,15 @@ type Content = {
   detailsSubtitle: string;
   actionTitle: string;
   actionSubtitle: string;
+  qrTitle: string;
+  qrSubtitle: string;
+  qrUnavailable: string;
+  qrValidFrom: string;
+  qrValidUntil: string;
+  qrWorksite: string;
   fields: {
     employeeId: string;
-    method: string;
+    method: string;    
     shiftId: string;
     worksiteId: string;
     qrToken: string;
@@ -68,8 +75,10 @@ type Content = {
     methodWarningMessage: string;
     locationTitle: string;
     locationMessage: string;
+    qrLocationTitle: string;
+    qrLocationMessage: string;
     worksiteTitle: string;
-    worksiteMessage: string;
+    worksiteMessage: string;    
     qrTitle: string;
     qrMessage: string;
     shiftTitle: string;
@@ -149,6 +158,12 @@ const contentMap: Record<Language, Content> = {
     detailsSubtitle: "Live status and timestamps",
     actionTitle: "Self-service actions",
     actionSubtitle: "Submit check-in or check-out on your own",
+    qrTitle: "Company QR code",
+    qrSubtitle: "Scan this code to check in or out within the allowed time window.",
+    qrUnavailable: "QR settings are not configured yet. Contact HR.",
+    qrValidFrom: "Valid from",
+    qrValidUntil: "Valid until",
+    qrWorksite: "Worksite",    
     fields: {
       employeeId: "Employee ID",
       method: "Method",
@@ -184,7 +199,9 @@ const contentMap: Record<Language, Content> = {
       locationTitle: "Location required",
       locationMessage:
         "We could not read the location, so we’ll use manual check-in instead.",
-      worksiteTitle: "Worksite required",
+      qrLocationTitle: "Location required",
+      qrLocationMessage: "Location is required for QR attendance. Please enable GPS.",
+      worksiteTitle: "Worksite required",      
       worksiteMessage:
         "Provide a worksite ID to enable GPS attendance. Manual mode will be used.",
       qrTitle: "QR token required",
@@ -264,6 +281,12 @@ const contentMap: Record<Language, Content> = {
     detailsSubtitle: "الحالة والتوقيتات المباشرة",
     actionTitle: "إجراءات الحضور",
     actionSubtitle: "سجل حضورك أو انصرافك بنفسك",
+    qrTitle: "رمز QR الخاص بالشركة",
+    qrSubtitle: "امسح الرمز لتسجيل الحضور أو الانصراف ضمن الوقت المسموح.",
+    qrUnavailable: "لم يتم إعداد رمز QR بعد. تواصل مع الموارد البشرية.",
+    qrValidFrom: "بداية الصلاحية",
+    qrValidUntil: "نهاية الصلاحية",
+    qrWorksite: "موقع العمل",    
     fields: {
       employeeId: "رقم الموظف",
       method: "الطريقة",
@@ -299,7 +322,9 @@ const contentMap: Record<Language, Content> = {
       locationTitle: "الموقع مطلوب",
       locationMessage:
         "لم نتمكن من قراءة الموقع، سيتم تسجيل الحضور بالطريقة اليدوية.",
-      worksiteTitle: "الموقع مطلوب",
+      qrLocationTitle: "الموقع مطلوب",
+      qrLocationMessage: "الموقع مطلوب لتسجيل الحضور عبر QR. فعّل GPS.",
+      worksiteTitle: "الموقع مطلوب",      
       worksiteMessage:
         "أدخل معرف الموقع لتفعيل تسجيل الحضور بالموقع. سيتم استخدام الطريقة اليدوية.",
       qrTitle: "مطلوب كود QR",
@@ -453,6 +478,15 @@ export function SelfAttendancePage() {
     dateFrom: todayValue,
     dateTo: todayValue,
   });
+  const companyQrQuery = useAttendanceCompanyQrQuery();
+  const qrImage = useMemo(() => {
+    const token = companyQrQuery.data?.token;
+    if (!token) {
+      return null;
+    }
+    const encoded = encodeURIComponent(token);
+    return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encoded}`;
+  }, [companyQrQuery.data?.token]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -467,6 +501,14 @@ export function SelfAttendancePage() {
     }
     window.localStorage.setItem("managora-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!companyQrQuery.data?.token) {
+      return;
+    }
+    const token = companyQrQuery.data.token;
+    setQrToken((current) => (current ? current : token));
+  }, [companyQrQuery.data?.token]);
 
   const checkInMutation = useCheckInMutation();
   const checkOutMutation = useCheckOutMutation();
@@ -529,6 +571,16 @@ export function SelfAttendancePage() {
         });
         resolvedMethod = "manual";
       }
+    } else if (method === "qr") {
+      locationValue = await readGeolocation();
+      if (!locationValue) {
+        notifications.show({
+          title: content.notifications.qrLocationTitle,
+          message: content.notifications.qrLocationMessage,
+          color: "red",
+        });
+        return;
+      }
     }
 
     if (resolvedMethod === "qr" && !qrToken.trim()) {
@@ -566,6 +618,12 @@ export function SelfAttendancePage() {
 
     if (resolvedMethod === "qr") {
       payload.qr_token = qrToken.trim();
+      payload.lat = locationValue
+        ? normalizeCoordinate(locationValue.lat)
+        : undefined;
+      payload.lng = locationValue
+        ? normalizeCoordinate(locationValue.lng)
+        : undefined;
     }
 
     try {
@@ -995,11 +1053,61 @@ export function SelfAttendancePage() {
               </div>
             </div>
 
+            <div className="panel attendance-qr-panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.qrTitle}</h2>
+                  <p>{content.qrSubtitle}</p>
+                </div>
+                <span className="pill">{content.todayLabel}</span>
+              </div>
+              {companyQrQuery.isLoading ? (
+                <div className="attendance-qr-state">
+                  {isArabic ? "جارٍ تحميل رمز QR..." : "Loading QR code..."}
+                </div>
+              ) : companyQrQuery.data ? (
+                <div className="attendance-qr-card">
+                  <div className="attendance-qr-image">
+                    {qrImage ? (
+                      <img src={qrImage} alt="Company QR" />
+                    ) : (
+                      <span>{content.qrUnavailable}</span>
+                    )}
+                  </div>
+                  <div className="attendance-qr-details">
+                    <label className="attendance-field">
+                      <span>{content.fields.qrToken}</span>
+                      <input type="text" value={companyQrQuery.data.token} readOnly />
+                    </label>
+                    <div className="attendance-qr-meta">
+                      <span>
+                        {content.qrValidFrom}:{" "}
+                        {new Date(companyQrQuery.data.valid_from).toLocaleString(
+                          isArabic ? "ar" : "en"
+                        )}
+                      </span>
+                      <span>
+                        {content.qrValidUntil}:{" "}
+                        {new Date(companyQrQuery.data.valid_until).toLocaleString(
+                          isArabic ? "ar" : "en"
+                        )}
+                      </span>
+                      <span>
+                        {content.qrWorksite}: {companyQrQuery.data.worksite_id}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="attendance-qr-state">{content.qrUnavailable}</div>
+              )}
+            </div>
+
             <div className="panel">
               <div className="panel__header">
                 <div>
                   <h2>{content.actionTitle}</h2>
-                  <p>{content.actionSubtitle}</p>
+                  <p>{content.actionSubtitle}</p>                  
                 </div>
                 <span className="pill">{content.todayLabel}</span>
               </div>
@@ -1038,33 +1146,36 @@ export function SelfAttendancePage() {
                       ))}
                     </select>
                   </label>
-                  <label className="attendance-field">
-                    <span>{content.fields.shiftId}</span>
-                    <input
-                      type="number"
-                      min={1}
-                      placeholder={content.fields.shiftPlaceholder}
-                      value={shiftId ?? ""}
-                      onChange={(event) => {
-                        const value = event.currentTarget.value;
-                        setShiftId(value ? Number(value) : undefined);
-                      }}
-                      disabled={method === "qr"}
-                    />
-                  </label>
-                  <label className="attendance-field">
-                    <span>{content.fields.worksiteId}</span>
-                    <input
-                      type="number"
-                      min={1}
-                      placeholder={content.fields.worksitePlaceholder}
-                      value={worksiteId ?? ""}
-                      onChange={(event) => {
-                        const value = event.currentTarget.value;
-                        setWorksiteId(value ? Number(value) : undefined);
-                      }}
-                    />
-                  </label>
+                  {method !== "qr" && (
+                    <label className="attendance-field">
+                      <span>{content.fields.shiftId}</span>
+                      <input
+                        type="number"
+                        min={1}
+                        placeholder={content.fields.shiftPlaceholder}
+                        value={shiftId ?? ""}
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
+                          setShiftId(value ? Number(value) : undefined);
+                        }}
+                      />
+                    </label>
+                  )}
+                  {method === "gps" && (
+                    <label className="attendance-field">
+                      <span>{content.fields.worksiteId}</span>
+                      <input
+                        type="number"
+                        min={1}
+                        placeholder={content.fields.worksitePlaceholder}
+                        value={worksiteId ?? ""}
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
+                          setWorksiteId(value ? Number(value) : undefined);
+                        }}
+                      />
+                    </label>
+                  )}                  
                 </div>
                 {method === "qr" && (
                   <label className="attendance-field">

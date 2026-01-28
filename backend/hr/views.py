@@ -351,18 +351,13 @@ class AttendanceQrGenerateView(APIView):
             data=request.data, context={"request": request}
         )
         serializer.is_valid(raise_exception=True)
-        token_data = generate_qr_token(
-            request.user,
-            serializer.validated_data["worksite"],
-            serializer.validated_data["shift"],
-            serializer.validated_data["expires_in_minutes"],
-        )
+        token_data = generate_qr_token(request.user)        
         return Response(
             {
                 "token": token_data["token"],
-                "expires_at": token_data["expires_at"],
-                "worksite_id": serializer.validated_data["worksite"].id,
-                "shift_id": serializer.validated_data["shift"].id,
+                "valid_from": token_data["valid_from"],
+                "valid_until": token_data["valid_until"],
+                "worksite_id": token_data["worksite_id"],                
             },
             status=status.HTTP_201_CREATED,
         )
@@ -371,6 +366,27 @@ class AttendanceQrGenerateView(APIView):
         permissions = [permission() for permission in self.permission_classes]
         permissions.append(HasAnyPermission(["attendance.*"]))
         return permissions
+
+
+class AttendanceCompanyQrView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Attendance"],
+        summary="Get company attendance QR token",
+        responses={200: AttendanceQrTokenSerializer},
+    )
+    def get(self, request):
+        token_data = generate_qr_token(request.user)
+        return Response(
+            {
+                "token": token_data["token"],
+                "valid_from": token_data["valid_from"],
+                "valid_until": token_data["valid_until"],
+                "worksite_id": token_data["worksite_id"],
+            },
+            status=status.HTTP_200_OK,
+        )
 
 class AttendanceMyView(ListAPIView):
     serializer_class = AttendanceRecordSerializer

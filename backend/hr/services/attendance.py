@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from math import atan2, cos, radians, sin, sqrt
 from typing import Any, Optional
 
@@ -22,7 +22,15 @@ class LocationPayload:
     lat: float
     lng: float
 
-def calculate_late(record_date, shift: Shift, now: datetime) -> int:
+
+@dataclass(frozen=True)
+class QrWindow:
+    start: datetime
+    end: datetime
+    worksite: WorkSite
+
+
+def calculate_late(record_date, shift: Shift, now: datetime) -> int:    
     expected_start = timezone.make_aware(
         datetime.combine(record_date, shift.start_time), timezone.get_current_timezone()
     )
@@ -68,6 +76,12 @@ def _get_employee(user, employee_id: int) -> Employee:
         raise serializers.ValidationError({"employee": "Employee not found."}) from exc
 
 
+def _get_employee_shift(employee: Employee) -> Shift:
+    if not employee.shift_id:
+        raise serializers.ValidationError({"shift": "Employee must be assigned to a shift."})
+    return employee.shift
+
+
 def _get_location_payload(payload: dict[str, Any]) -> Optional[LocationPayload]:
     lat = payload.get("lat")
     lng = payload.get("lng")
@@ -94,7 +108,7 @@ def _validate_gps(payload: dict[str, Any]) -> LocationPayload:
     location = _get_location_payload(payload)
     if not location:
         raise serializers.ValidationError({"location": "lat/lng is required for GPS."})
-        
+
     worksite = payload.get("worksite")
     if not worksite:
         raise serializers.ValidationError({"worksite": "Worksite is required for GPS."})
@@ -102,70 +116,99 @@ def _validate_gps(payload: dict[str, Any]) -> LocationPayload:
     return location
 
 
+def _validate_qr_location(payload: dict[str, Any], worksite: WorkSite) -> LocationPayload:
+    location = _get_location_payload(payload)
+    if not location:
+        raise serializers.ValidationError({"location": "lat/lng is required for QR."})
+    validate_location(worksite, location.lat, location.lng)
+    return location
+
+
+def _ensure_company_qr_settings(company) -> tuple[WorkSite, time, time]:
+    if not company.attendance_qr_worksite_id:
+        raise serializers.ValidationError(
+            {"qr_token": "Company QR worksite is not configured."}
+        )
+    if not company.attendance_qr_start_time or not company.attendance_qr_end_time:
+        raise serializers.ValidationError(
+            {"qr_token": "Company QR schedule is not configured."}
+        )
+    return (
+        company.attendance_qr_worksite,
+        company.attendance_qr_start_time,
+        company.attendance_qr_end_time,
+    )
+
+
+def _get_qr_window(company, issued_for: date) -> QrWindow:
+    worksite, start_time, end_time = _ensure_company_qr_settings(company)
+    tz = timezone.get_current_timezone()
+    start_at = timezone.make_aware(datetime.combine(issued_for, start_time), tz)
+    end_at = timezone.make_aware(datetime.combine(issued_for, end_time), tz)
+    if end_time <= start_time:
+        end_at += timedelta(days=1)
+    return QrWindow(start=start_at, end=end_at, worksite=worksite)
+
+
 def generate_qr_token(
     user,
-    worksite: WorkSite,
-    shift: Shift,
-    expires_in_minutes: int = 60,
 ) -> dict[str, Any]:
-    if worksite.company_id != user.company_id or shift.company_id != user.company_id:
-        raise PermissionDenied("Worksite and shift must belong to your company.")
+    issued_for = timezone.localdate()
+    window = _get_qr_window(user.company, issued_for)
 
-    expires_at = timezone.now() + timedelta(minutes=expires_in_minutes)
     payload = {
-        "worksite_id": worksite.id,
-        "shift_id": shift.id,
         "company_id": user.company_id,
-        "expires_at": expires_at.isoformat(),
+        "worksite_id": window.worksite.id,
+        "issued_for": issued_for.isoformat(),
     }
     token = signing.dumps(payload, salt=QR_TOKEN_SALT)
-    return {"token": token, "expires_at": expires_at}
+    return {
+        "token": token,
+        "valid_from": window.start,
+        "valid_until": window.end,
+        "worksite_id": window.worksite.id,
+    }
 
 
-def _parse_expires_at(value: str | None) -> datetime:
+def _parse_issued_for(value: str | None) -> date:
     if not value:
         raise serializers.ValidationError({"qr_token": "Invalid QR token."})
-    expires_at = datetime.fromisoformat(value)
-    if timezone.is_naive(expires_at):
-        expires_at = timezone.make_aware(expires_at, timezone.get_current_timezone())
-    return expires_at
+    return date.fromisoformat(value)
 
 
-def _resolve_qr_payload(payload: dict[str, Any], company_id: int) -> tuple[Shift, WorkSite]:
+def _resolve_qr_payload(payload: dict[str, Any], company) -> WorkSite:
     token = payload.get("qr_token")
     if not token:
         raise serializers.ValidationError({"qr_token": "QR token is required."})
-
+    
     try:
         data = signing.loads(token, salt=QR_TOKEN_SALT)
     except signing.BadSignature as exc:
         raise serializers.ValidationError({"qr_token": "Invalid QR token."}) from exc
 
-    expires_at = _parse_expires_at(data.get("expires_at"))
-    if timezone.now() > expires_at:
-        raise serializers.ValidationError({"qr_token": "QR token expired."})
-
-    if data.get("company_id") != company_id:
+    if data.get("company_id") != company.id:
         raise serializers.ValidationError({"qr_token": "QR token not valid for company."})
 
-    shift_id = data.get("shift_id")
     worksite_id = data.get("worksite_id")
-    if not shift_id or not worksite_id:
+    issued_for = _parse_issued_for(data.get("issued_for"))
+    if not worksite_id:
         raise serializers.ValidationError({"qr_token": "Invalid QR token payload."})
 
-    try:
-        shift = Shift.objects.get(id=shift_id, company_id=company_id)
-        worksite = WorkSite.objects.get(id=worksite_id, company_id=company_id)
-    except (Shift.DoesNotExist, WorkSite.DoesNotExist) as exc:
-        raise serializers.ValidationError({"qr_token": "QR token references invalid data."}) from exc
+    window = _get_qr_window(company, issued_for)
+    if window.worksite.id != worksite_id:
+        raise serializers.ValidationError({"qr_token": "QR token not valid for company."})
+    now = timezone.now()
+    if now < window.start:
+        raise serializers.ValidationError({"qr_token": "QR token not active yet."})
+    if now > window.end:
+        raise serializers.ValidationError({"qr_token": "QR token expired."})
 
-    payload["shift"] = shift
-    payload["worksite"] = worksite
-    return shift, worksite
+    payload["worksite"] = window.worksite
+    return window.worksite
 
 
 def check_in(user, employee_id: int, payload: dict[str, Any]) -> AttendanceRecord:
-    method = _ensure_method(payload)
+    method = _ensure_method(payload)    
     now = timezone.now()
     record_date = timezone.localdate(now)
     
@@ -177,16 +220,19 @@ def check_in(user, employee_id: int, payload: dict[str, Any]) -> AttendanceRecor
         raise serializers.ValidationError("Already checked in for today.")
 
     if method == AttendanceRecord.Method.QR:
-        shift, _ = _resolve_qr_payload(payload, user.company_id)
+        shift = _get_employee_shift(employee)
+        worksite = _resolve_qr_payload(payload, user.company)
     else:
         shift = _ensure_shift(payload)
 
     location = None
     if method == AttendanceRecord.Method.GPS:
         location = _validate_gps(payload)
+    elif method == AttendanceRecord.Method.QR:
+        location = _validate_qr_location(payload, worksite)
     else:
         location = _get_location_payload(payload)
-        
+                
     late_minutes = calculate_late(record_date, shift, now)
     status = (
         AttendanceRecord.Status.LATE
@@ -242,13 +288,19 @@ def check_out(user, employee_id: int, payload: dict[str, Any]) -> AttendanceReco
     if not record or not record.check_in_time or record.check_out_time:
         raise serializers.ValidationError("No open check-in for today.")
 
-    shift = _ensure_shift(payload)
+    if method == AttendanceRecord.Method.QR:
+        shift = _get_employee_shift(employee)
+        worksite = _resolve_qr_payload(payload, user.company)
+    else:
+        shift = _ensure_shift(payload)
     location = None
     if method == AttendanceRecord.Method.GPS:
         location = _validate_gps(payload)
+    elif method == AttendanceRecord.Method.QR:
+        location = _validate_qr_location(payload, worksite)
     else:
         location = _get_location_payload(payload)
-
+        
     early_leave_minutes = calculate_early_leave(record_date, shift, now)
     status = record.status
     if early_leave_minutes > 0 and status != AttendanceRecord.Status.LATE:

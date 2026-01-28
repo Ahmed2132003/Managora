@@ -4,9 +4,10 @@ from rest_framework.routers import DefaultRouter
 from hr.views import (
     AttendanceCheckInView,
     AttendanceCheckOutView,
+    AttendanceCompanyQrView,
     AttendanceMyView,
     AttendanceRecordViewSet,
-    AttendanceQrGenerateView,
+    AttendanceQrGenerateView,    
     DepartmentViewSet,
     LeaveApprovalsInboxView,
     LeaveApproveView,
@@ -116,6 +117,11 @@ urlpatterns = [
         AttendanceQrGenerateView.as_view(),
         name="attendance-qr-generate",
     ),
+    path(
+        "attendance/qr/company/",
+        AttendanceCompanyQrView.as_view(),
+        name="attendance-qr-company",
+    ),    
     path(
         "payroll/periods/",
         PayrollPeriodCreateView.as_view(),
