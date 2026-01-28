@@ -471,12 +471,11 @@ export function DashboardPage() {
     () => [
       { path: "/dashboard", label: content.nav.dashboard, icon: "🏠" },
       {
-        path: "/admin/",
+        path: "/admin",
         label: content.nav.adminPanel,
         icon: "🛠️",
         superuserOnly: true,
-        external: true,
-      },
+      },      
       { path: "/users", label: content.nav.users, icon: "👥", permissions: ["users.view"] },      
       {
         path: "/attendance/self",
