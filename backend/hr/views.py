@@ -403,8 +403,8 @@ class AttendanceMyView(ListAPIView):
     def get_queryset(self):
         employee = getattr(self.request.user, "employee_profile", None)
         if not employee:
-            raise PermissionDenied("Employee profile is required.")
-
+            return AttendanceRecord.objects.none()
+        
         date_from = _parse_date_param(
             self.request.query_params.get("date_from"), "date_from"
         )

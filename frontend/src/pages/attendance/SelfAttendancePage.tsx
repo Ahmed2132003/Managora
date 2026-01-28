@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useLocation, useNavigate } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
@@ -48,12 +48,10 @@ type Content = {
   qrWorksite: string;
   fields: {
     employeeId: string;
-    method: string;    
+    method: string;
     shiftId: string;
     worksiteId: string;
-    qrToken: string;
     shiftPlaceholder: string;
-    qrPlaceholder: string;
     worksitePlaceholder: string;
   };
   rows: {
@@ -78,7 +76,7 @@ type Content = {
     qrLocationTitle: string;
     qrLocationMessage: string;
     worksiteTitle: string;
-    worksiteMessage: string;    
+    worksiteMessage: string;
     qrTitle: string;
     qrMessage: string;
     shiftTitle: string;
@@ -159,19 +157,18 @@ const contentMap: Record<Language, Content> = {
     actionTitle: "Self-service actions",
     actionSubtitle: "Submit check-in or check-out on your own",
     qrTitle: "Company QR code",
-    qrSubtitle: "Scan this code to check in or out within the allowed time window.",
+    qrSubtitle:
+      "Scan this code to open the attendance link and check in automatically within the allowed time window.",
     qrUnavailable: "QR settings are not configured yet. Contact HR.",
     qrValidFrom: "Valid from",
     qrValidUntil: "Valid until",
-    qrWorksite: "Worksite",    
+    qrWorksite: "Worksite",
     fields: {
       employeeId: "Employee ID",
       method: "Method",
       shiftId: "Shift ID",
       worksiteId: "Worksite ID (optional)",
-      qrToken: "QR Token",
       shiftPlaceholder: "Example: 3",
-      qrPlaceholder: "Paste the QR token",
       worksitePlaceholder: "Required for GPS",
     },
     rows: {
@@ -201,11 +198,11 @@ const contentMap: Record<Language, Content> = {
         "We could not read the location, so we’ll use manual check-in instead.",
       qrLocationTitle: "Location required",
       qrLocationMessage: "Location is required for QR attendance. Please enable GPS.",
-      worksiteTitle: "Worksite required",      
+      worksiteTitle: "Worksite required",
       worksiteMessage:
         "Provide a worksite ID to enable GPS attendance. Manual mode will be used.",
       qrTitle: "QR token required",
-      qrMessage: "Please paste the QR token before continuing.",
+      qrMessage: "QR token is missing. Please scan the QR code again.",
       shiftTitle: "Missing shift",
       shiftMessage: "Please enter a shift ID before continuing.",
       checkInTitle: "Checked in",
@@ -282,19 +279,18 @@ const contentMap: Record<Language, Content> = {
     actionTitle: "إجراءات الحضور",
     actionSubtitle: "سجل حضورك أو انصرافك بنفسك",
     qrTitle: "رمز QR الخاص بالشركة",
-    qrSubtitle: "امسح الرمز لتسجيل الحضور أو الانصراف ضمن الوقت المسموح.",
+    qrSubtitle:
+      "امسح الرمز لفتح رابط الحضور وتسجيل الدخول تلقائيًا ضمن الوقت المسموح.",
     qrUnavailable: "لم يتم إعداد رمز QR بعد. تواصل مع الموارد البشرية.",
     qrValidFrom: "بداية الصلاحية",
     qrValidUntil: "نهاية الصلاحية",
-    qrWorksite: "موقع العمل",    
+    qrWorksite: "موقع العمل",
     fields: {
       employeeId: "رقم الموظف",
       method: "الطريقة",
       shiftId: "رقم الوردية",
       worksiteId: "معرف الموقع (اختياري)",
-      qrToken: "كود QR",
       shiftPlaceholder: "مثال: 3",
-      qrPlaceholder: "الصق كود الـ QR هنا",
       worksitePlaceholder: "مطلوب لطريقة GPS",
     },
     rows: {
@@ -324,11 +320,11 @@ const contentMap: Record<Language, Content> = {
         "لم نتمكن من قراءة الموقع، سيتم تسجيل الحضور بالطريقة اليدوية.",
       qrLocationTitle: "الموقع مطلوب",
       qrLocationMessage: "الموقع مطلوب لتسجيل الحضور عبر QR. فعّل GPS.",
-      worksiteTitle: "الموقع مطلوب",      
+      worksiteTitle: "الموقع مطلوب",
       worksiteMessage:
         "أدخل معرف الموقع لتفعيل تسجيل الحضور بالموقع. سيتم استخدام الطريقة اليدوية.",
       qrTitle: "مطلوب كود QR",
-      qrMessage: "من فضلك أدخل كود الـ QR قبل المتابعة.",
+      qrMessage: "رمز الـ QR غير متوفر. من فضلك أعد مسح الرمز.",
       shiftTitle: "بيانات ناقصة",
       shiftMessage: "من فضلك أدخل الوردية قبل المتابعة.",
       checkInTitle: "تم تسجيل الحضور",
@@ -452,9 +448,19 @@ export function SelfAttendancePage() {
   const [employeeId, setEmployeeId] = useState<number | undefined>(undefined);
   const [shiftId, setShiftId] = useState<number | undefined>(undefined);
   const [worksiteId, setWorksiteId] = useState<number | undefined>(undefined);
-  const [method, setMethod] = useState<AttendanceActionPayload["method"]>("gps");
-  const [qrToken, setQrToken] = useState("");
-  const [qrTokenTouched, setQrTokenTouched] = useState(false);  
+  const [method, setMethod] = useState<AttendanceActionPayload["method"]>(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("qr_token") ? "qr" : "gps";
+  });
+  const [qrToken, setQrToken] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("qr_token") ?? "";
+  });
+  const [qrTokenTouched, setQrTokenTouched] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    return Boolean(params.get("qr_token"));
+  });
+  const autoCheckInTriggeredRef = useRef(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
@@ -473,6 +479,14 @@ export function SelfAttendancePage() {
 
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
+  const { qrTokenFromUrl, autoCheckInRequested } = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const token = params.get("qr_token") ?? "";
+    return {
+      qrTokenFromUrl: token,
+      autoCheckInRequested: Boolean(token) && params.get("auto") !== "0",
+    };
+  }, [location.search]);
 
   const meQuery = useMe();
   const myAttendanceQuery = useMyAttendanceQuery({
@@ -480,14 +494,23 @@ export function SelfAttendancePage() {
     dateTo: todayValue,
   });
   const companyQrQuery = useAttendanceCompanyQrQuery();
-  const qrImage = useMemo(() => {
+  const qrLink = useMemo(() => {
     const token = companyQrQuery.data?.token;
-    if (!token) {
+    if (!token || typeof window === "undefined") {
       return null;
     }
-    const encoded = encodeURIComponent(token);
-    return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encoded}`;
+    const url = new URL("/attendance/self", window.location.origin);
+    url.searchParams.set("qr_token", token);
+    url.searchParams.set("auto", "1");
+    return url.toString();
   }, [companyQrQuery.data?.token]);
+  const qrImage = useMemo(() => {
+    if (!qrLink) {
+      return null;
+    }
+    const encoded = encodeURIComponent(qrLink);
+    return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encoded}`;
+  }, [qrLink]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -529,123 +552,183 @@ export function SelfAttendancePage() {
     Boolean(meQuery.data?.employee?.id) &&
     resolvedEmployeeId === meQuery.data?.employee?.id;
 
-  async function handleAction(action: "check-in" | "check-out") {
-    if (!resolvedEmployeeId) {
-      notifications.show({
-        title: content.notifications.missingEmployeeTitle,
-        message: content.notifications.missingEmployeeMessage,
-        color: "red",
-      });
-      return;
-    }
-
-    let resolvedMethod: AttendanceActionPayload["method"] = method;
-    let locationValue: { lat: number; lng: number } | null = null;
-
-    if (!isSelfCheckIn) {
-      notifications.show({
-        title: content.notifications.methodWarningTitle,
-        message: content.notifications.methodWarningMessage,
-        color: "yellow",
-      });
-      resolvedMethod = "manual";
-    } else if (method === "gps") {
-      locationValue = await readGeolocation();
-
-      if (!locationValue) {
+  const handleAction = useCallback(
+    async (action: "check-in" | "check-out") => {
+      if (!resolvedEmployeeId) {
         notifications.show({
-          title: content.notifications.locationTitle,
-          message: content.notifications.locationMessage,
-          color: "yellow",
-        });
-        resolvedMethod = "manual";
-      } else if (!worksiteId) {
-        notifications.show({
-          title: content.notifications.worksiteTitle,
-          message: content.notifications.worksiteMessage,
-          color: "yellow",
-        });
-        resolvedMethod = "manual";
-      }
-    } else if (method === "qr") {
-      locationValue = await readGeolocation();
-      if (!locationValue) {
-        notifications.show({
-          title: content.notifications.qrLocationTitle,
-          message: content.notifications.qrLocationMessage,
+          title: content.notifications.missingEmployeeTitle,
+          message: content.notifications.missingEmployeeMessage,
           color: "red",
         });
         return;
       }
-    }
 
-    if (resolvedMethod === "qr" && !effectiveQrToken.trim()) {      
-      notifications.show({
-        title: content.notifications.qrTitle,
-        message: content.notifications.qrMessage,
-        color: "red",
-      });
-      return;
-    }
+      let resolvedMethod: AttendanceActionPayload["method"] = method;
+      let locationValue: { lat: number; lng: number } | null = null;
 
-    if (resolvedMethod !== "qr" && !shiftId) {
-      notifications.show({
-        title: content.notifications.shiftTitle,
-        message: content.notifications.shiftMessage,
-        color: "red",
-      });
-      return;
-    }
-    const payload: AttendanceActionPayload = {
-      employee_id: resolvedEmployeeId,
-      shift_id: resolvedMethod === "qr" ? undefined : shiftId,
-      method: resolvedMethod,
-    };
-
-    if (resolvedMethod === "gps") {
-      payload.worksite_id = worksiteId;
-      payload.lat = locationValue
-        ? normalizeCoordinate(locationValue.lat)
-        : undefined;
-      payload.lng = locationValue
-        ? normalizeCoordinate(locationValue.lng)
-        : undefined;
-    }
-
-    if (resolvedMethod === "qr") {
-      payload.qr_token = effectiveQrToken.trim();      
-      payload.lat = locationValue
-        ? normalizeCoordinate(locationValue.lat)
-        : undefined;
-      payload.lng = locationValue
-        ? normalizeCoordinate(locationValue.lng)
-        : undefined;
-    }
-
-    try {
-      if (action === "check-in") {
-        await checkInMutation.mutateAsync(payload);
+      if (!isSelfCheckIn) {
         notifications.show({
-          title: content.notifications.checkInTitle,
-          message: content.notifications.checkInMessage,
+          title: content.notifications.methodWarningTitle,
+          message: content.notifications.methodWarningMessage,
+          color: "yellow",
         });
-      } else {
-        await checkOutMutation.mutateAsync(payload);
-        notifications.show({
-          title: content.notifications.checkOutTitle,
-          message: content.notifications.checkOutMessage,
-        });
+        resolvedMethod = "manual";
+      } else if (method === "gps") {
+        locationValue = await readGeolocation();
+
+        if (!locationValue) {
+          notifications.show({
+            title: content.notifications.locationTitle,
+            message: content.notifications.locationMessage,
+            color: "yellow",
+          });
+          resolvedMethod = "manual";
+        } else if (!worksiteId) {
+          notifications.show({
+            title: content.notifications.worksiteTitle,
+            message: content.notifications.worksiteMessage,
+            color: "yellow",
+          });
+          resolvedMethod = "manual";
+        }
+      } else if (method === "qr") {
+        locationValue = await readGeolocation();
+        if (!locationValue) {
+          notifications.show({
+            title: content.notifications.qrLocationTitle,
+            message: content.notifications.qrLocationMessage,
+            color: "red",
+          });
+          return;
+        }
       }
 
-      await queryClient.invalidateQueries({ queryKey: ["attendance", "my"] });
-    } catch (error) {
-      notifications.show({
-        title: content.notifications.failedTitle,
-        message: formatApiError(error),
-        color: "red",
-      });
+      if (resolvedMethod === "qr" && !effectiveQrToken.trim()) {
+        notifications.show({
+          title: content.notifications.qrTitle,
+          message: content.notifications.qrMessage,
+          color: "red",
+        });
+        return;
+      }
+
+      if (resolvedMethod !== "qr" && !shiftId) {
+        notifications.show({
+          title: content.notifications.shiftTitle,
+          message: content.notifications.shiftMessage,
+          color: "red",
+        });
+        return;
+      }
+      const payload: AttendanceActionPayload = {
+        employee_id: resolvedEmployeeId,
+        shift_id: resolvedMethod === "qr" ? undefined : shiftId,
+        method: resolvedMethod,
+      };
+
+      if (resolvedMethod === "gps") {
+        payload.worksite_id = worksiteId;
+        payload.lat = locationValue
+          ? normalizeCoordinate(locationValue.lat)
+          : undefined;
+        payload.lng = locationValue
+          ? normalizeCoordinate(locationValue.lng)
+          : undefined;
+      }
+
+      if (resolvedMethod === "qr") {
+        payload.qr_token = effectiveQrToken.trim();
+        payload.lat = locationValue
+          ? normalizeCoordinate(locationValue.lat)
+          : undefined;
+        payload.lng = locationValue
+          ? normalizeCoordinate(locationValue.lng)
+          : undefined;
+      }
+
+      try {
+        if (action === "check-in") {
+          await checkInMutation.mutateAsync(payload);
+          notifications.show({
+            title: content.notifications.checkInTitle,
+            message: content.notifications.checkInMessage,
+          });
+        } else {
+          await checkOutMutation.mutateAsync(payload);
+          notifications.show({
+            title: content.notifications.checkOutTitle,
+            message: content.notifications.checkOutMessage,
+          });
+        }
+
+        await queryClient.invalidateQueries({ queryKey: ["attendance", "my"] });
+      } catch (error) {
+        notifications.show({
+          title: content.notifications.failedTitle,
+          message: formatApiError(error),
+          color: "red",
+        });
+      }
+    },
+    [
+      resolvedEmployeeId,
+      content,
+      method,
+      isSelfCheckIn,
+      worksiteId,
+      shiftId,
+      effectiveQrToken,
+      checkInMutation,
+      checkOutMutation,
+      queryClient,
+    ]
+  );
+
+  useEffect(() => {
+    if (!autoCheckInRequested || autoCheckInTriggeredRef.current) {
+      return;
     }
-  }
+    if (meQuery.isLoading || companyQrQuery.isLoading || checkInMutation.isPending) {
+      return;
+    }
+    if (!resolvedEmployeeId || !isSelfCheckIn) {
+      return;
+    }
+    if (todayRecord?.check_in_time) {
+      autoCheckInTriggeredRef.current = true;
+      return;
+    }
+    if (method !== "qr" || !effectiveQrToken.trim()) {
+      return;
+    }
+    autoCheckInTriggeredRef.current = true;
+    void handleAction("check-in").finally(() => {
+      const params = new URLSearchParams(location.search);
+      params.delete("qr_token");
+      params.delete("auto");
+      navigate(
+        {
+          pathname: location.pathname,
+          search: params.toString() ? `?${params.toString()}` : "",
+        },
+        { replace: true }
+      );
+    });
+  }, [
+    autoCheckInRequested,
+    meQuery.isLoading,
+    companyQrQuery.isLoading,
+    checkInMutation.isPending,
+    resolvedEmployeeId,
+    isSelfCheckIn,
+    todayRecord?.check_in_time,
+    method,
+    effectiveQrToken,
+    handleAction,
+    location.pathname,
+    location.search,
+    navigate,
+  ]);
 
   const navLinks = useMemo(
     () => [
@@ -893,9 +976,7 @@ export function SelfAttendancePage() {
             )}
             {meQuery.isError && (
               <span className="sidebar-note sidebar-note--error">
-                {isArabic
-                  ? "تعذر تحميل بيانات الحساب."
-                  : "Unable to load account data."}
+                {isArabic ? "تعذر تحميل بيانات الحساب." : "Unable to load account data."}
               </span>
             )}
           </div>
@@ -903,9 +984,7 @@ export function SelfAttendancePage() {
             <button
               type="button"
               className="nav-item"
-              onClick={() =>
-                setLanguage((prev) => (prev === "en" ? "ar" : "en"))
-              }
+              onClick={() => setLanguage((prev) => (prev === "en" ? "ar" : "en"))}
             >
               <span className="nav-icon" aria-hidden="true">
                 🌐
@@ -915,9 +994,7 @@ export function SelfAttendancePage() {
             <button
               type="button"
               className="nav-item"
-              onClick={() =>
-                setTheme((prev) => (prev === "light" ? "dark" : "light"))
-              }
+              onClick={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
             >
               <span className="nav-icon" aria-hidden="true">
                 {theme === "light" ? "🌙" : "☀️"}
@@ -925,9 +1002,7 @@ export function SelfAttendancePage() {
               {content.themeLabel} • {theme === "light" ? "Dark" : "Light"}
             </button>
             <div className="sidebar-links">
-              <span className="sidebar-links__title">
-                {content.navigationLabel}
-              </span>
+              <span className="sidebar-links__title">{content.navigationLabel}</span>
               {visibleNavLinks.map((link) => (
                 <button
                   key={link.path}
@@ -1008,10 +1083,7 @@ export function SelfAttendancePage() {
                   <h2>{content.detailsTitle}</h2>
                   <p>{content.detailsSubtitle}</p>
                 </div>
-                <span
-                  className="attendance-status-pill"
-                  data-status={statusKey}
-                >
+                <span className="attendance-status-pill" data-status={statusKey}>
                   {content.statusMap[statusKey]}
                 </span>
               </div>
@@ -1023,10 +1095,7 @@ export function SelfAttendancePage() {
                 <div className="attendance-detail-row">
                   <span>{content.rows.checkIn}</span>
                   <strong>
-                    {getTimeLabel(
-                      todayRecord?.check_in_time ?? null,
-                      isArabic ? "ar" : "en"
-                    )}
+                    {getTimeLabel(todayRecord?.check_in_time ?? null, isArabic ? "ar" : "en")}
                   </strong>
                 </div>
                 <div className="attendance-detail-row">
@@ -1064,17 +1133,9 @@ export function SelfAttendancePage() {
               ) : companyQrQuery.data ? (
                 <div className="attendance-qr-card">
                   <div className="attendance-qr-image">
-                    {qrImage ? (
-                      <img src={qrImage} alt="Company QR" />
-                    ) : (
-                      <span>{content.qrUnavailable}</span>
-                    )}
+                    {qrImage ? <img src={qrImage} alt="Company QR" /> : <span>{content.qrUnavailable}</span>}
                   </div>
                   <div className="attendance-qr-details">
-                    <label className="attendance-field">
-                      <span>{content.fields.qrToken}</span>
-                      <input type="text" value={companyQrQuery.data.token} readOnly />
-                    </label>
                     <div className="attendance-qr-meta">
                       <span>
                         {content.qrValidFrom}:{" "}
@@ -1103,7 +1164,7 @@ export function SelfAttendancePage() {
               <div className="panel__header">
                 <div>
                   <h2>{content.actionTitle}</h2>
-                  <p>{content.actionSubtitle}</p>                  
+                  <p>{content.actionSubtitle}</p>
                 </div>
                 <span className="pill">{content.todayLabel}</span>
               </div>
@@ -1114,9 +1175,7 @@ export function SelfAttendancePage() {
                     <input
                       type="number"
                       min={1}
-                      placeholder={
-                        isArabic ? "مثال: 12" : "Example: 12"
-                      }
+                      placeholder={isArabic ? "مثال: 12" : "Example: 12"}
                       value={resolvedEmployeeId ?? ""}
                       onChange={(event) => {
                         const value = event.currentTarget.value;
@@ -1171,22 +1230,8 @@ export function SelfAttendancePage() {
                         }}
                       />
                     </label>
-                  )}                  
+                  )}
                 </div>
-                {method === "qr" && (
-                  <label className="attendance-field">
-                    <span>{content.fields.qrToken}</span>
-                    <input
-                      type="text"
-                      placeholder={content.fields.qrPlaceholder}
-                      value={effectiveQrToken}
-                      onChange={(event) => {
-                        setQrTokenTouched(true);
-                        setQrToken(event.currentTarget.value);
-                      }}
-                    />
-                  </label>
-                )}                
                 <div className="attendance-actions">
                   <button
                     type="button"

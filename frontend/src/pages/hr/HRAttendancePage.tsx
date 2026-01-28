@@ -53,11 +53,10 @@ type Content = {
     title: string;
     subtitle: string;
     generate: string;
-    tokenLabel: string;
     validFrom: string;
     validUntil: string;
     worksite: string;
-  };  
+  };     
   table: {
     title: string;
     subtitle: string;
@@ -155,13 +154,12 @@ const contentMap: Record<Language, Content> = {
     },
     qr: {
       title: "Company QR token",
-      subtitle: "Daily QR token based on the company schedule",
+      subtitle: "Daily QR code based on the company schedule",
       generate: "Refresh token",
-      tokenLabel: "Token",
       validFrom: "Valid from",
       validUntil: "Valid until",
       worksite: "Worksite",
-    },    
+    },           
     table: {
       title: "Attendance log",
       subtitle: "Live check-in and check-out status",
@@ -267,13 +265,12 @@ const contentMap: Record<Language, Content> = {
     },
     qr: {
       title: "رمز QR الخاص بالشركة",
-      subtitle: "رمز يومي مرتبط بجدول الشركة",
+      subtitle: "رمز QR يومي مرتبط بجدول الشركة",
       generate: "تحديث الرمز",
-      tokenLabel: "الرمز",
       validFrom: "بداية الصلاحية",
       validUntil: "نهاية الصلاحية",
       worksite: "الموقع",
-    },    
+    },           
     table: {
       title: "سجل الحضور",
       subtitle: "تفاصيل الدخول والخروج المباشرة",
@@ -392,6 +389,22 @@ export function HRAttendancePage() {
   
   const userName =
     meData?.user.first_name || meData?.user.username || content.userFallback;
+  const qrLink = useMemo(() => {
+    if (!qrToken?.token || typeof window === "undefined") {
+      return null;
+    }
+    const url = new URL("/attendance/self", window.location.origin);
+    url.searchParams.set("qr_token", qrToken.token);
+    url.searchParams.set("auto", "1");
+    return url.toString();
+  }, [qrToken?.token]);
+  const qrImage = useMemo(() => {
+    if (!qrLink) {
+      return null;
+    }
+    const encoded = encodeURIComponent(qrLink);
+    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encoded}`;
+  }, [qrLink]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -898,13 +911,16 @@ export function HRAttendancePage() {
             </div>
             {qrToken && (
               <div className="qr-token-card">
-                <label className="filter-field">
-                  {content.qr.tokenLabel}
-                  <input type="text" value={qrToken.token} readOnly />
-                </label>
+                <div className="qr-token-image">
+                  {qrImage ? (
+                    <img src={qrImage} alt="Company QR" />
+                  ) : (
+                    <span>{content.notifications.qrFailedMessage}</span>
+                  )}
+                </div>
                 <div className="qr-token-meta">
                   <span>
-                    {content.qr.validFrom}: {new Date(qrToken.valid_from).toLocaleString()}
+                    {content.qr.validFrom}: {new Date(qrToken.valid_from).toLocaleString()}                    
                   </span>
                   <span>
                     {content.qr.validUntil}: {new Date(qrToken.valid_until).toLocaleString()}

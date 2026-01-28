@@ -77,10 +77,24 @@
   gap: 12px;
 }
 
+.qr-token-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.qr-token-image img {
+  width: 180px;
+  height: 180px;
+}
+
 .qr-token-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 12px;  
   font-size: 0.85rem;
   color: var(--muted);
 }
