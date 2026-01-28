@@ -104,7 +104,9 @@ def ensure_company_roles(sender, instance, created, **kwargs):
 def audit_post_delete(sender, instance, **kwargs):
     if not _should_audit(sender):
         return
-    audit_context = get_audit_context()
+    if sender is Company:
+        return
+    audit_context = get_audit_context()    
     user = audit_context.user if audit_context else None
     company = _resolve_company(instance, user)
     if not company:
