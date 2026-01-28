@@ -9,7 +9,8 @@ from django.dispatch import receiver
 from django.forms.models import model_to_dict
 
 from core.audit import get_audit_context
-from core.models import AuditLog
+from core.models import AuditLog, Company
+from core.services.setup_templates import apply_roles
 
 AUDITED_APPS = {"core", "hr", "accounting", "analytics"}
 EXCLUDED_MODELS = {
@@ -91,6 +92,13 @@ def audit_post_save(sender, instance, created, **kwargs):
         user_agent=audit_context.user_agent if audit_context else "",
     )
 
+
+@receiver(post_save, sender=Company)
+def ensure_company_roles(sender, instance, created, **kwargs):
+    if not created:
+        return
+    apply_roles(instance, roles_data=[])
+    
 
 @receiver(post_delete)
 def audit_post_delete(sender, instance, **kwargs):
