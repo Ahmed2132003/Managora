@@ -114,7 +114,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             else:
                 # داخل الشركة: Manager يضيف HR/Accountant/Employee
                 if "manager" in creator_roles or is_admin_user(creator):
-                    allowed = {"manager", "hr", "accountant", "employee"}                    
+                    allowed = {"hr", "accountant", "employee"}                                       
                 # HR يضيف Accountant/Employee
                 elif "hr" in creator_roles:
                     allowed = {"accountant", "employee"}
