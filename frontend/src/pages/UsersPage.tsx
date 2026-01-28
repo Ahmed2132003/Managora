@@ -28,6 +28,44 @@ import { useMe } from "../shared/auth/useMe";
 import "./DashboardPage.css";
 import "./UsersPage.css";
 
+// Try to extract useful validation errors from axios-like responses.
+function formatApiError(err: unknown): string {
+  // Supports Axios-like errors (err.response.data) and plain strings.
+  type AxiosLikeError = {
+    message?: string;
+    response?: { status?: number; data?: unknown };
+  };
+
+  const e = err as AxiosLikeError;
+  const data = e?.response?.data;
+
+  if (data == null) return e?.message ?? String(err);
+
+  if (typeof data === "string") return data;
+
+  if (typeof data === "object") {
+    // DRF often returns: {field: ["msg"]} or {detail: "..."}
+    const record = data as Record<string, unknown>;
+    if (typeof record.detail === "string") return record.detail;
+
+    const parts: string[] = [];
+    for (const [k, v] of Object.entries(record)) {
+      if (Array.isArray(v)) parts.push(`${k}: ${v.join(", ")}`);
+      else if (typeof v === "string") parts.push(`${k}: ${v}`);
+      else if (v != null) parts.push(`${k}: ${JSON.stringify(v)}`);
+    }
+    if (parts.length) return parts.join(" | ");
+
+    try {
+      return JSON.stringify(data);
+    } catch {
+      return "Request failed (unreadable error payload).";
+    }
+  }
+
+  return String(data);
+}
+
 /* ================= Types ================= */
 
 type Role = {
@@ -531,6 +569,14 @@ export function UsersPage() {
 
   const createMutation = useMutation({
     mutationFn: async (values: CreateFormValues) => {
+      // Hard guard: backend requires company for superuser.
+      if (isSuperuser && !values.company_id) {
+        throw new Error(
+          isArabic
+            ? "يجب اختيار شركة قبل إنشاء المستخدم"
+            : "Company is required for superuser user creation"
+        );
+      }
       const payload: Record<
         string,
         string | boolean | number | number[] | undefined
@@ -542,7 +588,7 @@ export function UsersPage() {
         role_ids: values.role_id ? [Number(values.role_id)] : [],
       };
       if (isSuperuser) {
-        payload.company = values.company_id ? Number(values.company_id) : undefined;
+        payload.company = Number(values.company_id);
       }
       const res = await http.post(endpoints.users, payload);
       return res.data;
@@ -559,7 +605,7 @@ export function UsersPage() {
     onError: (err: unknown) => {
       notifications.show({
         title: "Create failed",
-        message: String(err),
+        message: formatApiError(err),
         color: "red",
       });
     },
@@ -585,7 +631,7 @@ export function UsersPage() {
     onError: (err: unknown) => {
       notifications.show({
         title: "Company creation failed",
-        message: String(err),
+        message: formatApiError(err),
         color: "red",
       });
     },
@@ -617,7 +663,7 @@ export function UsersPage() {
     onError: (err: unknown) => {
       notifications.show({
         title: "Update failed",
-        message: String(err),
+        message: formatApiError(err),
         color: "red",
       });
     },
@@ -634,7 +680,7 @@ export function UsersPage() {
     onError: (err: unknown) => {
       notifications.show({
         title: "Delete failed",
-        message: String(err),
+        message: formatApiError(err),
         color: "red",
       });
     },
