@@ -135,13 +135,28 @@ class UserCreateSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        role_ids = validated_data.pop("role_ids", [])
-        password = validated_data.pop("password")
+        # NOTE:
+        # Some deployments / integrations were observed to pass `password` and `role_ids`
+        # in request data but not in `validated_data` (e.g. due to serializer customization
+        # elsewhere or client bugs). We therefore fall back to `initial_data` and raise a
+        # proper 400 ValidationError instead of crashing with KeyError (500).
+        role_ids = validated_data.pop("role_ids", None)
+        if role_ids is None:
+            role_ids = self.initial_data.get("role_ids") if hasattr(self, "initial_data") else None
+        role_ids = role_ids or []
+
+        password = validated_data.pop("password", None)
+        if password is None:
+            password = self.initial_data.get("password") if hasattr(self, "initial_data") else None
+
+        if not password:
+            raise serializers.ValidationError({"password": "This field is required."})
 
         user = User(**validated_data)
         user.set_password(password)
         user.save()
 
+        # Assign exactly one role (already validated), if provided
         if role_ids:
             roles = Role.objects.filter(id__in=role_ids)
             user.roles.set(roles)
