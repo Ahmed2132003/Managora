@@ -601,8 +601,11 @@ export function UsersPage() {
       if (values.password) payload.password = values.password;
 
       await http.patch(`${endpoints.users}${values.id}/`, payload);
+      if (!values.role_id) {
+        throw new Error("Role is required / الدور مطلوب");
+      }
       await http.post(`${endpoints.users}${values.id}/roles/`, {
-        role_ids: values.role_id ? [Number(values.role_id)] : [],
+        role_ids: [Number(values.role_id)],
       });
     },
     onSuccess: () => {
@@ -647,7 +650,7 @@ export function UsersPage() {
       (data?.roles ?? []).map((role) => role.name.toLowerCase())
     );
     if (roleNames.has("manager")) {
-      return new Set(["hr", "accountant", "employee"]);      
+      return new Set(["manager", "hr", "accountant", "employee"]);      
     }
     if (roleNames.has("hr")) {
       return new Set(["accountant", "employee"]);
@@ -1328,11 +1331,9 @@ export function UsersPage() {
                 <Select
                   label={content.form.roles}
                   placeholder={content.form.rolesPlaceholder}
-                  data={assignableRoleOptions}
-                  value={field.value ?? null}
+                  data={assignableRoleOptions}                  
+                  value={field.value ?? ""}
                   onChange={field.onChange}
-                  error={createForm.formState.errors.role_id?.message}
-                  required
                 />
               )}
             />
@@ -1437,11 +1438,9 @@ export function UsersPage() {
                 <Select
                   label={content.form.roles}
                   placeholder={content.form.rolesPlaceholder}
-                  data={assignableRoleOptions}
-                  value={field.value ?? null}
+                  data={assignableRoleOptions}                  
+                  value={field.value ?? ""}
                   onChange={field.onChange}
-                  error={editForm.formState.errors.role_id?.message}
-                  required
                 />
               )}
             />
