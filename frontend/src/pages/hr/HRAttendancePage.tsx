@@ -389,15 +389,16 @@ export function HRAttendancePage() {
   
   const userName =
     meData?.user.first_name || meData?.user.username || content.userFallback;
+  const qrTokenValue = qrToken?.token ?? "";
   const qrLink = useMemo(() => {
-    if (!qrToken?.token || typeof window === "undefined") {
+    if (!qrTokenValue || typeof window === "undefined") {
       return null;
     }
     const url = new URL("/attendance/self", window.location.origin);
-    url.searchParams.set("qr_token", qrToken.token);
+    url.searchParams.set("qr_token", qrTokenValue);
     url.searchParams.set("auto", "1");
     return url.toString();
-  }, [qrToken?.token]);
+  }, [qrTokenValue]);  
   const qrImage = useMemo(() => {
     if (!qrLink) {
       return null;

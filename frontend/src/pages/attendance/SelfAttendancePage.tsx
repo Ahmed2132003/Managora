@@ -452,15 +452,7 @@ export function SelfAttendancePage() {
     const params = new URLSearchParams(location.search);
     return params.get("qr_token") ? "qr" : "gps";
   });
-  const [qrToken, setQrToken] = useState(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("qr_token") ?? "";
-  });
-  const [qrTokenTouched, setQrTokenTouched] = useState(() => {
-    const params = new URLSearchParams(location.search);
-    return Boolean(params.get("qr_token"));
-  });
-  const autoCheckInTriggeredRef = useRef(false);
+  const autoCheckInTriggeredRef = useRef(false);  
   const [searchTerm, setSearchTerm] = useState("");
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
@@ -527,8 +519,8 @@ export function SelfAttendancePage() {
   }, [theme]);
 
   const companyQrToken = companyQrQuery.data?.token ?? "";
-  const effectiveQrToken = qrTokenTouched ? qrToken : companyQrToken;
-
+  const effectiveQrToken = qrTokenFromUrl ? qrTokenFromUrl : companyQrToken;
+  
   const checkInMutation = useCheckInMutation();
   const checkOutMutation = useCheckOutMutation();
 
