@@ -388,7 +388,8 @@ export function HRAttendancePage() {
 
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
-  const userPermissions = meData?.permissions ?? [];
+  const userPermissions = useMemo(() => meData?.permissions ?? [], [meData?.permissions]);
+  
   const userName =
     meData?.user.first_name || meData?.user.username || content.userFallback;
 
@@ -654,7 +655,8 @@ export function HRAttendancePage() {
 
   async function handleGenerateQr() {
     try {
-      const token = await qrGenerateMutation.mutateAsync();
+      const token = await qrGenerateMutation.mutateAsync({});
+      
       setQrToken(token);
       notifications.show({
         title: content.notifications.qrTitle,

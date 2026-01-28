@@ -454,6 +454,7 @@ export function SelfAttendancePage() {
   const [worksiteId, setWorksiteId] = useState<number | undefined>(undefined);
   const [method, setMethod] = useState<AttendanceActionPayload["method"]>("gps");
   const [qrToken, setQrToken] = useState("");
+  const [qrTokenTouched, setQrTokenTouched] = useState(false);  
   const [searchTerm, setSearchTerm] = useState("");
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
@@ -502,13 +503,8 @@ export function SelfAttendancePage() {
     window.localStorage.setItem("managora-theme", theme);
   }, [theme]);
 
-  useEffect(() => {
-    if (!companyQrQuery.data?.token) {
-      return;
-    }
-    const token = companyQrQuery.data.token;
-    setQrToken((current) => (current ? current : token));
-  }, [companyQrQuery.data?.token]);
+  const companyQrToken = companyQrQuery.data?.token ?? "";
+  const effectiveQrToken = qrTokenTouched ? qrToken : companyQrToken;
 
   const checkInMutation = useCheckInMutation();
   const checkOutMutation = useCheckOutMutation();
@@ -583,7 +579,7 @@ export function SelfAttendancePage() {
       }
     }
 
-    if (resolvedMethod === "qr" && !qrToken.trim()) {
+    if (resolvedMethod === "qr" && !effectiveQrToken.trim()) {      
       notifications.show({
         title: content.notifications.qrTitle,
         message: content.notifications.qrMessage,
@@ -617,7 +613,7 @@ export function SelfAttendancePage() {
     }
 
     if (resolvedMethod === "qr") {
-      payload.qr_token = qrToken.trim();
+      payload.qr_token = effectiveQrToken.trim();      
       payload.lat = locationValue
         ? normalizeCoordinate(locationValue.lat)
         : undefined;
@@ -1183,11 +1179,14 @@ export function SelfAttendancePage() {
                     <input
                       type="text"
                       placeholder={content.fields.qrPlaceholder}
-                      value={qrToken}
-                      onChange={(event) => setQrToken(event.currentTarget.value)}
+                      value={effectiveQrToken}
+                      onChange={(event) => {
+                        setQrTokenTouched(true);
+                        setQrToken(event.currentTarget.value);
+                      }}
                     />
                   </label>
-                )}
+                )}                
                 <div className="attendance-actions">
                   <button
                     type="button"
