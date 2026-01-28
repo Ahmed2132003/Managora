@@ -23,7 +23,7 @@ class RoleListView(APIView):
         else:
             role_names = {name.lower() for name in request.user.roles.values_list("name", flat=True)}
             if "manager" in role_names:
-                allowed = {"hr", "accountant", "employee"}
+                allowed = {"manager", "hr", "accountant", "employee"}                
             elif "hr" in role_names:
                 allowed = {"accountant", "employee"}
             else:

@@ -31,7 +31,7 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
 
     قواعد الإنشاء حسب المطلوب:
     - Superuser: يقدر ينشئ لأي شركة + أي Role من الأربع (Manager/HR/Accountant/Employee).
-    - Manager (داخل الشركة): يقدر ينشئ HR/Accountant/Employee.
+    - Manager (داخل الشركة): يقدر ينشئ Manager/HR/Accountant/Employee.    
     - HR (داخل الشركة): يقدر ينشئ Accountant/Employee.
     - Accountant/Employee: ممنوع ينشئوا users.
     """
@@ -108,7 +108,7 @@ class UsersViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
             return {"manager", "hr", "accountant", "employee"}
         actor_roles = _role_names(actor)
         if "manager" in actor_roles or is_admin_user(actor):
-            return {"hr", "accountant", "employee"}
+            return {"manager", "hr", "accountant", "employee"}        
         if "hr" in actor_roles:
             return {"accountant", "employee"}
         return set()
