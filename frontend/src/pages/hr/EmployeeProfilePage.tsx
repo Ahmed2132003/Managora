@@ -348,7 +348,11 @@ export function EmployeeProfilePage() {
 
   async function handleCreateJobTitle(values: JobTitleFormValues) {
     try {
-      const created = await createJobTitleMutation.mutateAsync(values);
+      const created = await createJobTitleMutation.mutateAsync({
+        name: values.name,
+        is_active: true,
+      });
+
       notifications.show({
         title: "Job title created",
         message: "تم إنشاء المسمى الوظيفي",
