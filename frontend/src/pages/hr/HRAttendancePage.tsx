@@ -407,6 +407,18 @@ export function HRAttendancePage() {
     return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encoded}`;
   }, [qrLink]);
 
+  const qrLinkLabel = useMemo(() => {
+    if (!qrLink) return "";
+    // Show a short readable version (domain + path), keep the full href for open/copy.
+    try {
+      const url = new URL(qrLink);
+      const short = `${url.origin}${url.pathname}`;
+      return short;
+    } catch {
+      return qrLink;
+    }
+  }, [qrLink]);
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -929,6 +941,16 @@ export function HRAttendancePage() {
                   <span>
                     {content.qr.worksite}: {qrToken.worksite_id}
                   </span>
+
+                  {/* Debug/UX: show the actual link that the QR should open. */}
+                  {qrLink && (
+                    <span style={{ wordBreak: "break-all" }}>
+                      {isArabic ? "الرابط:" : "Link:"}{" "}
+                      <a href={qrLink} target="_blank" rel="noreferrer">
+                        {qrLinkLabel}
+                      </a>
+                    </span>
+                  )}
                 </div>
               </div>
             )}            

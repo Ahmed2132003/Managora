@@ -24,6 +24,47 @@ class Company(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class CompanyAttendanceQrToken(models.Model):
+    """Stores the daily QR token for a company.
+
+    Token is a signed string (django.core.signing.dumps) that encodes company_id,
+    worksite_id and issued_for. We persist it so the QR code stays stable for the day
+    and rotates every 24h.
+    """
+
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="attendance_qr_tokens",
+    )
+    issued_for = models.DateField()
+    token = models.TextField(unique=True)
+    valid_from = models.DateTimeField()
+    valid_until = models.DateTimeField()
+    worksite = models.ForeignKey(
+        "hr.WorkSite",
+        on_delete=models.PROTECT,
+        related_name="attendance_qr_tokens",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "issued_for"],
+                name="unique_company_qr_token_per_day",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["company", "issued_for"], name="comp_qr_day_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.company_id} - {self.issued_for}"
+
+
 class Permission(models.Model):
     code = models.CharField(max_length=150, unique=True)
     name = models.CharField(max_length=255)

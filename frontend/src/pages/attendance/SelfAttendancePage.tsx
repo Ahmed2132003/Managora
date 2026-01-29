@@ -687,7 +687,24 @@ export function SelfAttendancePage() {
       return;
     }
     if (todayRecord?.check_in_time) {
-      autoCheckInTriggeredRef.current = true;
+      // If the user already checked in today, a second scan should auto check-out (once).
+      if (!todayRecord.check_out_time) {
+        autoCheckInTriggeredRef.current = true;
+        void handleAction("check-out").finally(() => {
+          const params = new URLSearchParams(location.search);
+          params.delete("qr_token");
+          params.delete("auto");
+          navigate(
+            {
+              pathname: location.pathname,
+              search: params.toString() ? `?${params.toString()}` : "",
+            },
+            { replace: true }
+          );
+        });
+      } else {
+        autoCheckInTriggeredRef.current = true;
+      }
       return;
     }
     if (method !== "qr" || !effectiveQrToken.trim()) {

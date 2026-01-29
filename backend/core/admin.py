@@ -9,6 +9,7 @@ from .models import (
     Role,
     RolePermission,
     UserRole,
+    CompanyAttendanceQrToken,
 )
 
 User = get_user_model()
@@ -115,3 +116,4 @@ class ExportLogAdmin(admin.ModelAdmin):
     list_filter = ("company", "export_type")
     search_fields = ("export_type", "actor__username")
     ordering = ("-created_at",)
+admin.site.register(CompanyAttendanceQrToken)

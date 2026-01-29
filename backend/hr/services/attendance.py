@@ -12,6 +12,7 @@ from rest_framework.exceptions import PermissionDenied
 
 from hr.models import AttendanceRecord, Employee, Shift, WorkSite
 from hr.services.policies import evaluate_attendance_record
+from core.models import CompanyAttendanceQrToken
 
 
 QR_TOKEN_SALT = "attendance.qr"
@@ -153,8 +154,24 @@ def _get_qr_window(company, issued_for: date) -> QrWindow:
 def generate_qr_token(
     user,
 ) -> dict[str, Any]:
+    """Return today's stable QR token for the user's company.
+
+    We persist the signed token per (company, issued_for) so the QR image stays the same
+    for the whole day and rotates every 24 hours.
+    """
     issued_for = timezone.localdate()
     window = _get_qr_window(user.company, issued_for)
+
+    existing = CompanyAttendanceQrToken.objects.filter(
+        company=user.company, issued_for=issued_for
+    ).first()
+    if existing:
+        return {
+            "token": existing.token,
+            "valid_from": existing.valid_from,
+            "valid_until": existing.valid_until,
+            "worksite_id": existing.worksite_id,
+        }
 
     payload = {
         "company_id": user.company_id,
@@ -162,6 +179,16 @@ def generate_qr_token(
         "issued_for": issued_for.isoformat(),
     }
     token = signing.dumps(payload, salt=QR_TOKEN_SALT)
+
+    CompanyAttendanceQrToken.objects.create(
+        company=user.company,
+        issued_for=issued_for,
+        token=token,
+        valid_from=window.start,
+        valid_until=window.end,
+        worksite=window.worksite,
+    )
+
     return {
         "token": token,
         "valid_from": window.start,
@@ -191,6 +218,12 @@ def _resolve_qr_payload(payload: dict[str, Any], company) -> WorkSite:
 
     worksite_id = data.get("worksite_id")
     issued_for = _parse_issued_for(data.get("issued_for"))
+
+    # Token must match the persisted daily token for this company.
+    stored = CompanyAttendanceQrToken.objects.filter(company=company, issued_for=issued_for).first()
+    if not stored or stored.token != token:
+        raise serializers.ValidationError({"qr_token": "Invalid QR token."})
+
     if not worksite_id:
         raise serializers.ValidationError({"qr_token": "Invalid QR token payload."})
 
