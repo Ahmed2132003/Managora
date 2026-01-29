@@ -328,12 +328,58 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             "check_in_lng",
             "check_out_lat",
             "check_out_lng",
+            "check_in_distance_meters",
+            "check_out_distance_meters",
+            "check_in_approval_status",
+            "check_out_approval_status",
+            "check_in_approved_by",
+            "check_out_approved_by",
+            "check_in_approved_at",
+            "check_out_approved_at",
+            "check_in_rejection_reason",
+            "check_out_rejection_reason",
             "method",
             "status",
             "late_minutes",
             "early_leave_minutes",
             "notes",
         )
+
+
+class AttendanceSelfRequestOtpSerializer(serializers.Serializer):
+    purpose = serializers.ChoiceField(choices=["checkin", "checkout"])
+
+
+class AttendanceSelfVerifyOtpSerializer(serializers.Serializer):
+    request_id = serializers.IntegerField()
+    code = serializers.CharField(min_length=6, max_length=6)
+    lat = serializers.DecimalField(max_digits=9, decimal_places=6)
+    lng = serializers.DecimalField(max_digits=9, decimal_places=6)
+
+
+class AttendanceApproveRejectSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["checkin", "checkout"])
+    reason = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+
+class AttendancePendingItemSerializer(serializers.Serializer):
+    record_id = serializers.IntegerField()
+    employee_id = serializers.IntegerField()
+    employee_name = serializers.CharField()
+    date = serializers.DateField()
+    action = serializers.ChoiceField(choices=["checkin", "checkout"])
+    time = serializers.DateTimeField()
+    lat = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
+    lng = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
+    distance_meters = serializers.IntegerField(required=False, allow_null=True)
+    status = serializers.CharField()
+
+
+class AttendanceEmailConfigUpsertSerializer(serializers.Serializer):
+    sender_email = serializers.EmailField()
+    app_password = serializers.CharField(min_length=4, max_length=256)
+    is_active = serializers.BooleanField(default=True)
+
 
 
 class AttendanceActionSerializer(serializers.Serializer):

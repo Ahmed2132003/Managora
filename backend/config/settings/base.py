@@ -7,6 +7,8 @@ from celery.schedules import crontab
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-me")
+# Optional: urlsafe_b64 Fernet key (32 bytes) for encrypting company email app passwords
+ATTENDANCE_EMAIL_ENCRYPTION_KEY = os.getenv("ATTENDANCE_EMAIL_ENCRYPTION_KEY", "") or None
 DEBUG = os.getenv("DEBUG", "1") == "1"
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]

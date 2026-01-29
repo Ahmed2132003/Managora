@@ -41,14 +41,27 @@ from hr.models import (
     PolicyRule,
     Shift,
 )
-from hr.services.attendance import check_in, check_out, generate_qr_token
+from hr.services.attendance import (
+    check_in,
+    check_out,
+    request_self_attendance_otp,
+    verify_self_attendance_otp,
+    approve_attendance_action,
+    reject_attendance_action,
+)
+from core.models import CompanyEmailConfig
 from hr.services.defaults import ensure_default_shifts, get_company_manager, get_default_shift
 from hr.serializers import (
     DepartmentSerializer,
     AttendanceActionSerializer,
     AttendanceQrGenerateSerializer,
     AttendanceQrTokenSerializer,
-    AttendanceRecordSerializer,    
+    AttendanceRecordSerializer,
+    AttendanceSelfRequestOtpSerializer,
+    AttendanceSelfVerifyOtpSerializer,
+    AttendanceApproveRejectSerializer,
+    AttendancePendingItemSerializer,
+    AttendanceEmailConfigUpsertSerializer,
     EmployeeCreateUpdateSerializer,
     EmployeeDetailSerializer,
     EmployeeSerializer,
@@ -431,53 +444,16 @@ class AttendanceCheckOutView(APIView):
 class AttendanceQrGenerateView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(
-        tags=["Attendance"],
-        summary="Generate attendance QR token",
-        request=AttendanceQrGenerateSerializer,
-        responses={201: AttendanceQrTokenSerializer},
-    )
     def post(self, request):
-        serializer = AttendanceQrGenerateSerializer(
-            data=request.data, context={"request": request}
-        )
-        serializer.is_valid(raise_exception=True)
-        token_data = generate_qr_token(request.user)        
-        return Response(
-            {
-                "token": token_data["token"],
-                "valid_from": token_data["valid_from"],
-                "valid_until": token_data["valid_until"],
-                "worksite_id": token_data["worksite_id"],                
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
-    def get_permissions(self):
-        permissions = [permission() for permission in self.permission_classes]
-        permissions.append(HasAnyPermission(["attendance.*"]))
-        return permissions
+        raise ValidationError("QR attendance is disabled.")
 
 
 class AttendanceCompanyQrView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(
-        tags=["Attendance"],
-        summary="Get company attendance QR token",
-        responses={200: AttendanceQrTokenSerializer},
-    )
     def get(self, request):
-        token_data = generate_qr_token(request.user)
-        return Response(
-            {
-                "token": token_data["token"],
-                "valid_from": token_data["valid_from"],
-                "valid_until": token_data["valid_until"],
-                "worksite_id": token_data["worksite_id"],
-            },
-            status=status.HTTP_200_OK,
-        )
+        raise ValidationError("QR attendance is disabled.")
+
 
 class AttendanceMyView(ListAPIView):
     serializer_class = AttendanceRecordSerializer

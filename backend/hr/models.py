@@ -221,9 +221,12 @@ class Shift(BaseModel):
 
 class AttendanceRecord(BaseModel):
     class Method(models.TextChoices):
+        # Legacy methods (kept for backward compatibility / old data)
         GPS = "gps", "GPS"
         QR = "qr", "QR"
         MANUAL = "manual", "Manual"
+        # New method
+        EMAIL_OTP = "email_otp", "Email OTP"
 
     class Status(models.TextChoices):
         PRESENT = "present", "Present"
@@ -232,19 +235,66 @@ class AttendanceRecord(BaseModel):
         EARLY_LEAVE = "early_leave", "Early Leave"
         INCOMPLETE = "incomplete", "Incomplete"
 
+    class ApprovalStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
     employee = models.ForeignKey(
         "hr.Employee",
         on_delete=models.CASCADE,
         related_name="attendance_records",
     )
     date = models.DateField()
+
+    # Times
     check_in_time = models.DateTimeField(null=True, blank=True)
     check_out_time = models.DateTimeField(null=True, blank=True)
+
+    # Locations
     check_in_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     check_in_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     check_out_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     check_out_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    method = models.CharField(max_length=10, choices=Method.choices)
+
+    # Distance to allowed worksite (meters)
+    check_in_distance_meters = models.PositiveIntegerField(null=True, blank=True)
+    check_out_distance_meters = models.PositiveIntegerField(null=True, blank=True)
+
+    # Approval per action (check-in / check-out)
+    check_in_approval_status = models.CharField(
+        max_length=10,
+        choices=ApprovalStatus.choices,
+        null=True,
+        blank=True,
+    )
+    check_out_approval_status = models.CharField(
+        max_length=10,
+        choices=ApprovalStatus.choices,
+        null=True,
+        blank=True,
+    )
+    check_in_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="attendance_checkin_approvals",
+    )
+    check_out_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="attendance_checkout_approvals",
+    )
+    check_in_approved_at = models.DateTimeField(null=True, blank=True)
+    check_out_approved_at = models.DateTimeField(null=True, blank=True)
+    check_in_rejection_reason = models.TextField(null=True, blank=True)
+    check_out_rejection_reason = models.TextField(null=True, blank=True)
+
+    # General
+    method = models.CharField(max_length=20, choices=Method.choices)
     status = models.CharField(max_length=20, choices=Status.choices)
     late_minutes = models.PositiveIntegerField(default=0)
     early_leave_minutes = models.PositiveIntegerField(default=0)
@@ -267,6 +317,43 @@ class AttendanceRecord(BaseModel):
 
     def __str__(self):
         return f"{self.company.name} - {self.employee.full_name} - {self.date}"
+
+
+class AttendanceOtpRequest(BaseModel):
+    """OTP request for self attendance actions (check-in / check-out)."""
+
+    class Purpose(models.TextChoices):
+        CHECK_IN = "checkin", "Check-in"
+        CHECK_OUT = "checkout", "Check-out"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="attendance_otp_requests",
+    )
+    purpose = models.CharField(max_length=10, choices=Purpose.choices)
+    code_salt = models.CharField(max_length=64)
+    code_hash = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(default=5)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["company", "user", "expires_at"], name="att_otp_company_user_idx"),
+        ]
+
+    def is_expired(self) -> bool:
+        return timezone.now() > self.expires_at
+
+    def mark_used(self) -> None:
+        self.used_at = timezone.now()
+        self.save(update_fields=["used_at"])
+
+    def __str__(self) -> str:
+        return f"{self.company.name} OTP {self.purpose} for {self.user_id}"
+
 
 
 class PolicyRule(BaseModel):

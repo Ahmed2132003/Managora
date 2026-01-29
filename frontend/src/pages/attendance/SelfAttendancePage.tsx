@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useLocation, useNavigate } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
 import { useQueryClient } from "@tanstack/react-query";
 
 import {
-  type AttendanceActionPayload,
   type AttendanceRecord,
-  useCheckInMutation,
-  useCheckOutMutation,
-  useAttendanceCompanyQrQuery,
+  type AttendanceOtpPurpose,
+  useAttendanceSelfRequestOtpMutation,
+  useAttendanceSelfVerifyOtpMutation,
   useMyAttendanceQuery,
 } from "../../shared/hr/hooks";
 import { useMe } from "../../shared/auth/useMe";
@@ -20,6 +19,11 @@ import "./SelfAttendancePage.css";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
+
+type AttendanceRecordWithApprovals = AttendanceRecord & {
+  check_in_approval_status?: string | null;
+  check_out_approval_status?: string | null;
+};
 
 type Content = {
   brand: string;
@@ -38,54 +42,29 @@ type Content = {
   statusMap: Record<string, string>;
   detailsTitle: string;
   detailsSubtitle: string;
-  actionTitle: string;
-  actionSubtitle: string;
-  qrTitle: string;
-  qrSubtitle: string;
-  qrUnavailable: string;
-  qrValidFrom: string;
-  qrValidUntil: string;
-  qrWorksite: string;
-  fields: {
-    employeeId: string;
-    method: string;
-    shiftId: string;
-    worksiteId: string;
-    shiftPlaceholder: string;
-    worksitePlaceholder: string;
-  };
+  otpTitle: string;
+  otpSubtitle: string;
+  otpCodeLabel: string;
+  otpRequestCheckIn: string;
+  otpRequestCheckOut: string;
+  otpSending: string;
+  otpVerifying: string;
+  otpVerifySubmit: string;
+  otpSentTitle: string;
+  otpSentMessage: string;
+  otpSendFailedTitle: string;
+  otpVerifyFailedTitle: string;
+  otpSubmittedTitle: string;
+  otpSubmittedMessage: string;
+  otpRequestFirst: string;
+  otpExpiresIn: (s: number) => string;
+  otpExpired: string;
   rows: {
     statusToday: string;
     checkIn: string;
     checkOut: string;
     lateMinutes: string;
     earlyLeaveMinutes: string;
-  };
-  actions: {
-    checkIn: string;
-    checkOut: string;
-  };
-  methodOptions: Array<{ value: AttendanceActionPayload["method"]; label: string }>;
-  notifications: {
-    missingEmployeeTitle: string;
-    missingEmployeeMessage: string;
-    methodWarningTitle: string;
-    methodWarningMessage: string;
-    locationTitle: string;
-    locationMessage: string;
-    qrLocationTitle: string;
-    qrLocationMessage: string;
-    worksiteTitle: string;
-    worksiteMessage: string;
-    qrTitle: string;
-    qrMessage: string;
-    shiftTitle: string;
-    shiftMessage: string;
-    checkInTitle: string;
-    checkInMessage: string;
-    checkOutTitle: string;
-    checkOutMessage: string;
-    failedTitle: string;
   };
   nav: {
     dashboard: string;
@@ -138,7 +117,7 @@ const contentMap: Record<Language, Content> = {
     navigationLabel: "Navigation",
     logoutLabel: "Logout",
     pageTitle: "My Attendance",
-    pageSubtitle: "Track today’s check-in and check-out moments with confidence.",
+    pageSubtitle: "Submit your attendance using Email OTP + GPS. Requests are pending approval.",
     userFallback: "Explorer",
     todayLabel: "Today",
     statusLabel: "Status",
@@ -154,62 +133,30 @@ const contentMap: Record<Language, Content> = {
     },
     detailsTitle: "Today’s summary",
     detailsSubtitle: "Live status and timestamps",
-    actionTitle: "Self-service actions",
-    actionSubtitle: "Submit check-in or check-out on your own",
-    qrTitle: "Company QR code",
-    qrSubtitle:
-      "Scan this code to open the attendance link and check in automatically within the allowed time window.",
-    qrUnavailable: "QR settings are not configured yet. Contact HR.",
-    qrValidFrom: "Valid from",
-    qrValidUntil: "Valid until",
-    qrWorksite: "Worksite",
-    fields: {
-      employeeId: "Employee ID",
-      method: "Method",
-      shiftId: "Shift ID",
-      worksiteId: "Worksite ID (optional)",
-      shiftPlaceholder: "Example: 3",
-      worksitePlaceholder: "Required for GPS",
-    },
+    otpTitle: "Email OTP Attendance",
+    otpSubtitle:
+      "Request a 6-digit code sent to your email. Enter it within 60 seconds; your GPS location will be verified. The request will be pending HR/Manager approval.",
+    otpCodeLabel: "6-digit code",
+    otpRequestCheckIn: "Request Check-in",
+    otpRequestCheckOut: "Request Check-out",
+    otpSending: "Sending...",
+    otpVerifying: "Verifying...",
+    otpVerifySubmit: "Verify & Submit",
+    otpSentTitle: "OTP Sent",
+    otpSentMessage: "Check your email for the 6-digit code (valid for 60 seconds).",
+    otpSendFailedTitle: "Failed to send OTP",
+    otpVerifyFailedTitle: "Verification failed",
+    otpSubmittedTitle: "Request submitted",
+    otpSubmittedMessage: "Recorded successfully and pending HR/Manager approval.",
+    otpRequestFirst: "Request an OTP first.",
+    otpExpiresIn: (s) => `Code expires in ${s}s`,
+    otpExpired: "Code expired. Request again.",
     rows: {
       statusToday: "Status today",
       checkIn: "Check-in",
       checkOut: "Check-out",
       lateMinutes: "Late minutes",
       earlyLeaveMinutes: "Early leave minutes",
-    },
-    actions: {
-      checkIn: "Check-in",
-      checkOut: "Check-out",
-    },
-    methodOptions: [
-      { value: "gps", label: "GPS" },
-      { value: "qr", label: "QR" },
-      { value: "manual", label: "Manual" },
-    ],
-    notifications: {
-      missingEmployeeTitle: "Missing info",
-      missingEmployeeMessage: "Please enter the employee ID before continuing.",
-      methodWarningTitle: "Attendance method",
-      methodWarningMessage:
-        "Checking in for someone else must be manual. Location data will be ignored.",
-      locationTitle: "Location required",
-      locationMessage:
-        "We could not read the location, so we’ll use manual check-in instead.",
-      qrLocationTitle: "Location required",
-      qrLocationMessage: "Location is required for QR attendance. Please enable GPS.",
-      worksiteTitle: "Worksite required",
-      worksiteMessage:
-        "Provide a worksite ID to enable GPS attendance. Manual mode will be used.",
-      qrTitle: "QR token required",
-      qrMessage: "QR token is missing. Please scan the QR code again.",
-      shiftTitle: "Missing shift",
-      shiftMessage: "Please enter a shift ID before continuing.",
-      checkInTitle: "Checked in",
-      checkInMessage: "Attendance has been recorded successfully.",
-      checkOutTitle: "Checked out",
-      checkOutMessage: "Checkout has been recorded successfully.",
-      failedTitle: "Action failed",
     },
     nav: {
       dashboard: "Dashboard",
@@ -260,7 +207,7 @@ const contentMap: Record<Language, Content> = {
     navigationLabel: "التنقل",
     logoutLabel: "تسجيل الخروج",
     pageTitle: "حضوري",
-    pageSubtitle: "تابع تسجيل الحضور والانصراف اليوم بثقة.",
+    pageSubtitle: "سجل حضورك عبر كود على البريد + التحقق بالموقع. الطلبات تنتظر التأكيد.",
     userFallback: "ضيف",
     todayLabel: "اليوم",
     statusLabel: "الحالة",
@@ -276,62 +223,30 @@ const contentMap: Record<Language, Content> = {
     },
     detailsTitle: "ملخص اليوم",
     detailsSubtitle: "الحالة والتوقيتات المباشرة",
-    actionTitle: "إجراءات الحضور",
-    actionSubtitle: "سجل حضورك أو انصرافك بنفسك",
-    qrTitle: "رمز QR الخاص بالشركة",
-    qrSubtitle:
-      "امسح الرمز لفتح رابط الحضور وتسجيل الدخول تلقائيًا ضمن الوقت المسموح.",
-    qrUnavailable: "لم يتم إعداد رمز QR بعد. تواصل مع الموارد البشرية.",
-    qrValidFrom: "بداية الصلاحية",
-    qrValidUntil: "نهاية الصلاحية",
-    qrWorksite: "موقع العمل",
-    fields: {
-      employeeId: "رقم الموظف",
-      method: "الطريقة",
-      shiftId: "رقم الوردية",
-      worksiteId: "معرف الموقع (اختياري)",
-      shiftPlaceholder: "مثال: 3",
-      worksitePlaceholder: "مطلوب لطريقة GPS",
-    },
+    otpTitle: "تسجيل الحضور عبر البريد",
+    otpSubtitle:
+      "اطلب كود مكون من 6 أرقام على بريدك، أدخله خلال 60 ثانية، ثم سيتم التحقق من موقعك. بعدها الطلب ينتظر موافقة الموارد البشرية/المدير.",
+    otpCodeLabel: "كود من 6 أرقام",
+    otpRequestCheckIn: "طلب تسجيل حضور",
+    otpRequestCheckOut: "طلب تسجيل انصراف",
+    otpSending: "جاري الإرسال...",
+    otpVerifying: "جاري التحقق...",
+    otpVerifySubmit: "تحقق وأرسل الطلب",
+    otpSentTitle: "تم إرسال الكود",
+    otpSentMessage: "تم إرسال كود من 6 أرقام على بريدك (صالح لمدة 60 ثانية).",
+    otpSendFailedTitle: "فشل إرسال الكود",
+    otpVerifyFailedTitle: "فشل التحقق",
+    otpSubmittedTitle: "تم إرسال الطلب",
+    otpSubmittedMessage: "تم تسجيل الطلب وبانتظار موافقة الموارد البشرية/المدير.",
+    otpRequestFirst: "اطلب الكود أولًا.",
+    otpExpiresIn: (s) => `ينتهي الكود خلال ${s} ثانية`,
+    otpExpired: "انتهت صلاحية الكود. اطلب كود جديد.",
     rows: {
       statusToday: "حالة اليوم",
       checkIn: "وقت الحضور",
       checkOut: "وقت الانصراف",
       lateMinutes: "دقائق التأخير",
       earlyLeaveMinutes: "دقائق الانصراف المبكر",
-    },
-    actions: {
-      checkIn: "تسجيل حضور",
-      checkOut: "تسجيل انصراف",
-    },
-    methodOptions: [
-      { value: "gps", label: "GPS" },
-      { value: "qr", label: "QR" },
-      { value: "manual", label: "يدوي" },
-    ],
-    notifications: {
-      missingEmployeeTitle: "بيانات ناقصة",
-      missingEmployeeMessage: "من فضلك أدخل رقم الموظف قبل المتابعة.",
-      methodWarningTitle: "طريقة تسجيل الحضور",
-      methodWarningMessage:
-        "تسجيل الحضور لشخص آخر يجب أن يكون يدويًا. سيتم تجاهل بيانات الموقع.",
-      locationTitle: "الموقع مطلوب",
-      locationMessage:
-        "لم نتمكن من قراءة الموقع، سيتم تسجيل الحضور بالطريقة اليدوية.",
-      qrLocationTitle: "الموقع مطلوب",
-      qrLocationMessage: "الموقع مطلوب لتسجيل الحضور عبر QR. فعّل GPS.",
-      worksiteTitle: "الموقع مطلوب",
-      worksiteMessage:
-        "أدخل معرف الموقع لتفعيل تسجيل الحضور بالموقع. سيتم استخدام الطريقة اليدوية.",
-      qrTitle: "مطلوب كود QR",
-      qrMessage: "رمز الـ QR غير متوفر. من فضلك أعد مسح الرمز.",
-      shiftTitle: "بيانات ناقصة",
-      shiftMessage: "من فضلك أدخل الوردية قبل المتابعة.",
-      checkInTitle: "تم تسجيل الحضور",
-      checkInMessage: "تم تسجيل الحضور بنجاح",
-      checkOutTitle: "تم تسجيل الانصراف",
-      checkOutMessage: "تم تسجيل الانصراف بنجاح",
-      failedTitle: "عملية غير مكتملة",
     },
     nav: {
       dashboard: "لوحة التحكم",
@@ -387,28 +302,6 @@ function getTimeLabel(value: string | null, locale: string) {
   return date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
 }
 
-function normalizeCoordinate(value: number) {
-  return Number(value.toFixed(6));
-}
-
-async function readGeolocation() {
-  if (!navigator.geolocation) {
-    return null;
-  }
-  return new Promise<{ lat: number; lng: number } | null>((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        });
-      },
-      () => resolve(null),
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
-  });
-}
-
 function formatApiError(error: unknown) {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data;
@@ -418,16 +311,11 @@ function formatApiError(error: unknown) {
     if (data && typeof data === "object") {
       const obj = data as Record<string, unknown>;
 
-      if (typeof obj.detail === "string") {
-        return obj.detail;
-      }
+      if (typeof obj.detail === "string") return obj.detail;
 
       return Object.entries(obj)
         .map(([key, value]) => {
-          if (Array.isArray(value)) {
-            const parts = value.map((v) => String(v));
-            return `${key}: ${parts.join(", ")}`;
-          }
+          if (Array.isArray(value)) return `${key}: ${value.map(String).join(", ")}`;
           return `${key}: ${String(value)}`;
         })
         .join(" | ");
@@ -440,91 +328,80 @@ function formatApiError(error: unknown) {
   return String(error);
 }
 
+function getErrorDetail(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data;
+    if (data && typeof data === "object") {
+      const obj = data as Record<string, unknown>;
+      const detail = obj.detail ?? obj.otp ?? obj.code;
+      if (typeof detail === "string" || typeof detail === "number") {
+        return String(detail);
+      }
+    }
+  }
+  return formatApiError(error);
+}
+
+
+
+
+
+function getGeo(): Promise<{ lat: number; lng: number }> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation is not supported"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (err) => reject(err),
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  });
+}
+
 export function SelfAttendancePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+
   const todayValue = useMemo(() => getTodayValue(), []);
-  const [employeeId, setEmployeeId] = useState<number | undefined>(undefined);
-  const [shiftId, setShiftId] = useState<number | undefined>(undefined);
-  const [worksiteId, setWorksiteId] = useState<number | undefined>(undefined);
-  const [method, setMethod] = useState<AttendanceActionPayload["method"]>(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("qr_token") ? "qr" : "gps";
-  });
-  const autoCheckInTriggeredRef = useRef(false);  
   const [searchTerm, setSearchTerm] = useState("");
+
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
-      typeof window !== "undefined"
-        ? window.localStorage.getItem("managora-language")
-        : null;
+      typeof window !== "undefined" ? window.localStorage.getItem("managora-language") : null;
     return stored === "en" || stored === "ar" ? stored : "ar";
   });
+
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const stored =
-      typeof window !== "undefined"
-        ? window.localStorage.getItem("managora-theme")
-        : null;
+      typeof window !== "undefined" ? window.localStorage.getItem("managora-theme") : null;
     return stored === "light" || stored === "dark" ? stored : "light";
   });
 
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
-  const { qrTokenFromUrl, autoCheckInRequested } = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    const token = params.get("qr_token") ?? "";
-    return {
-      qrTokenFromUrl: token,
-      autoCheckInRequested: Boolean(token) && params.get("auto") !== "0",
-    };
-  }, [location.search]);
-
-  const meQuery = useMe();
-  const myAttendanceQuery = useMyAttendanceQuery({
-    dateFrom: todayValue,
-    dateTo: todayValue,
-  });
-  const companyQrQuery = useAttendanceCompanyQrQuery();
-  const qrLink = useMemo(() => {
-    const token = companyQrQuery.data?.token;
-    if (!token || typeof window === "undefined") {
-      return null;
-    }
-    const url = new URL("/attendance/self", window.location.origin);
-    url.searchParams.set("qr_token", token);
-    url.searchParams.set("auto", "1");
-    return url.toString();
-  }, [companyQrQuery.data?.token]);
-  const qrImage = useMemo(() => {
-    if (!qrLink) {
-      return null;
-    }
-    const encoded = encodeURIComponent(qrLink);
-    return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encoded}`;
-  }, [qrLink]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
+    if (typeof window === "undefined") return;
     window.localStorage.setItem("managora-language", language);
   }, [language]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
+    if (typeof window === "undefined") return;
     window.localStorage.setItem("managora-theme", theme);
   }, [theme]);
 
-  const companyQrToken = companyQrQuery.data?.token ?? "";
-  const effectiveQrToken = qrTokenFromUrl ? qrTokenFromUrl : companyQrToken;
-  
-  const checkInMutation = useCheckInMutation();
-  const checkOutMutation = useCheckOutMutation();
+  const meQuery = useMe();
 
-  const todayRecord = useMemo<AttendanceRecord | undefined>(() => {
+  // Keep your existing query signature (dateFrom/dateTo) to not break hooks logic
+  const myAttendanceQuery = useMyAttendanceQuery({
+    dateFrom: todayValue,
+    dateTo: todayValue,
+  });
+
+  const todayRecord = useMemo<AttendanceRecordWithApprovals | undefined>(() => {
     return myAttendanceQuery.data?.find((record) => record.date === todayValue);
   }, [myAttendanceQuery.data, todayValue]);
 
@@ -534,391 +411,132 @@ export function SelfAttendancePage() {
       : todayRecord.status || "checked-in"
     : "no-record";
 
-  const hasOpenCheckIn = Boolean(
-    todayRecord?.check_in_time && !todayRecord?.check_out_time
-  );
+  // ===== NEW OTP FLOW STATE =====
+  const [otpPurpose, setOtpPurpose] = useState<AttendanceOtpPurpose>("checkin");
+  const [requestId, setRequestId] = useState<number | null>(null);
+  const [expiresIn, setExpiresIn] = useState<number>(0);
+  const [otpCode, setOtpCode] = useState<string>("");
 
-  const resolvedEmployeeId =
-    employeeId ?? meQuery.data?.employee?.id ?? todayRecord?.employee?.id;
-  const isSelfCheckIn =
-    Boolean(meQuery.data?.employee?.id) &&
-    resolvedEmployeeId === meQuery.data?.employee?.id;
+  const requestOtp = useAttendanceSelfRequestOtpMutation();
+  const verifyOtp = useAttendanceSelfVerifyOtpMutation();
 
-  const handleAction = useCallback(
-    async (action: "check-in" | "check-out") => {
-      if (!resolvedEmployeeId) {
-        notifications.show({
-          title: content.notifications.missingEmployeeTitle,
-          message: content.notifications.missingEmployeeMessage,
-          color: "red",
-        });
-        return;
-      }
+  // countdown
+  useEffect(() => {
+    if (!expiresIn) return;
+    const t = setInterval(() => setExpiresIn((s) => (s > 0 ? s - 1 : 0)), 1000);
+    return () => clearInterval(t);
+  }, [expiresIn]);
 
-      let resolvedMethod: AttendanceActionPayload["method"] = method;
-      let locationValue: { lat: number; lng: number } | null = null;
+  const canVerify = useMemo(() => {
+    return requestId !== null && expiresIn > 0 && otpCode.trim().length === 6 && !verifyOtp.isPending;
+  }, [requestId, expiresIn, otpCode, verifyOtp.isPending]);
 
-      if (!isSelfCheckIn) {
-        notifications.show({
-          title: content.notifications.methodWarningTitle,
-          message: content.notifications.methodWarningMessage,
-          color: "yellow",
-        });
-        resolvedMethod = "manual";
-      } else if (method === "gps") {
-        locationValue = await readGeolocation();
-
-        if (!locationValue) {
-          notifications.show({
-            title: content.notifications.locationTitle,
-            message: content.notifications.locationMessage,
-            color: "yellow",
-          });
-          resolvedMethod = "manual";
-        } else if (!worksiteId) {
-          notifications.show({
-            title: content.notifications.worksiteTitle,
-            message: content.notifications.worksiteMessage,
-            color: "yellow",
-          });
-          resolvedMethod = "manual";
-        }
-      } else if (method === "qr") {
-        locationValue = await readGeolocation();
-        if (!locationValue) {
-          notifications.show({
-            title: content.notifications.qrLocationTitle,
-            message: content.notifications.qrLocationMessage,
-            color: "red",
-          });
-          return;
-        }
-      }
-
-      if (resolvedMethod === "qr" && !effectiveQrToken.trim()) {
-        notifications.show({
-          title: content.notifications.qrTitle,
-          message: content.notifications.qrMessage,
-          color: "red",
-        });
-        return;
-      }
-
-      if (resolvedMethod !== "qr" && !shiftId) {
-        notifications.show({
-          title: content.notifications.shiftTitle,
-          message: content.notifications.shiftMessage,
-          color: "red",
-        });
-        return;
-      }
-      const payload: AttendanceActionPayload = {
-        employee_id: resolvedEmployeeId,
-        shift_id: resolvedMethod === "qr" ? undefined : shiftId,
-        method: resolvedMethod,
-      };
-
-      if (resolvedMethod === "gps") {
-        payload.worksite_id = worksiteId;
-        payload.lat = locationValue
-          ? normalizeCoordinate(locationValue.lat)
-          : undefined;
-        payload.lng = locationValue
-          ? normalizeCoordinate(locationValue.lng)
-          : undefined;
-      }
-
-      if (resolvedMethod === "qr") {
-        payload.qr_token = effectiveQrToken.trim();
-        payload.lat = locationValue
-          ? normalizeCoordinate(locationValue.lat)
-          : undefined;
-        payload.lng = locationValue
-          ? normalizeCoordinate(locationValue.lng)
-          : undefined;
-      }
-
+  const handleRequestOtp = useCallback(
+    async (p: AttendanceOtpPurpose) => {
       try {
-        if (action === "check-in") {
-          await checkInMutation.mutateAsync(payload);
-          notifications.show({
-            title: content.notifications.checkInTitle,
-            message: content.notifications.checkInMessage,
-          });
-        } else {
-          await checkOutMutation.mutateAsync(payload);
-          notifications.show({
-            title: content.notifications.checkOutTitle,
-            message: content.notifications.checkOutMessage,
-          });
-        }
-
-        await queryClient.invalidateQueries({ queryKey: ["attendance", "my"] });
-      } catch (error) {
+        setOtpPurpose(p);
+        setOtpCode("");
+        const res = await requestOtp.mutateAsync({ purpose: p });
+        setRequestId(res.request_id);
+        setExpiresIn(res.expires_in);
         notifications.show({
-          title: content.notifications.failedTitle,
-          message: formatApiError(error),
+          title: content.otpSentTitle,
+          message: content.otpSentMessage,
+        });
+      } catch (e: unknown) {
+        notifications.show({
+          title: content.otpSendFailedTitle,
+          message: getErrorDetail(e),
           color: "red",
         });
       }
     },
-    [
-      resolvedEmployeeId,
-      content,
-      method,
-      isSelfCheckIn,
-      worksiteId,
-      shiftId,
-      effectiveQrToken,
-      checkInMutation,
-      checkOutMutation,
-      queryClient,
-    ]
+    [content.otpSentTitle, content.otpSentMessage, content.otpSendFailedTitle, requestOtp]
   );
 
-  useEffect(() => {
-    if (!autoCheckInRequested || autoCheckInTriggeredRef.current) {
-      return;
+  const handleVerifyOtp = useCallback(async () => {
+    if (!canVerify || requestId == null) return;
+
+    try {
+      const geo = await getGeo();
+      await verifyOtp.mutateAsync({
+        request_id: requestId,
+        code: otpCode.trim(),
+        lat: geo.lat,
+        lng: geo.lng,
+      });
+
+      notifications.show({
+        title: content.otpSubmittedTitle,
+        message: content.otpSubmittedMessage,
+      });
+
+      setRequestId(null);
+      setExpiresIn(0);
+      setOtpCode("");
+
+      // refresh my attendance
+      await queryClient.invalidateQueries({ queryKey: ["attendance", "my"] });
+    } catch (e: unknown) {
+      const msg = getErrorDetail(e);
+      notifications.show({
+        title: content.otpVerifyFailedTitle,
+        message: String(msg),
+        color: "red",
+      });
     }
-    if (meQuery.isLoading || companyQrQuery.isLoading || checkInMutation.isPending) {
-      return;
-    }
-    if (!resolvedEmployeeId || !isSelfCheckIn) {
-      return;
-    }
-    if (todayRecord?.check_in_time) {
-      // If the user already checked in today, a second scan should auto check-out (once).
-      if (!todayRecord.check_out_time) {
-        autoCheckInTriggeredRef.current = true;
-        void handleAction("check-out").finally(() => {
-          const params = new URLSearchParams(location.search);
-          params.delete("qr_token");
-          params.delete("auto");
-          navigate(
-            {
-              pathname: location.pathname,
-              search: params.toString() ? `?${params.toString()}` : "",
-            },
-            { replace: true }
-          );
-        });
-      } else {
-        autoCheckInTriggeredRef.current = true;
-      }
-      return;
-    }
-    if (method !== "qr" || !effectiveQrToken.trim()) {
-      return;
-    }
-    autoCheckInTriggeredRef.current = true;
-    void handleAction("check-in").finally(() => {
-      const params = new URLSearchParams(location.search);
-      params.delete("qr_token");
-      params.delete("auto");
-      navigate(
-        {
-          pathname: location.pathname,
-          search: params.toString() ? `?${params.toString()}` : "",
-        },
-        { replace: true }
-      );
-    });
   }, [
-    autoCheckInRequested,
-    meQuery.isLoading,
-    companyQrQuery.isLoading,
-    checkInMutation.isPending,
-    resolvedEmployeeId,
-    isSelfCheckIn,
-    todayRecord?.check_in_time,
-    method,
-    effectiveQrToken,
-    handleAction,
-    location.pathname,
-    location.search,
-    navigate,
+    canVerify,
+    requestId,
+    otpCode,
+    verifyOtp,
+    content.otpSubmittedTitle,
+    content.otpSubmittedMessage,
+    content.otpVerifyFailedTitle,
+    queryClient,
   ]);
 
   const navLinks = useMemo(
     () => [
       { path: "/dashboard", label: content.nav.dashboard, icon: "🏠" },
-      {
-        path: "/users",
-        label: content.nav.users,
-        icon: "👥",
-        permissions: ["users.view"],
-      },
+      { path: "/users", label: content.nav.users, icon: "👥", permissions: ["users.view"] },
       {
         path: "/attendance/self",
         label: content.nav.attendanceSelf,
         icon: "🕒",
         permissions: ["attendance.*", "attendance.view_team"],
       },
-      {
-        path: "/leaves/balance",
-        label: content.nav.leaveBalance,
-        icon: "📅",
-        permissions: ["leaves.*"],
-      },
-      {
-        path: "/leaves/request",
-        label: content.nav.leaveRequest,
-        icon: "📝",
-        permissions: ["leaves.*"],
-      },
-      {
-        path: "/leaves/my",
-        label: content.nav.leaveMyRequests,
-        icon: "📌",
-        permissions: ["leaves.*"],
-      },
-      {
-        path: "/hr/employees",
-        label: content.nav.employees,
-        icon: "🧑‍💼",
-        permissions: ["employees.*", "hr.employees.view"],
-      },
-      {
-        path: "/hr/departments",
-        label: content.nav.departments,
-        icon: "🏢",
-        permissions: ["hr.departments.view"],
-      },
-      {
-        path: "/hr/job-titles",
-        label: content.nav.jobTitles,
-        icon: "🧩",
-        permissions: ["hr.job_titles.view"],
-      },
-      {
-        path: "/hr/attendance",
-        label: content.nav.hrAttendance,
-        icon: "📍",
-        permissions: ["attendance.*", "attendance.view_team"],
-      },
-      {
-        path: "/hr/leaves/inbox",
-        label: content.nav.leaveInbox,
-        icon: "📥",
-        permissions: ["leaves.*"],
-      },
-      {
-        path: "/hr/policies",
-        label: content.nav.policies,
-        icon: "📚",
-        permissions: ["employees.*"],
-      },
-      {
-        path: "/hr/actions",
-        label: content.nav.hrActions,
-        icon: "✅",
-        permissions: ["approvals.*"],
-      },
-      {
-        path: "/payroll",
-        label: content.nav.payroll,
-        icon: "💸",
-        permissions: ["hr.payroll.view", "hr.payroll.*"],
-      },
-      {
-        path: "/accounting/setup",
-        label: content.nav.accountingSetup,
-        icon: "⚙️",
-        permissions: ["accounting.manage_coa", "accounting.*"],
-      },
-      {
-        path: "/accounting/journal-entries",
-        label: content.nav.journalEntries,
-        icon: "📒",
-        permissions: ["accounting.journal.view", "accounting.*"],
-      },
-      {
-        path: "/accounting/expenses",
-        label: content.nav.expenses,
-        icon: "🧾",
-        permissions: ["expenses.view", "expenses.*"],
-      },
-      {
-        path: "/collections",
-        label: content.nav.collections,
-        icon: "💼",
-        permissions: ["accounting.view", "accounting.*"],
-      },
-      {
-        path: "/accounting/reports/trial-balance",
-        label: content.nav.trialBalance,
-        icon: "📈",
-        permissions: ["accounting.reports.view", "accounting.*"],
-      },
-      {
-        path: "/accounting/reports/general-ledger",
-        label: content.nav.generalLedger,
-        icon: "📊",
-        permissions: ["accounting.reports.view", "accounting.*"],
-      },
-      {
-        path: "/accounting/reports/pnl",
-        label: content.nav.profitLoss,
-        icon: "📉",
-        permissions: ["accounting.reports.view", "accounting.*"],
-      },
-      {
-        path: "/accounting/reports/balance-sheet",
-        label: content.nav.balanceSheet,
-        icon: "🧮",
-        permissions: ["accounting.reports.view", "accounting.*"],
-      },
-      {
-        path: "/accounting/reports/ar-aging",
-        label: content.nav.agingReport,
-        icon: "⏳",
-        permissions: ["accounting.reports.view", "accounting.*"],
-      },
-      {
-        path: "/customers",
-        label: content.nav.customers,
-        icon: "🤝",
-        permissions: ["customers.view", "customers.*"],
-      },
-      {
-        path: "/customers/new",
-        label: content.nav.newCustomer,
-        icon: "➕",
-        permissions: ["customers.create", "customers.*"],
-      },
-      {
-        path: "/invoices",
-        label: content.nav.invoices,
-        icon: "📄",
-        permissions: ["invoices.*"],
-      },
-      {
-        path: "/invoices/new",
-        label: content.nav.newInvoice,
-        icon: "🧾",
-        permissions: ["invoices.*"],
-      },
-      {
-        path: "/analytics/alerts",
-        label: content.nav.alertsCenter,
-        icon: "🚨",
-        permissions: ["analytics.alerts.view", "analytics.alerts.manage"],
-      },
+      { path: "/leaves/balance", label: content.nav.leaveBalance, icon: "📅", permissions: ["leaves.*"] },
+      { path: "/leaves/request", label: content.nav.leaveRequest, icon: "📝", permissions: ["leaves.*"] },
+      { path: "/leaves/my", label: content.nav.leaveMyRequests, icon: "📌", permissions: ["leaves.*"] },
+      { path: "/hr/employees", label: content.nav.employees, icon: "🧑‍💼", permissions: ["employees.*", "hr.employees.view"] },
+      { path: "/hr/departments", label: content.nav.departments, icon: "🏢", permissions: ["hr.departments.view"] },
+      { path: "/hr/job-titles", label: content.nav.jobTitles, icon: "🧩", permissions: ["hr.job_titles.view"] },
+      { path: "/hr/attendance", label: content.nav.hrAttendance, icon: "📍", permissions: ["attendance.*", "attendance.view_team"] },
+      { path: "/hr/leaves/inbox", label: content.nav.leaveInbox, icon: "📥", permissions: ["leaves.*"] },
+      { path: "/hr/policies", label: content.nav.policies, icon: "📚", permissions: ["employees.*"] },
+      { path: "/hr/actions", label: content.nav.hrActions, icon: "✅", permissions: ["approvals.*"] },
+      { path: "/payroll", label: content.nav.payroll, icon: "💸", permissions: ["hr.payroll.view", "hr.payroll.*"] },
+      { path: "/accounting/setup", label: content.nav.accountingSetup, icon: "⚙️", permissions: ["accounting.manage_coa", "accounting.*"] },
+      { path: "/accounting/journal-entries", label: content.nav.journalEntries, icon: "📒", permissions: ["accounting.journal.view", "accounting.*"] },
+      { path: "/accounting/expenses", label: content.nav.expenses, icon: "🧾", permissions: ["expenses.view", "expenses.*"] },
+      { path: "/collections", label: content.nav.collections, icon: "💼", permissions: ["accounting.view", "accounting.*"] },
+      { path: "/accounting/reports/trial-balance", label: content.nav.trialBalance, icon: "📈", permissions: ["accounting.reports.view", "accounting.*"] },
+      { path: "/accounting/reports/general-ledger", label: content.nav.generalLedger, icon: "📊", permissions: ["accounting.reports.view", "accounting.*"] },
+      { path: "/accounting/reports/pnl", label: content.nav.profitLoss, icon: "📉", permissions: ["accounting.reports.view", "accounting.*"] },
+      { path: "/accounting/reports/balance-sheet", label: content.nav.balanceSheet, icon: "🧮", permissions: ["accounting.reports.view", "accounting.*"] },
+      { path: "/accounting/reports/ar-aging", label: content.nav.agingReport, icon: "⏳", permissions: ["accounting.reports.view", "accounting.*"] },
+      { path: "/customers", label: content.nav.customers, icon: "🤝", permissions: ["customers.view", "customers.*"] },
+      { path: "/customers/new", label: content.nav.newCustomer, icon: "➕", permissions: ["customers.create", "customers.*"] },
+      { path: "/invoices", label: content.nav.invoices, icon: "📄", permissions: ["invoices.*"] },
+      { path: "/invoices/new", label: content.nav.newInvoice, icon: "🧾", permissions: ["invoices.*"] },
+      { path: "/analytics/alerts", label: content.nav.alertsCenter, icon: "🚨", permissions: ["analytics.alerts.view", "analytics.alerts.manage"] },
       { path: "/analytics/cash-forecast", label: content.nav.cashForecast, icon: "💡" },
       { path: "/analytics/ceo", label: content.nav.ceoDashboard, icon: "📌" },
-      {
-        path: "/analytics/finance",
-        label: content.nav.financeDashboard,
-        icon: "💹",
-      },
+      { path: "/analytics/finance", label: content.nav.financeDashboard, icon: "💹" },
       { path: "/analytics/hr", label: content.nav.hrDashboard, icon: "🧑‍💻" },
       { path: "/copilot", label: content.nav.copilot, icon: "🤖" },
-      {
-        path: "/admin/audit-logs",
-        label: content.nav.auditLogs,
-        icon: "🛡️",
-        permissions: ["audit.view"],
-      },
+      { path: "/admin/audit-logs", label: content.nav.auditLogs, icon: "🛡️", permissions: ["audit.view"] },
       { path: "/setup/templates", label: content.nav.setupTemplates, icon: "🧱" },
       { path: "/setup/progress", label: content.nav.setupProgress, icon: "🚀" },
     ],
@@ -928,19 +546,13 @@ export function SelfAttendancePage() {
   const visibleNavLinks = useMemo(() => {
     const userPermissions = meQuery.data?.permissions ?? [];
     return navLinks.filter((link) => {
-      if (!link.permissions || link.permissions.length === 0) {
-        return true;
-      }
-      return link.permissions.some((permission) =>
-        hasPermission(userPermissions, permission)
-      );
+      if (!link.permissions || link.permissions.length === 0) return true;
+      return link.permissions.some((permission) => hasPermission(userPermissions, permission));
     });
   }, [meQuery.data?.permissions, navLinks]);
 
   const userName =
-    meQuery.data?.user.first_name ||
-    meQuery.data?.user.username ||
-    content.userFallback;
+    meQuery.data?.user.first_name || meQuery.data?.user.username || content.userFallback;
 
   function handleLogout() {
     clearTokens();
@@ -980,55 +592,49 @@ export function SelfAttendancePage() {
           <div className="sidebar-card">
             <p>{content.pageTitle}</p>
             <strong>{userName}</strong>
-            {meQuery.isLoading && (
-              <span className="sidebar-note">...loading profile</span>
-            )}
+            {meQuery.isLoading && <span className="sidebar-note">...loading profile</span>}
             {meQuery.isError && (
               <span className="sidebar-note sidebar-note--error">
                 {isArabic ? "تعذر تحميل بيانات الحساب." : "Unable to load account data."}
               </span>
             )}
           </div>
+
           <nav className="sidebar-nav" aria-label={content.navigationLabel}>
             <button
               type="button"
               className="nav-item"
               onClick={() => setLanguage((prev) => (prev === "en" ? "ar" : "en"))}
             >
-              <span className="nav-icon" aria-hidden="true">
-                🌐
-              </span>
+              <span className="nav-icon" aria-hidden="true">🌐</span>
               {content.languageLabel} • {isArabic ? "EN" : "AR"}
             </button>
+
             <button
               type="button"
               className="nav-item"
               onClick={() => setTheme((prev) => (prev === "light" ? "dark" : "light"))}
             >
-              <span className="nav-icon" aria-hidden="true">
-                {theme === "light" ? "🌙" : "☀️"}
-              </span>
+              <span className="nav-icon" aria-hidden="true">{theme === "light" ? "🌙" : "☀️"}</span>
               {content.themeLabel} • {theme === "light" ? "Dark" : "Light"}
             </button>
+
             <div className="sidebar-links">
               <span className="sidebar-links__title">{content.navigationLabel}</span>
               {visibleNavLinks.map((link) => (
                 <button
                   key={link.path}
                   type="button"
-                  className={`nav-item${
-                    location.pathname === link.path ? " nav-item--active" : ""
-                  }`}
+                  className={`nav-item${location.pathname === link.path ? " nav-item--active" : ""}`}
                   onClick={() => navigate(link.path)}
                 >
-                  <span className="nav-icon" aria-hidden="true">
-                    {link.icon}
-                  </span>
+                  <span className="nav-icon" aria-hidden="true">{link.icon}</span>
                   {link.label}
                 </button>
               ))}
             </div>
           </nav>
+
           <div className="sidebar-footer">
             <button type="button" className="pill-button" onClick={handleLogout}>
               {content.logoutLabel}
@@ -1048,30 +654,19 @@ export function SelfAttendancePage() {
                 </span>
               </div>
             </div>
+
             <div className="hero-panel__stats">
               {[
                 {
                   label: content.rows.checkIn,
-                  value: getTimeLabel(
-                    todayRecord?.check_in_time ?? null,
-                    isArabic ? "ar" : "en"
-                  ),
+                  value: getTimeLabel(todayRecord?.check_in_time ?? null, isArabic ? "ar" : "en"),
                 },
                 {
                   label: content.rows.checkOut,
-                  value: getTimeLabel(
-                    todayRecord?.check_out_time ?? null,
-                    isArabic ? "ar" : "en"
-                  ),
+                  value: getTimeLabel(todayRecord?.check_out_time ?? null, isArabic ? "ar" : "en"),
                 },
-                {
-                  label: content.rows.lateMinutes,
-                  value: todayRecord?.late_minutes ?? "-",
-                },
-                {
-                  label: content.rows.earlyLeaveMinutes,
-                  value: todayRecord?.early_leave_minutes ?? "-",
-                },
+                { label: content.rows.lateMinutes, value: todayRecord?.late_minutes ?? "-" },
+                { label: content.rows.earlyLeaveMinutes, value: todayRecord?.early_leave_minutes ?? "-" },
               ].map((stat) => (
                 <div key={stat.label} className="stat-card">
                   <div className="stat-card__top">
@@ -1086,6 +681,7 @@ export function SelfAttendancePage() {
           </section>
 
           <section className="grid-panels">
+            {/* Summary panel (unchanged) */}
             <div className="panel">
               <div className="panel__header">
                 <div>
@@ -1096,6 +692,7 @@ export function SelfAttendancePage() {
                   {content.statusMap[statusKey]}
                 </span>
               </div>
+
               <div className="attendance-detail-list">
                 <div className="attendance-detail-row">
                   <span>{content.rows.statusToday}</span>
@@ -1103,18 +700,11 @@ export function SelfAttendancePage() {
                 </div>
                 <div className="attendance-detail-row">
                   <span>{content.rows.checkIn}</span>
-                  <strong>
-                    {getTimeLabel(todayRecord?.check_in_time ?? null, isArabic ? "ar" : "en")}
-                  </strong>
+                  <strong>{getTimeLabel(todayRecord?.check_in_time ?? null, isArabic ? "ar" : "en")}</strong>
                 </div>
                 <div className="attendance-detail-row">
                   <span>{content.rows.checkOut}</span>
-                  <strong>
-                    {getTimeLabel(
-                      todayRecord?.check_out_time ?? null,
-                      isArabic ? "ar" : "en"
-                    )}
-                  </strong>
+                  <strong>{getTimeLabel(todayRecord?.check_out_time ?? null, isArabic ? "ar" : "en")}</strong>
                 </div>
                 <div className="attendance-detail-row">
                   <span>{content.rows.lateMinutes}</span>
@@ -1124,149 +714,90 @@ export function SelfAttendancePage() {
                   <span>{content.rows.earlyLeaveMinutes}</span>
                   <strong>{todayRecord?.early_leave_minutes ?? "-"}</strong>
                 </div>
+
+                {/* Approval info (new but harmless) */}
+                <div className="attendance-detail-row">
+                  <span>{isArabic ? "تأكيد الحضور" : "Check-in approval"}</span>
+                  <strong>{todayRecord?.check_in_approval_status ?? "-"}</strong>
+                </div>
+                <div className="attendance-detail-row">
+                  <span>{isArabic ? "تأكيد الانصراف" : "Check-out approval"}</span>
+                  <strong>{todayRecord?.check_out_approval_status ?? "-"}</strong>
+                </div>
               </div>
             </div>
 
-            <div className="panel attendance-qr-panel">
-              <div className="panel__header">
-                <div>
-                  <h2>{content.qrTitle}</h2>
-                  <p>{content.qrSubtitle}</p>
-                </div>
-                <span className="pill">{content.todayLabel}</span>
-              </div>
-              {companyQrQuery.isLoading ? (
-                <div className="attendance-qr-state">
-                  {isArabic ? "جارٍ تحميل رمز QR..." : "Loading QR code..."}
-                </div>
-              ) : companyQrQuery.data ? (
-                <div className="attendance-qr-card">
-                  <div className="attendance-qr-image">
-                    {qrImage ? <img src={qrImage} alt="Company QR" /> : <span>{content.qrUnavailable}</span>}
-                  </div>
-                  <div className="attendance-qr-details">
-                    <div className="attendance-qr-meta">
-                      <span>
-                        {content.qrValidFrom}:{" "}
-                        {new Date(companyQrQuery.data.valid_from).toLocaleString(
-                          isArabic ? "ar" : "en"
-                        )}
-                      </span>
-                      <span>
-                        {content.qrValidUntil}:{" "}
-                        {new Date(companyQrQuery.data.valid_until).toLocaleString(
-                          isArabic ? "ar" : "en"
-                        )}
-                      </span>
-                      <span>
-                        {content.qrWorksite}: {companyQrQuery.data.worksite_id}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="attendance-qr-state">{content.qrUnavailable}</div>
-              )}
-            </div>
-
+            {/* NEW OTP panel (replaces QR + old action form) */}
             <div className="panel">
               <div className="panel__header">
                 <div>
-                  <h2>{content.actionTitle}</h2>
-                  <p>{content.actionSubtitle}</p>
+                  <h2>{content.otpTitle}</h2>
+                  <p>{content.otpSubtitle}</p>
                 </div>
                 <span className="pill">{content.todayLabel}</span>
               </div>
+
               <div className="attendance-form">
-                <div className="attendance-fields">
-                  <label className="attendance-field">
-                    <span>{content.fields.employeeId}</span>
-                    <input
-                      type="number"
-                      min={1}
-                      placeholder={isArabic ? "مثال: 12" : "Example: 12"}
-                      value={resolvedEmployeeId ?? ""}
-                      onChange={(event) => {
-                        const value = event.currentTarget.value;
-                        setEmployeeId(value ? Number(value) : undefined);
-                      }}
-                    />
-                  </label>
-                  <label className="attendance-field">
-                    <span>{content.fields.method}</span>
-                    <select
-                      value={method}
-                      onChange={(event) =>
-                        setMethod(
-                          (event.currentTarget.value as AttendanceActionPayload["method"]) ??
-                            "gps"
-                        )
-                      }
-                    >
-                      {content.methodOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {method !== "qr" && (
-                    <label className="attendance-field">
-                      <span>{content.fields.shiftId}</span>
-                      <input
-                        type="number"
-                        min={1}
-                        placeholder={content.fields.shiftPlaceholder}
-                        value={shiftId ?? ""}
-                        onChange={(event) => {
-                          const value = event.currentTarget.value;
-                          setShiftId(value ? Number(value) : undefined);
-                        }}
-                      />
-                    </label>
-                  )}
-                  {method === "gps" && (
-                    <label className="attendance-field">
-                      <span>{content.fields.worksiteId}</span>
-                      <input
-                        type="number"
-                        min={1}
-                        placeholder={content.fields.worksitePlaceholder}
-                        value={worksiteId ?? ""}
-                        onChange={(event) => {
-                          const value = event.currentTarget.value;
-                          setWorksiteId(value ? Number(value) : undefined);
-                        }}
-                      />
-                    </label>
-                  )}
-                </div>
                 <div className="attendance-actions">
                   <button
                     type="button"
                     className="primary-button"
-                    onClick={() => handleAction("check-in")}
-                    disabled={Boolean(todayRecord?.check_in_time)}
+                    onClick={() => handleRequestOtp("checkin")}
+                    disabled={requestOtp.isPending}
                   >
-                    {checkInMutation.isPending
-                      ? content.notifications.checkInTitle
-                      : content.actions.checkIn}
+                    {requestOtp.isPending && otpPurpose === "checkin"
+                      ? content.otpSending
+                      : content.otpRequestCheckIn}
                   </button>
+
                   <button
                     type="button"
                     className="ghost-button"
-                    onClick={() => handleAction("check-out")}
-                    disabled={!hasOpenCheckIn}
+                    onClick={() => handleRequestOtp("checkout")}
+                    disabled={requestOtp.isPending}
                   >
-                    {checkOutMutation.isPending
-                      ? content.notifications.checkOutTitle
-                      : content.actions.checkOut}
+                    {requestOtp.isPending && otpPurpose === "checkout"
+                      ? content.otpSending
+                      : content.otpRequestCheckOut}
                   </button>
                 </div>
+
+                <div className="attendance-fields" style={{ marginTop: 12 }}>
+                  <label className="attendance-field">
+                    <span>{content.otpCodeLabel}</span>
+                    <input
+                      inputMode="numeric"
+                      placeholder="123456"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.currentTarget.value.replace(/\D/g, "").slice(0, 6))}
+                      disabled={requestId === null || expiresIn === 0}
+                    />
+                  </label>
+                </div>
+
+                <div className="attendance-actions" style={{ marginTop: 12, alignItems: "center" }}>
+                  <span className="attendance-note" style={{ margin: 0 }}>
+                    {requestId === null
+                      ? content.otpRequestFirst
+                      : expiresIn > 0
+                      ? content.otpExpiresIn(expiresIn)
+                      : content.otpExpired}
+                  </span>
+
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={handleVerifyOtp}
+                    disabled={!canVerify}
+                  >
+                    {verifyOtp.isPending ? content.otpVerifying : content.otpVerifySubmit}
+                  </button>
+                </div>
+
                 <span className="attendance-note">
                   {isArabic
-                    ? "يتم تحديث الحالة تلقائيًا بعد تسجيل الحركة."
-                    : "Status updates automatically after each action."}
+                    ? "ملاحظة: لا يتم اعتماد الحركة إلا بعد تأكيد الموارد البشرية/المدير."
+                    : "Note: the record will be approved only after HR/Manager confirmation."}
                 </span>
               </div>
             </div>
@@ -1276,3 +807,5 @@ export function SelfAttendancePage() {
     </div>
   );
 }
+
+export default SelfAttendancePage;

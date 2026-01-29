@@ -4,10 +4,16 @@ from rest_framework.routers import DefaultRouter
 from hr.views import (
     AttendanceCheckInView,
     AttendanceCheckOutView,
-    AttendanceCompanyQrView,
     AttendanceMyView,
+
+    # 🔐 Email OTP Attendance
+    AttendanceSelfRequestOtpView,
+    AttendanceSelfVerifyOtpView,
+    AttendanceEmailConfigView,
+    AttendancePendingApprovalsView,
+    AttendanceApproveRejectView,
+
     AttendanceRecordViewSet,
-    AttendanceQrGenerateView,    
     DepartmentViewSet,
     LeaveApprovalsInboxView,
     LeaveApproveView,
@@ -43,127 +49,58 @@ router.register("employees", EmployeeViewSet, basename="employee")
 router.register("shifts", ShiftViewSet, basename="shift")
 router.register("leaves/types", LeaveTypeViewSet, basename="leave-type")
 router.register("leaves/balances", LeaveBalanceViewSet, basename="leave-balance")
-router.register(
-    "attendance/records", AttendanceRecordViewSet, basename="attendance-record"
-)
+router.register("attendance/records", AttendanceRecordViewSet, basename="attendance-record")
 router.register("policies", PolicyRuleViewSet, basename="policy-rule")
 router.register("actions", HRActionViewSet, basename="hr-action")
 
 urlpatterns = [
     path("", include(router.urls)),
-    path(
-        "leaves/balances/my/",
-        LeaveBalanceMyView.as_view(),
-        name="leave-balance-my",
-    ),
-    path(
-        "leaves/requests/my/",
-        LeaveRequestMyListView.as_view(),
-        name="leave-request-my",
-    ),
-    path(
-        "leaves/requests/",
-        LeaveRequestCreateView.as_view(),
-        name="leave-request-create",
-    ),
-    path(
-        "leaves/requests/<int:id>/cancel/",
-        LeaveRequestCancelView.as_view(),
-        name="leave-request-cancel",
-    ),
-    path(
-        "leaves/approvals/inbox/",
-        LeaveApprovalsInboxView.as_view(),
-        name="leave-approvals-inbox",
-    ),
-    path(
-        "leaves/requests/<int:id>/approve/",
-        LeaveApproveView.as_view(),
-        name="leave-request-approve",
-    ),
-    path(
-        "leaves/requests/<int:id>/reject/",
-        LeaveRejectView.as_view(),
-        name="leave-request-reject",
-    ),
-    path(
-        "employees/<int:employee_id>/documents/",
-        EmployeeDocumentListCreateView.as_view(),
-        name="employee-documents",        
-    ),
-    path(
-        "employees/selectable-users/",
-        EmployeeSelectableUsersView.as_view(),
-        name="employee-selectable-users",
-    ),
-    path(
-        "employees/defaults/",
-        EmployeeDefaultsView.as_view(),
-        name="employee-defaults",
-    ),
-    path(
-        "documents/<int:pk>/download/",
-        EmployeeDocumentDownloadView.as_view(),
-        name="employee-document-download",
-    ),
-    path(
-        "documents/<int:pk>/",
-        EmployeeDocumentDeleteView.as_view(),
-        name="employee-document-delete",
-    ),
-    path(
-        "attendance/check-in/",
-        AttendanceCheckInView.as_view(),
-        name="attendance-check-in",
-    ),
-    path(
-        "attendance/check-out/",
-        AttendanceCheckOutView.as_view(),
-        name="attendance-check-out",
-    ),
-    path(
-        "attendance/my/",
-        AttendanceMyView.as_view(),
-        name="attendance-my",
-    ),
-    path(
-        "attendance/qr/generate/",
-        AttendanceQrGenerateView.as_view(),
-        name="attendance-qr-generate",
-    ),
-    path(
-        "attendance/qr/company/",
-        AttendanceCompanyQrView.as_view(),
-        name="attendance-qr-company",
-    ),    
-    path(
-        "payroll/periods/",
-        PayrollPeriodCreateView.as_view(),
-        name="payroll-period-create",
-    ),
-    path(
-        "payroll/periods/<int:id>/generate/",
-        PayrollPeriodGenerateView.as_view(),
-        name="payroll-period-generate",
-    ),
-    path(
-        "payroll/periods/<int:id>/runs/",
-        PayrollPeriodRunsListView.as_view(),
-        name="payroll-period-runs",
-    ),
-    path(
-        "payroll/periods/<int:id>/lock/",
-        PayrollPeriodLockView.as_view(),
-        name="payroll-period-lock",
-    ),
-    path(
-        "payroll/runs/<int:id>/",
-        PayrollRunDetailView.as_view(),
-        name="payroll-run-detail",
-    ),
-    path(
-        "payroll/runs/<int:id>/payslip.pdf",
-        PayrollRunPayslipPDFView.as_view(),
-        name="payroll-run-payslip",
-    ),
+
+    # =========================
+    # Leaves
+    # =========================
+    path("leaves/balances/my/", LeaveBalanceMyView.as_view(), name="leave-balance-my"),
+    path("leaves/requests/my/", LeaveRequestMyListView.as_view(), name="leave-request-my"),
+    path("leaves/requests/", LeaveRequestCreateView.as_view(), name="leave-request-create"),
+    path("leaves/requests/<int:id>/cancel/", LeaveRequestCancelView.as_view(), name="leave-request-cancel"),
+    path("leaves/approvals/inbox/", LeaveApprovalsInboxView.as_view(), name="leave-approvals-inbox"),
+    path("leaves/requests/<int:id>/approve/", LeaveApproveView.as_view(), name="leave-request-approve"),
+    path("leaves/requests/<int:id>/reject/", LeaveRejectView.as_view(), name="leave-request-reject"),
+
+    # =========================
+    # Employees
+    # =========================
+    path("employees/<int:employee_id>/documents/", EmployeeDocumentListCreateView.as_view(), name="employee-documents"),
+    path("employees/selectable-users/", EmployeeSelectableUsersView.as_view(), name="employee-selectable-users"),
+    path("employees/defaults/", EmployeeDefaultsView.as_view(), name="employee-defaults"),
+    path("documents/<int:pk>/download/", EmployeeDocumentDownloadView.as_view(), name="employee-document-download"),
+    path("documents/<int:pk>/", EmployeeDocumentDeleteView.as_view(), name="employee-document-delete"),
+
+    # =========================
+    # Attendance (OLD - will be deprecated)
+    # =========================
+    path("attendance/check-in/", AttendanceCheckInView.as_view(), name="attendance-check-in"),
+    path("attendance/check-out/", AttendanceCheckOutView.as_view(), name="attendance-check-out"),
+    path("attendance/my/", AttendanceMyView.as_view(), name="attendance-my"),
+
+    # =========================
+    # Attendance (NEW EMAIL OTP FLOW)
+    # =========================
+    path("attendance/self/request-otp/", AttendanceSelfRequestOtpView.as_view(), name="attendance-self-request-otp"),
+    path("attendance/self/verify-otp/", AttendanceSelfVerifyOtpView.as_view(), name="attendance-self-verify-otp"),
+
+    # HR / Manager
+    path("attendance/hr/email-config/", AttendanceEmailConfigView.as_view(), name="attendance-email-config"),
+    path("attendance/hr/pending/", AttendancePendingApprovalsView.as_view(), name="attendance-pending"),
+    path("attendance/hr/<int:record_id>/<str:action>/", AttendanceApproveRejectView.as_view(), name="attendance-approve-reject"),
+
+    # =========================
+    # Payroll
+    # =========================
+    path("payroll/periods/", PayrollPeriodCreateView.as_view(), name="payroll-period-create"),
+    path("payroll/periods/<int:id>/generate/", PayrollPeriodGenerateView.as_view(), name="payroll-period-generate"),
+    path("payroll/periods/<int:id>/runs/", PayrollPeriodRunsListView.as_view(), name="payroll-period-runs"),
+    path("payroll/periods/<int:id>/lock/", PayrollPeriodLockView.as_view(), name="payroll-period-lock"),
+    path("payroll/runs/<int:id>/", PayrollRunDetailView.as_view(), name="payroll-run-detail"),
+    path("payroll/runs/<int:id>/payslip.pdf", PayrollRunPayslipPDFView.as_view(), name="payroll-run-payslip"),
 ]

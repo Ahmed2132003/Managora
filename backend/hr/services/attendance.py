@@ -53,7 +53,7 @@ def calculate_early_leave(record_date, shift: Shift, now: datetime) -> int:
     return 0
 
 
-def validate_location(worksite: WorkSite, lat: float, lng: float) -> None:
+def distance_meters(worksite: WorkSite, lat: float, lng: float) -> int:
     earth_radius_m = 6_371_000
     lat1 = radians(float(worksite.lat))
     lng1 = radians(float(worksite.lng))
@@ -65,10 +65,16 @@ def validate_location(worksite: WorkSite, lat: float, lng: float) -> None:
     a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlng / 2) ** 2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
     distance = earth_radius_m * c
+    return int(distance)
 
-    if distance > worksite.radius_meters:
+
+
+def validate_location(worksite: WorkSite, lat: float, lng: float) -> int:
+    """Validate location within radius; return distance meters."""
+    dist = distance_meters(worksite, lat, lng)
+    if dist > worksite.radius_meters:
         raise PermissionDenied("Outside allowed location")
-
+    return dist
 
 def _get_employee(user, employee_id: int) -> Employee:
     try:
@@ -113,7 +119,9 @@ def _validate_gps(payload: dict[str, Any]) -> LocationPayload:
     worksite = payload.get("worksite")
     if not worksite:
         raise serializers.ValidationError({"worksite": "Worksite is required for GPS."})
-    validate_location(worksite, location.lat, location.lng)
+    dist = distance_meters(worksite, location.lat, location.lng)
+    if dist > worksite.radius_meters:
+        raise PermissionDenied("Outside allowed location")
     return location
 
 
@@ -121,7 +129,9 @@ def _validate_qr_location(payload: dict[str, Any], worksite: WorkSite) -> Locati
     location = _get_location_payload(payload)
     if not location:
         raise serializers.ValidationError({"location": "lat/lng is required for QR."})
-    validate_location(worksite, location.lat, location.lng)
+    dist = distance_meters(worksite, location.lat, location.lng)
+    if dist > worksite.radius_meters:
+        raise PermissionDenied("Outside allowed location")
     return location
 
 
@@ -357,3 +367,217 @@ def check_out(user, employee_id: int, payload: dict[str, Any]) -> AttendanceReco
         ]
     )
     return record
+
+
+import secrets
+import hashlib
+from django.core.mail import EmailMessage, get_connection
+from core.models import CompanyEmailConfig
+from hr.models import AttendanceOtpRequest
+
+OTP_VALID_SECONDS = 60
+
+
+def _hash_otp(code: str, salt: str) -> str:
+    return hashlib.sha256(f"{salt}:{code}".encode("utf-8")).hexdigest()
+
+
+def _get_attendance_worksite(company) -> WorkSite:
+    # Reuse the configured worksite on Company (was used for QR schedule).
+    if getattr(company, "attendance_qr_worksite_id", None):
+        return company.attendance_qr_worksite
+    ws = WorkSite.objects.filter(company=company, is_active=True).order_by("id").first()
+    if not ws:
+        raise serializers.ValidationError({"worksite": "No active worksite configured for company."})
+    return ws
+
+
+def _send_otp_email(*, cfg: CompanyEmailConfig, to_email: str, code: str, purpose: str) -> None:
+    subject = "Managora Attendance Verification Code"
+    body = (
+        f"Your verification code for {purpose} is: {code}\n"
+        f"This code expires in {OTP_VALID_SECONDS} seconds.\n\n"
+        "— Managora"
+    )
+    # Gmail SMTP (works with App Passwords). If you need other providers later, add fields to CompanyEmailConfig.
+    connection = get_connection(
+        backend="django.core.mail.backends.smtp.EmailBackend",
+        host="smtp.gmail.com",
+        port=587,
+        username=cfg.sender_email,
+        password=cfg.get_app_password(),
+        use_tls=True,
+        fail_silently=False,
+    )
+    msg = EmailMessage(subject=subject, body=body, from_email=cfg.sender_email, to=[to_email], connection=connection)
+    msg.send(fail_silently=False)
+
+
+def request_self_attendance_otp(user, purpose: str) -> dict[str, Any]:
+    employee = getattr(user, "employee_profile", None)
+    if not employee:
+        raise serializers.ValidationError({"employee": "This user is not linked to an employee profile."})
+
+    cfg = CompanyEmailConfig.objects.filter(company=user.company, is_active=True).first()
+    if not cfg:
+        raise serializers.ValidationError({"email_config": "Company email config is not set or inactive."})
+    if not user.email:
+        raise serializers.ValidationError({"email": "User email is required to send OTP."})
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    salt = secrets.token_hex(16)
+    otp = AttendanceOtpRequest.objects.create(
+        company=user.company,
+        user=user,
+        purpose=purpose,
+        code_salt=salt,
+        code_hash=_hash_otp(code, salt),
+        expires_at=timezone.now() + timedelta(seconds=OTP_VALID_SECONDS),
+    )
+
+    _send_otp_email(cfg=cfg, to_email=user.email, code=code, purpose=purpose)
+    return {"request_id": otp.id, "expires_in": OTP_VALID_SECONDS}
+
+
+def verify_self_attendance_otp(user, *, request_id: int, code: str, lat: float, lng: float) -> AttendanceRecord:
+    employee = getattr(user, "employee_profile", None)
+    if not employee:
+        raise serializers.ValidationError({"employee": "This user is not linked to an employee profile."})
+
+    otp = AttendanceOtpRequest.objects.filter(company=user.company, user=user, id=request_id).first()
+    if not otp:
+        raise serializers.ValidationError({"otp": "OTP request not found."})
+    if otp.used_at:
+        raise serializers.ValidationError({"otp": "OTP request already used."})
+    if otp.is_expired():
+        raise serializers.ValidationError({"otp": "OTP request expired."})
+    if otp.attempts >= otp.max_attempts:
+        raise serializers.ValidationError({"otp": "Too many attempts."})
+
+    otp.attempts += 1
+    otp.save(update_fields=["attempts", "updated_at"])
+
+    if _hash_otp(code, otp.code_salt) != otp.code_hash:
+        raise serializers.ValidationError({"code": "Invalid code."})
+
+    # Mark used
+    otp.mark_used()
+
+    worksite = _get_attendance_worksite(user.company)
+    dist = distance_meters(worksite, lat, lng)
+    if dist > worksite.radius_meters:
+        raise PermissionDenied("Outside allowed location")
+
+    now = timezone.now()
+    record_date = timezone.localdate(now)
+
+    # Ensure shift exists
+    shift = _get_employee_shift(employee)
+
+    if otp.purpose == AttendanceOtpRequest.Purpose.CHECK_IN:
+        existing_record = AttendanceRecord.objects.filter(company=user.company, employee=employee, date=record_date).first()
+        if existing_record and existing_record.check_in_time:
+            raise serializers.ValidationError("Already checked in for today.")
+
+        late_minutes = calculate_late(record_date, shift, now)
+        status = AttendanceRecord.Status.LATE if late_minutes > 0 else AttendanceRecord.Status.PRESENT
+
+        if existing_record is None:
+            record = AttendanceRecord.objects.create(
+                company=user.company,
+                employee=employee,
+                date=record_date,
+                check_in_time=now,
+                check_in_lat=lat,
+                check_in_lng=lng,
+                check_in_distance_meters=dist,
+                check_in_approval_status=AttendanceRecord.ApprovalStatus.PENDING,
+                method=AttendanceRecord.Method.EMAIL_OTP,
+                status=status,
+                late_minutes=late_minutes,
+            )
+        else:
+            existing_record.check_in_time = now
+            existing_record.check_in_lat = lat
+            existing_record.check_in_lng = lng
+            existing_record.check_in_distance_meters = dist
+            existing_record.check_in_approval_status = AttendanceRecord.ApprovalStatus.PENDING
+            existing_record.check_in_approved_by = None
+            existing_record.check_in_approved_at = None
+            existing_record.check_in_rejection_reason = None
+            existing_record.method = AttendanceRecord.Method.EMAIL_OTP
+            existing_record.status = status
+            existing_record.late_minutes = late_minutes
+            existing_record.save()
+            record = existing_record
+
+        evaluate_attendance_record(record)
+        return record
+
+    # CHECK_OUT
+    record = AttendanceRecord.objects.filter(company=user.company, employee=employee, date=record_date).first()
+    if not record or not record.check_in_time or record.check_out_time:
+        raise serializers.ValidationError("No open check-in for today.")
+
+    early_leave_minutes = calculate_early_leave(record_date, shift, now)
+    status = record.status
+    if early_leave_minutes > 0 and status != AttendanceRecord.Status.LATE:
+        status = AttendanceRecord.Status.EARLY_LEAVE
+
+    record.check_out_time = now
+    record.check_out_lat = lat
+    record.check_out_lng = lng
+    record.check_out_distance_meters = dist
+    record.check_out_approval_status = AttendanceRecord.ApprovalStatus.PENDING
+    record.check_out_approved_by = None
+    record.check_out_approved_at = None
+    record.check_out_rejection_reason = None
+    record.method = AttendanceRecord.Method.EMAIL_OTP
+    record.status = status
+    record.early_leave_minutes = early_leave_minutes
+    record.save()
+    return record
+
+
+def approve_attendance_action(*, approver, record: AttendanceRecord, action: str) -> AttendanceRecord:
+    if action == "checkin":
+        if not record.check_in_time:
+            raise serializers.ValidationError({"action": "No check-in to approve."})
+        record.check_in_approval_status = AttendanceRecord.ApprovalStatus.APPROVED
+        record.check_in_approved_by = approver
+        record.check_in_approved_at = timezone.now()
+        record.check_in_rejection_reason = None
+        record.save()
+        return record
+    if action == "checkout":
+        if not record.check_out_time:
+            raise serializers.ValidationError({"action": "No check-out to approve."})
+        record.check_out_approval_status = AttendanceRecord.ApprovalStatus.APPROVED
+        record.check_out_approved_by = approver
+        record.check_out_approved_at = timezone.now()
+        record.check_out_rejection_reason = None
+        record.save()
+        return record
+    raise serializers.ValidationError({"action": "Invalid action."})
+
+
+def reject_attendance_action(*, approver, record: AttendanceRecord, action: str, reason: str | None = None) -> AttendanceRecord:
+    if action == "checkin":
+        if not record.check_in_time:
+            raise serializers.ValidationError({"action": "No check-in to reject."})
+        record.check_in_approval_status = AttendanceRecord.ApprovalStatus.REJECTED
+        record.check_in_approved_by = approver
+        record.check_in_approved_at = timezone.now()
+        record.check_in_rejection_reason = reason or "Rejected"
+        record.save()
+        return record
+    if action == "checkout":
+        if not record.check_out_time:
+            raise serializers.ValidationError({"action": "No check-out to reject."})
+        record.check_out_approval_status = AttendanceRecord.ApprovalStatus.REJECTED
+        record.check_out_approved_by = approver
+        record.check_out_approved_at = timezone.now()
+        record.check_out_rejection_reason = reason or "Rejected"
+        record.save()
+        return record
+    raise serializers.ValidationError({"action": "Invalid action."})

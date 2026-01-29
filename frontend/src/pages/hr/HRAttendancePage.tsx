@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { notifications } from "@mantine/notifications";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { isForbiddenError } from "../../shared/api/errors";
 import {
-  useAttendanceQrGenerateMutation,
   useAttendanceRecordsQuery,
   useDepartments,
   useEmployees,
+  useAttendanceEmailConfigQuery,
+  useAttendanceEmailConfigUpsertMutation,
+  useAttendancePendingApprovalsQuery,
+  useAttendanceApproveRejectMutation,
+  type AttendancePendingItem,
 } from "../../shared/hr/hooks";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
@@ -16,7 +21,6 @@ import "../DashboardPage.css";
 import "./HRAttendancePage.css";
 
 type Language = "en" | "ar";
-
 type ThemeMode = "light" | "dark";
 
 type Content = {
@@ -27,8 +31,10 @@ type Content = {
   themeLabel: string;
   navigationLabel: string;
   logoutLabel: string;
+
   pageTitle: string;
   pageSubtitle: string;
+
   rangeLabel: string;
   filtersTitle: string;
   filtersSubtitle: string;
@@ -43,12 +49,48 @@ type Content = {
   statusLabel: string;
   statusPlaceholder: string;
   clearFilters: string;
+
   stats: {
     total: string;
     present: string;
     late: string;
     absent: string;
   };
+
+  email: {
+    title: string;
+    subtitle: string;
+    senderEmail: string;
+    appPassword: string;
+    active: string;
+    save: string;
+    savedTitle: string;
+    savedMessage: string;
+    failedTitle: string;
+    failedMessage: string;
+    passwordHint: string;
+  };
+
+  approvals: {
+    title: string;
+    subtitle: string;
+    refresh: string;
+    rejectReasonLabel: string;
+    rejectReasonPlaceholder: string;
+    empty: string;
+    employee: string;
+    date: string;
+    action: string;
+    time: string;
+    distance: string;
+    approve: string;
+    reject: string;
+    approvedTitle: string;
+    rejectedTitle: string;
+    failedTitle: string;
+    failedMessage: string;
+  };
+
   qr: {
     title: string;
     subtitle: string;
@@ -56,7 +98,9 @@ type Content = {
     validFrom: string;
     validUntil: string;
     worksite: string;
-  };     
+    linkLabel: string;
+  };
+
   table: {
     title: string;
     subtitle: string;
@@ -72,15 +116,19 @@ type Content = {
     emptySubtitle: string;
     loading: string;
   };
+
   statusMap: Record<string, string>;
   methodMap: Record<string, string>;
+
   notifications: {
     qrTitle: string;
     qrMessage: string;
-    qrFailedTitle: string;    
+    qrFailedTitle: string;
     qrFailedMessage: string;
   };
+
   userFallback: string;
+
   nav: {
     dashboard: string;
     users: string;
@@ -130,8 +178,10 @@ const contentMap: Record<Language, Content> = {
     themeLabel: "Theme",
     navigationLabel: "Navigation",
     logoutLabel: "Logout",
+
     pageTitle: "HR Attendance",
-    pageSubtitle: "Review daily attendance and generate QR tokens for teams.",
+    pageSubtitle: "Review daily attendance, QR tokens, and approve self-service requests.",
+
     rangeLabel: "Date range",
     filtersTitle: "Attendance filters",
     filtersSubtitle: "Slice data by date, department, or status",
@@ -146,12 +196,49 @@ const contentMap: Record<Language, Content> = {
     statusLabel: "Status",
     statusPlaceholder: "All statuses",
     clearFilters: "Clear filters",
+
     stats: {
       total: "Total records",
       present: "Present",
       late: "Late",
       absent: "Absent",
     },
+
+    email: {
+      title: "Attendance email sender (Company)",
+      subtitle:
+        "Enter the company email + app password used to send OTP codes to employees (Gmail App Password).",
+      senderEmail: "Sender email",
+      appPassword: "App password",
+      active: "Active",
+      save: "Save",
+      savedTitle: "Saved",
+      savedMessage: "Email config updated.",
+      failedTitle: "Failed",
+      failedMessage: "Could not save email config.",
+      passwordHint: "We never return it after saving.",
+    },
+
+    approvals: {
+      title: "Pending approvals",
+      subtitle: "Approve or reject self-service attendance requests.",
+      refresh: "Refresh",
+      rejectReasonLabel: "Reject reason (optional)",
+      rejectReasonPlaceholder: "Reason shown to employee",
+      empty: "No pending requests.",
+      employee: "Employee",
+      date: "Date",
+      action: "Action",
+      time: "Time",
+      distance: "Distance (m)",
+      approve: "Approve",
+      reject: "Reject",
+      approvedTitle: "Approved",
+      rejectedTitle: "Rejected",
+      failedTitle: "Failed",
+      failedMessage: "Operation failed.",
+    },
+
     qr: {
       title: "Company QR token",
       subtitle: "Daily QR code based on the company schedule",
@@ -159,7 +246,9 @@ const contentMap: Record<Language, Content> = {
       validFrom: "Valid from",
       validUntil: "Valid until",
       worksite: "Worksite",
-    },           
+      linkLabel: "Link",
+    },
+
     table: {
       title: "Attendance log",
       subtitle: "Live check-in and check-out status",
@@ -175,6 +264,7 @@ const contentMap: Record<Language, Content> = {
       emptySubtitle: "Try another date range or search term.",
       loading: "Loading attendance...",
     },
+
     statusMap: {
       present: "Present",
       late: "Late",
@@ -182,18 +272,22 @@ const contentMap: Record<Language, Content> = {
       absent: "Absent",
       incomplete: "Incomplete",
     },
+
     methodMap: {
       manual: "Manual",
       qr: "QR",
       gps: "GPS",
     },
+
     notifications: {
       qrTitle: "QR generated",
       qrMessage: "QR token generated successfully.",
-      qrFailedTitle: "Failed to generate QR",      
+      qrFailedTitle: "Failed to generate QR",
       qrFailedMessage: "Something went wrong while creating the QR token.",
     },
+
     userFallback: "Explorer",
+
     nav: {
       dashboard: "Dashboard",
       users: "Users",
@@ -241,8 +335,10 @@ const contentMap: Record<Language, Content> = {
     themeLabel: "المظهر",
     navigationLabel: "التنقل",
     logoutLabel: "تسجيل الخروج",
+
     pageTitle: "حضور الموارد البشرية",
-    pageSubtitle: "راجع سجلات الحضور اليومية وأنشئ أكواد QR للفِرق.",
+    pageSubtitle: "راجع سجلات الحضور، أكواد QR، واعتماد طلبات الحضور الذاتية.",
+
     rangeLabel: "النطاق الزمني",
     filtersTitle: "فلاتر الحضور",
     filtersSubtitle: "فرز البيانات حسب التاريخ أو القسم أو الحالة",
@@ -257,12 +353,49 @@ const contentMap: Record<Language, Content> = {
     statusLabel: "الحالة",
     statusPlaceholder: "كل الحالات",
     clearFilters: "مسح الفلاتر",
+
     stats: {
       total: "إجمالي السجلات",
       present: "حاضر",
       late: "متأخر",
       absent: "غائب",
     },
+
+    email: {
+      title: "إعداد بريد إرسال OTP (الشركة)",
+      subtitle:
+        "أدخل بريد الشركة وكلمة مرور التطبيقات لإرسال أكواد OTP للموظفين (Gmail App Password).",
+      senderEmail: "بريد المُرسل",
+      appPassword: "كلمة مرور التطبيقات",
+      active: "مفعل",
+      save: "حفظ",
+      savedTitle: "تم الحفظ",
+      savedMessage: "تم تحديث إعدادات البريد.",
+      failedTitle: "فشل",
+      failedMessage: "تعذر حفظ إعدادات البريد.",
+      passwordHint: "لن يتم إرجاعها بعد الحفظ.",
+    },
+
+    approvals: {
+      title: "طلبات اعتماد معلقة",
+      subtitle: "اعتماد أو رفض طلبات الحضور الذاتية.",
+      refresh: "تحديث",
+      rejectReasonLabel: "سبب الرفض (اختياري)",
+      rejectReasonPlaceholder: "سيظهر السبب للموظف",
+      empty: "لا توجد طلبات معلقة.",
+      employee: "الموظف",
+      date: "التاريخ",
+      action: "الإجراء",
+      time: "الوقت",
+      distance: "المسافة (م)",
+      approve: "اعتماد",
+      reject: "رفض",
+      approvedTitle: "تم الاعتماد",
+      rejectedTitle: "تم الرفض",
+      failedTitle: "فشل",
+      failedMessage: "فشلت العملية.",
+    },
+
     qr: {
       title: "رمز QR الخاص بالشركة",
       subtitle: "رمز QR يومي مرتبط بجدول الشركة",
@@ -270,7 +403,9 @@ const contentMap: Record<Language, Content> = {
       validFrom: "بداية الصلاحية",
       validUntil: "نهاية الصلاحية",
       worksite: "الموقع",
-    },           
+      linkLabel: "الرابط",
+    },
+
     table: {
       title: "سجل الحضور",
       subtitle: "تفاصيل الدخول والخروج المباشرة",
@@ -286,6 +421,7 @@ const contentMap: Record<Language, Content> = {
       emptySubtitle: "جرّب تعديل التاريخ أو البحث.",
       loading: "جاري تحميل سجلات الحضور...",
     },
+
     statusMap: {
       present: "حاضر",
       late: "متأخر",
@@ -293,18 +429,22 @@ const contentMap: Record<Language, Content> = {
       absent: "غائب",
       incomplete: "غير مكتمل",
     },
+
     methodMap: {
       manual: "يدوي",
       qr: "QR",
       gps: "GPS",
     },
+
     notifications: {
       qrTitle: "تم إنشاء الكود",
       qrMessage: "تم إنشاء كود QR بنجاح.",
-      qrFailedTitle: "تعذر إنشاء الكود",      
+      qrFailedTitle: "تعذر إنشاء الكود",
       qrFailedMessage: "حدث خطأ أثناء إنشاء كود QR.",
     },
+
     userFallback: "ضيف",
+
     nav: {
       dashboard: "لوحة التحكم",
       users: "المستخدمون",
@@ -352,22 +492,55 @@ function formatTime(value: string | null) {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function getErrorDetail(error: unknown, fallback: string) {
+  if (typeof error === "string") return error;
+  if (!error || typeof error !== "object") return fallback;
+
+  const maybe = error as { response?: { data?: unknown } };
+  const data = maybe.response?.data;
+
+  if (!data) return fallback;
+  if (typeof data === "string") return data;
+
+  if (typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    if (typeof obj.detail === "string") return obj.detail;
+
+    // Join first-level fields
+    const parts: string[] = [];
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === "string") parts.push(`${k}: ${v}`);
+      else if (Array.isArray(v)) parts.push(`${k}: ${v.map(String).join(", ")}`);
+    }
+    if (parts.length) return parts.join(" | ");
+  }
+
+  return fallback;
+}
+
 export function HRAttendancePage() {
   const navigate = useNavigate();
   const location = useLocation();
+
   const { data: meData, isLoading: isProfileLoading, isError } = useMe();
+
+  // filters
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [departmentId, setDepartmentId] = useState<string | null>(null);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+
+  // QR
   const [qrToken, setQrToken] = useState<{
     token: string;
     valid_from: string;
     valid_until: string;
     worksite_id: number;
-  } | null>(null);  
+  } | null>(null);
+
+  // UI prefs
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
       typeof window !== "undefined"
@@ -385,53 +558,26 @@ export function HRAttendancePage() {
 
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
-  const userPermissions = useMemo(() => meData?.permissions ?? [], [meData?.permissions]);
-  
-  const userName =
-    meData?.user.first_name || meData?.user.username || content.userFallback;
-  const qrTokenValue = qrToken?.token ?? "";
-  const qrLink = useMemo(() => {
-    if (!qrTokenValue || typeof window === "undefined") {
-      return null;
-    }
-    const url = new URL("/attendance/self", window.location.origin);
-    url.searchParams.set("qr_token", qrTokenValue);
-    url.searchParams.set("auto", "1");
-    return url.toString();
-  }, [qrTokenValue]);  
-  const qrImage = useMemo(() => {
-    if (!qrLink) {
-      return null;
-    }
-    const encoded = encodeURIComponent(qrLink);
-    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encoded}`;
-  }, [qrLink]);
+  const userPermissions = useMemo(
+    () => meData?.permissions ?? [],
+    [meData?.permissions]
+  );
 
-  const qrLinkLabel = useMemo(() => {
-    if (!qrLink) return "";
-    // Show a short readable version (domain + path), keep the full href for open/copy.
-    try {
-      const url = new URL(qrLink);
-      const short = `${url.origin}${url.pathname}`;
-      return short;
-    } catch {
-      return qrLink;
-    }
-  }, [qrLink]);
-
+  // persist prefs
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("managora-language", language);
     }
-    window.localStorage.setItem("managora-language", language);
   }, [language]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("managora-theme", theme);
     }
-    window.localStorage.setItem("managora-theme", theme);
   }, [theme]);
+
+  const userName =
+    meData?.user.first_name || meData?.user.username || content.userFallback;
 
   const departmentsQuery = useDepartments();
   const employeesQuery = useEmployees({
@@ -441,19 +587,23 @@ export function HRAttendancePage() {
 
   const departmentOptions = useMemo(
     () =>
-      (departmentsQuery.data ?? []).map((dept) => ({
-        value: String(dept.id),
-        label: dept.name,
-      })),
+      (departmentsQuery.data ?? []).map(
+        (dept: { id: number; name: string }) => ({
+          value: String(dept.id),
+          label: dept.name,
+        })
+      ),
     [departmentsQuery.data]
   );
 
   const employeeOptions = useMemo(
     () =>
-      (employeesQuery.data ?? []).map((employee) => ({
-        value: String(employee.id),
-        label: `${employee.full_name} (${employee.employee_code})`,
-      })),
+      (employeesQuery.data ?? []).map(
+        (employee: { id: number; full_name: string; employee_code: string }) => ({
+          value: String(employee.id),
+          label: `${employee.full_name} (${employee.employee_code})`,
+        })
+      ),
     [employeesQuery.data]
   );
 
@@ -465,17 +615,157 @@ export function HRAttendancePage() {
     status: status ?? undefined,
     search: employeeSearch || undefined,
   });
-  const qrGenerateMutation = useAttendanceQrGenerateMutation();
+
+  const qrGenerateMutation = useMutation({
+    mutationFn: async (): Promise<{
+      token: string;
+      valid_from: string;
+      valid_until: string;
+      worksite_id: number;
+    }> => {
+      const accessToken =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("access_token") ||
+            window.localStorage.getItem("token") ||
+            window.localStorage.getItem("access")
+          : null;
+
+      const res = await fetch("/api/attendance/qr/generate/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try {
+          const data = (await res.json()) as { detail?: string };
+          detail = data.detail || detail;
+        } catch {
+          // ignore
+        }
+        throw new Error(detail);
+      }
+
+      return (await res.json()) as {
+        token: string;
+        valid_from: string;
+        valid_until: string;
+        worksite_id: number;
+      };
+    },
+  });
+
+  // Email OTP config + approvals
+  const emailCfgQuery = useAttendanceEmailConfigQuery();
+  const emailCfgUpsert = useAttendanceEmailConfigUpsertMutation();
+  const pendingApprovals = useAttendancePendingApprovalsQuery();
+  const approveReject = useAttendanceApproveRejectMutation();
+
+  const [senderEmailDraft, setSenderEmailDraft] = useState("");
+  const [senderEmailTouched, setSenderEmailTouched] = useState(false);
+  const [appPassword, setAppPassword] = useState("");
+  const [isActiveDraft, setIsActiveDraft] = useState(true);
+  const [isActiveTouched, setIsActiveTouched] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+
+  const effectiveSenderEmail = useMemo(() => {
+    return senderEmailTouched
+      ? senderEmailDraft
+      : emailCfgQuery.data?.sender_email ?? "";
+  }, [emailCfgQuery.data?.sender_email, senderEmailDraft, senderEmailTouched]);
+
+  const effectiveIsActive = useMemo(() => {
+    if (isActiveTouched) return isActiveDraft;
+    // If config not loaded yet, default to true.
+    return Boolean(emailCfgQuery.data?.is_active ?? true);
+  }, [emailCfgQuery.data?.is_active, isActiveDraft, isActiveTouched]);
+
+
+  async function saveEmailConfig() {
+    try {
+      await emailCfgUpsert.mutateAsync({
+        sender_email: effectiveSenderEmail,
+        app_password: appPassword,
+        is_active: effectiveIsActive,
+      });
+      notifications.show({
+        title: content.email.savedTitle,
+        message: content.email.savedMessage,
+      });
+      setAppPassword("");
+      setSenderEmailTouched(false);
+      setIsActiveTouched(false);
+      await emailCfgQuery.refetch();
+    } catch (error: unknown) {
+      notifications.show({
+        title: content.email.failedTitle,
+        message: getErrorDetail(error, content.email.failedMessage),
+        color: "red",
+      });
+    }
+  }
+
+  async function handleApproval(item: AttendancePendingItem, op: "approve" | "reject") {
+    try {
+      await approveReject.mutateAsync({
+        record_id: item.record_id,
+        op,
+        action: item.action,
+        reason: op === "reject" ? rejectReason || "Rejected" : null,
+      });
+      notifications.show({
+        title: op === "approve" ? content.approvals.approvedTitle : content.approvals.rejectedTitle,
+        message: `${item.employee_name} - ${item.action} (${item.date})`,
+      });
+      setRejectReason("");
+      await pendingApprovals.refetch();
+    } catch (error: unknown) {
+      notifications.show({
+        title: content.approvals.failedTitle,
+        message: getErrorDetail(error, content.approvals.failedMessage),
+        color: "red",
+      });
+    }
+  }
 
   const stats = useMemo(() => {
     const rows = attendanceQuery.data ?? [];
     return {
       total: rows.length,
-      present: rows.filter((record) => record.status === "present").length,
-      late: rows.filter((record) => record.status === "late").length,
-      absent: rows.filter((record) => record.status === "absent").length,
+      present: rows.filter((record: { status?: string }) => record.status === "present").length,
+      late: rows.filter((record: { status?: string }) => record.status === "late").length,
+      absent: rows.filter((record: { status?: string }) => record.status === "absent").length,
     };
   }, [attendanceQuery.data]);
+
+  const qrTokenValue = qrToken?.token ?? "";
+  const qrLink = useMemo(() => {
+    if (!qrTokenValue || typeof window === "undefined") return null;
+    const url = new URL("/attendance/self", window.location.origin);
+    url.searchParams.set("qr_token", qrTokenValue);
+    url.searchParams.set("auto", "1");
+    return url.toString();
+  }, [qrTokenValue]);
+
+  const qrImage = useMemo(() => {
+    if (!qrLink) return null;
+    const encoded = encodeURIComponent(qrLink);
+    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encoded}`;
+  }, [qrLink]);
+
+  const qrLinkLabel = useMemo(() => {
+    if (!qrLink) return "";
+    try {
+      const url = new URL(qrLink);
+      return `${url.origin}${url.pathname}`;
+    } catch {
+      return qrLink;
+    }
+  }, [qrLink]);
 
   const navLinks = useMemo(
     () => [
@@ -487,167 +777,37 @@ export function HRAttendancePage() {
         icon: "🕒",
         permissions: ["attendance.*", "attendance.view_team"],
       },
-      {
-        path: "/leaves/balance",
-        label: content.nav.leaveBalance,
-        icon: "📅",
-        permissions: ["leaves.*"],
-      },
-      {
-        path: "/leaves/request",
-        label: content.nav.leaveRequest,
-        icon: "📝",
-        permissions: ["leaves.*"],
-      },
-      {
-        path: "/leaves/my",
-        label: content.nav.leaveMyRequests,
-        icon: "📌",
-        permissions: ["leaves.*"],
-      },
-      {
-        path: "/hr/employees",
-        label: content.nav.employees,
-        icon: "🧑‍💼",
-        permissions: ["employees.*", "hr.employees.view"],
-      },
-      {
-        path: "/hr/departments",
-        label: content.nav.departments,
-        icon: "🏢",
-        permissions: ["hr.departments.view"],
-      },
-      {
-        path: "/hr/job-titles",
-        label: content.nav.jobTitles,
-        icon: "🧩",
-        permissions: ["hr.job_titles.view"],
-      },
-      {
-        path: "/hr/attendance",
-        label: content.nav.hrAttendance,
-        icon: "📍",
-        permissions: ["attendance.*", "attendance.view_team"],
-      },
-      {
-        path: "/hr/leaves/inbox",
-        label: content.nav.leaveInbox,
-        icon: "📥",
-        permissions: ["leaves.*"],
-      },
-      {
-        path: "/hr/policies",
-        label: content.nav.policies,
-        icon: "📚",
-        permissions: ["employees.*"],
-      },
-      {
-        path: "/hr/actions",
-        label: content.nav.hrActions,
-        icon: "✅",
-        permissions: ["approvals.*"],
-      },
-      {
-        path: "/payroll",
-        label: content.nav.payroll,
-        icon: "💸",
-        permissions: ["hr.payroll.view", "hr.payroll.*"],
-      },
-      {
-        path: "/accounting/setup",
-        label: content.nav.accountingSetup,
-        icon: "⚙️",
-        permissions: ["accounting.manage_coa", "accounting.*"],
-      },
-      {
-        path: "/accounting/journal-entries",
-        label: content.nav.journalEntries,
-        icon: "📒",
-        permissions: ["accounting.journal.view", "accounting.*"],
-      },
-      {
-        path: "/accounting/expenses",
-        label: content.nav.expenses,
-        icon: "🧾",
-        permissions: ["expenses.view", "expenses.*"],
-      },
-      {
-        path: "/collections",
-        label: content.nav.collections,
-        icon: "💼",
-        permissions: ["accounting.view", "accounting.*"],
-      },
-      {
-        path: "/accounting/reports/trial-balance",
-        label: content.nav.trialBalance,
-        icon: "📈",
-        permissions: ["accounting.reports.view", "accounting.*"],
-      },
-      {
-        path: "/accounting/reports/general-ledger",
-        label: content.nav.generalLedger,
-        icon: "📊",
-        permissions: ["accounting.reports.view", "accounting.*"],
-      },
-      {
-        path: "/accounting/reports/pnl",
-        label: content.nav.profitLoss,
-        icon: "📉",
-        permissions: ["accounting.reports.view", "accounting.*"],
-      },
-      {
-        path: "/accounting/reports/balance-sheet",
-        label: content.nav.balanceSheet,
-        icon: "🧮",
-        permissions: ["accounting.reports.view", "accounting.*"],
-      },
-      {
-        path: "/accounting/reports/ar-aging",
-        label: content.nav.agingReport,
-        icon: "⏳",
-        permissions: ["accounting.reports.view", "accounting.*"],
-      },
-      {
-        path: "/customers",
-        label: content.nav.customers,
-        icon: "🤝",
-        permissions: ["customers.view", "customers.*"],
-      },
-      {
-        path: "/customers/new",
-        label: content.nav.newCustomer,
-        icon: "➕",
-        permissions: ["customers.create", "customers.*"],
-      },
-      {
-        path: "/invoices",
-        label: content.nav.invoices,
-        icon: "📄",
-        permissions: ["invoices.*"],
-      },
-      {
-        path: "/invoices/new",
-        label: content.nav.newInvoice,
-        icon: "🧾",
-        permissions: ["invoices.*"],
-      },
-      {
-        path: "/analytics/alerts",
-        label: content.nav.alertsCenter,
-        icon: "🚨",
-        permissions: ["analytics.alerts.view", "analytics.alerts.manage"],
-      },
+      { path: "/leaves/balance", label: content.nav.leaveBalance, icon: "📅", permissions: ["leaves.*"] },
+      { path: "/leaves/request", label: content.nav.leaveRequest, icon: "📝", permissions: ["leaves.*"] },
+      { path: "/leaves/my", label: content.nav.leaveMyRequests, icon: "📌", permissions: ["leaves.*"] },
+      { path: "/hr/employees", label: content.nav.employees, icon: "🧑‍💼", permissions: ["employees.*", "hr.employees.view"] },
+      { path: "/hr/departments", label: content.nav.departments, icon: "🏢", permissions: ["hr.departments.view"] },
+      { path: "/hr/job-titles", label: content.nav.jobTitles, icon: "🧩", permissions: ["hr.job_titles.view"] },
+      { path: "/hr/attendance", label: content.nav.hrAttendance, icon: "📍", permissions: ["attendance.*", "attendance.view_team"] },
+      { path: "/hr/leaves/inbox", label: content.nav.leaveInbox, icon: "📥", permissions: ["leaves.*"] },
+      { path: "/hr/policies", label: content.nav.policies, icon: "📚", permissions: ["employees.*"] },
+      { path: "/hr/actions", label: content.nav.hrActions, icon: "✅", permissions: ["approvals.*"] },
+      { path: "/payroll", label: content.nav.payroll, icon: "💸", permissions: ["hr.payroll.view", "hr.payroll.*"] },
+      { path: "/accounting/setup", label: content.nav.accountingSetup, icon: "⚙️", permissions: ["accounting.manage_coa", "accounting.*"] },
+      { path: "/accounting/journal-entries", label: content.nav.journalEntries, icon: "📒", permissions: ["accounting.journal.view", "accounting.*"] },
+      { path: "/accounting/expenses", label: content.nav.expenses, icon: "🧾", permissions: ["expenses.view", "expenses.*"] },
+      { path: "/collections", label: content.nav.collections, icon: "💼", permissions: ["accounting.view", "accounting.*"] },
+      { path: "/accounting/reports/trial-balance", label: content.nav.trialBalance, icon: "📈", permissions: ["accounting.reports.view", "accounting.*"] },
+      { path: "/accounting/reports/general-ledger", label: content.nav.generalLedger, icon: "📊", permissions: ["accounting.reports.view", "accounting.*"] },
+      { path: "/accounting/reports/pnl", label: content.nav.profitLoss, icon: "📉", permissions: ["accounting.reports.view", "accounting.*"] },
+      { path: "/accounting/reports/balance-sheet", label: content.nav.balanceSheet, icon: "🧮", permissions: ["accounting.reports.view", "accounting.*"] },
+      { path: "/accounting/reports/ar-aging", label: content.nav.agingReport, icon: "⏳", permissions: ["accounting.reports.view", "accounting.*"] },
+      { path: "/customers", label: content.nav.customers, icon: "🤝", permissions: ["customers.view", "customers.*"] },
+      { path: "/customers/new", label: content.nav.newCustomer, icon: "➕", permissions: ["customers.create", "customers.*"] },
+      { path: "/invoices", label: content.nav.invoices, icon: "📄", permissions: ["invoices.*"] },
+      { path: "/invoices/new", label: content.nav.newInvoice, icon: "🧾", permissions: ["invoices.*"] },
+      { path: "/analytics/alerts", label: content.nav.alertsCenter, icon: "🚨", permissions: ["analytics.alerts.view", "analytics.alerts.manage"] },
       { path: "/analytics/cash-forecast", label: content.nav.cashForecast, icon: "💡" },
       { path: "/analytics/ceo", label: content.nav.ceoDashboard, icon: "📌" },
       { path: "/analytics/finance", label: content.nav.financeDashboard, icon: "💹" },
       { path: "/analytics/hr", label: content.nav.hrDashboard, icon: "🧑‍💻" },
       { path: "/copilot", label: content.nav.copilot, icon: "🤖" },
-      {
-        path: "/admin/audit-logs",
-        label: content.nav.auditLogs,
-        icon: "🛡️",
-        permissions: ["audit.view"],
-      },
+      { path: "/admin/audit-logs", label: content.nav.auditLogs, icon: "🛡️", permissions: ["audit.view"] },
       { path: "/setup/templates", label: content.nav.setupTemplates, icon: "🧱" },
       { path: "/setup/progress", label: content.nav.setupProgress, icon: "🚀" },
     ],
@@ -656,9 +816,7 @@ export function HRAttendancePage() {
 
   const visibleNavLinks = useMemo(() => {
     return navLinks.filter((link) => {
-      if (!link.permissions || link.permissions.length === 0) {
-        return true;
-      }
+      if (!link.permissions || link.permissions.length === 0) return true;
       return link.permissions.some((permission) =>
         hasPermission(userPermissions, permission)
       );
@@ -681,17 +839,16 @@ export function HRAttendancePage() {
 
   async function handleGenerateQr() {
     try {
-      const token = await qrGenerateMutation.mutateAsync({});
-      
+      const token = await qrGenerateMutation.mutateAsync();
       setQrToken(token);
       notifications.show({
         title: content.notifications.qrTitle,
-        message: content.notifications.qrMessage,        
+        message: content.notifications.qrMessage,
       });
-    } catch {
+    } catch (error: unknown) {
       notifications.show({
         title: content.notifications.qrFailedTitle,
-        message: content.notifications.qrFailedMessage,
+        message: getErrorDetail(error, content.notifications.qrFailedMessage),
         color: "red",
       });
     }
@@ -738,10 +895,14 @@ export function HRAttendancePage() {
           <div className="sidebar-card">
             <p>{content.pageTitle}</p>
             <strong>{userName}</strong>
-            {isProfileLoading && <span className="sidebar-note">...loading profile</span>}
+            {isProfileLoading && (
+              <span className="sidebar-note">...loading profile</span>
+            )}
             {isError && (
               <span className="sidebar-note sidebar-note--error">
-                {isArabic ? "تعذر تحميل بيانات الحساب." : "Unable to load account data."}
+                {isArabic
+                  ? "تعذر تحميل بيانات الحساب."
+                  : "Unable to load account data."}
               </span>
             )}
           </div>
@@ -766,13 +927,18 @@ export function HRAttendancePage() {
               </span>
               {content.themeLabel} • {theme === "light" ? "Dark" : "Light"}
             </button>
+
             <div className="sidebar-links">
-              <span className="sidebar-links__title">{content.navigationLabel}</span>
+              <span className="sidebar-links__title">
+                {content.navigationLabel}
+              </span>
               {visibleNavLinks.map((link) => (
                 <button
                   key={link.path}
                   type="button"
-                  className={`nav-item${location.pathname === link.path ? " nav-item--active" : ""}`}
+                  className={`nav-item${
+                    location.pathname === link.path ? " nav-item--active" : ""
+                  }`}
                   onClick={() => navigate(link.path)}
                 >
                   <span className="nav-icon" aria-hidden="true">
@@ -783,6 +949,7 @@ export function HRAttendancePage() {
               ))}
             </div>
           </nav>
+
           <div className="sidebar-footer">
             <button type="button" className="pill-button" onClick={handleLogout}>
               {content.logoutLabel}
@@ -823,6 +990,154 @@ export function HRAttendancePage() {
             </div>
           </section>
 
+          {/* Email OTP config */}
+          <section className="panel hr-attendance-panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.email.title}</h2>
+                <p>{content.email.subtitle}</p>
+              </div>
+            </div>
+
+            <div className="attendance-filters">
+              <label className="filter-field">
+                {content.email.senderEmail}
+                <input
+                  type="email"
+                  value={effectiveSenderEmail}
+                  onChange={(event) => {
+                    setSenderEmailTouched(true);
+                    setSenderEmailDraft(event.target.value);
+                  }}
+                  placeholder="company@gmail.com"
+                />
+              </label>
+              <label className="filter-field">
+                {content.email.appPassword}
+                <input
+                  type="password"
+                  value={appPassword}
+                  onChange={(event) => setAppPassword(event.target.value)}
+                  placeholder={emailCfgQuery.data?.configured ? "••••••••••" : ""}
+                />
+                <span className="sidebar-note">{content.email.passwordHint}</span>
+              </label>
+              <label className="filter-field" style={{ alignSelf: "end" }}>
+                <span style={{ display: "block", marginBottom: 8 }}>
+                  {content.email.active}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={effectiveIsActive}
+                  onChange={(event) => {
+                    setIsActiveTouched(true);
+                    setIsActiveDraft(event.currentTarget.checked);
+                  }}
+                />
+              </label>
+
+              <div className="attendance-actions" style={{ alignSelf: "end" }}>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={saveEmailConfig}
+                  disabled={emailCfgUpsert.isPending}
+                >
+                  {emailCfgUpsert.isPending ? `${content.email.save}...` : content.email.save}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* Pending approvals */}
+          <section className="panel hr-attendance-panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.approvals.title}</h2>
+                <p>{content.approvals.subtitle}</p>
+              </div>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => pendingApprovals.refetch()}
+                disabled={pendingApprovals.isFetching}
+              >
+                {pendingApprovals.isFetching ? `${content.approvals.refresh}...` : content.approvals.refresh}
+              </button>
+            </div>
+
+            <div className="attendance-filters">
+              <label className="filter-field" style={{ gridColumn: "1 / -1" }}>
+                {content.approvals.rejectReasonLabel}
+                <input
+                  type="text"
+                  value={rejectReason}
+                  onChange={(event) => setRejectReason(event.target.value)}
+                  placeholder={content.approvals.rejectReasonPlaceholder}
+                />
+              </label>
+            </div>
+
+            {pendingApprovals.isLoading ? (
+              <div className="attendance-state attendance-state--loading">
+                {isArabic ? "جاري التحميل..." : "Loading..."}
+              </div>
+            ) : !(pendingApprovals.data ?? []).length ? (
+              <div className="attendance-state">
+                <strong>{content.approvals.empty}</strong>
+              </div>
+            ) : (
+              <div className="attendance-table-wrapper">
+                <table className="attendance-table">
+                  <thead>
+                    <tr>
+                      <th>{content.approvals.employee}</th>
+                      <th>{content.approvals.date}</th>
+                      <th>{content.approvals.action}</th>
+                      <th>{content.approvals.time}</th>
+                      <th>{content.approvals.distance}</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(pendingApprovals.data ?? []).map((item) => (
+                      <tr key={`${item.record_id}-${item.action}`}>
+                        <td>{item.employee_name}</td>
+                        <td>{item.date}</td>
+                        <td>{item.action}</td>
+                        <td>{new Date(item.time).toLocaleString(isArabic ? "ar" : "en")}</td>
+                        <td>{item.distance_meters ?? "-"}</td>
+                        <td>
+                          <div className="attendance-actions" style={{ justifyContent: "flex-end" }}>
+                            <button
+                              type="button"
+                              className="primary-button"
+                              onClick={() => handleApproval(item, "approve")}
+                              disabled={approveReject.isPending}
+                              style={{ padding: "10px 14px" }}
+                            >
+                              {content.approvals.approve}
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() => handleApproval(item, "reject")}
+                              disabled={approveReject.isPending}
+                              style={{ padding: "10px 14px" }}
+                            >
+                              {content.approvals.reject}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {/* Filters */}
           <section className="panel hr-attendance-panel">
             <div className="panel__header">
               <div>
@@ -893,7 +1208,10 @@ export function HRAttendancePage() {
               </label>
               <label className="filter-field">
                 {content.statusLabel}
-                <select value={status ?? ""} onChange={(event) => setStatus(event.target.value || null)}>
+                <select
+                  value={status ?? ""}
+                  onChange={(event) => setStatus(event.target.value || null)}
+                >
                   <option value="">{content.statusPlaceholder}</option>
                   {Object.entries(content.statusMap).map(([value, label]) => (
                     <option key={value} value={value}>
@@ -905,6 +1223,7 @@ export function HRAttendancePage() {
             </div>
           </section>
 
+          {/* QR */}
           <section className="panel hr-attendance-panel">
             <div className="panel__header">
               <div>
@@ -912,16 +1231,20 @@ export function HRAttendancePage() {
                 <p>{content.qr.subtitle}</p>
               </div>
             </div>
+
             <div className="attendance-qr-grid">
               <button
                 type="button"
                 className="primary-button"
-                onClick={handleGenerateQr}                
+                onClick={handleGenerateQr}
                 disabled={qrGenerateMutation.isPending}
               >
-                {qrGenerateMutation.isPending ? `${content.qr.generate}...` : content.qr.generate}
+                {qrGenerateMutation.isPending
+                  ? `${content.qr.generate}...`
+                  : content.qr.generate}
               </button>
             </div>
+
             {qrToken && (
               <div className="qr-token-card">
                 <div className="qr-token-image">
@@ -933,19 +1256,19 @@ export function HRAttendancePage() {
                 </div>
                 <div className="qr-token-meta">
                   <span>
-                    {content.qr.validFrom}: {new Date(qrToken.valid_from).toLocaleString()}                    
+                    {content.qr.validFrom}:{" "}
+                    {new Date(qrToken.valid_from).toLocaleString(isArabic ? "ar" : "en")}
                   </span>
                   <span>
-                    {content.qr.validUntil}: {new Date(qrToken.valid_until).toLocaleString()}
+                    {content.qr.validUntil}:{" "}
+                    {new Date(qrToken.valid_until).toLocaleString(isArabic ? "ar" : "en")}
                   </span>
                   <span>
                     {content.qr.worksite}: {qrToken.worksite_id}
                   </span>
-
-                  {/* Debug/UX: show the actual link that the QR should open. */}
                   {qrLink && (
                     <span style={{ wordBreak: "break-all" }}>
-                      {isArabic ? "الرابط:" : "Link:"}{" "}
+                      {content.qr.linkLabel}:{" "}
                       <a href={qrLink} target="_blank" rel="noreferrer">
                         {qrLinkLabel}
                       </a>
@@ -953,9 +1276,10 @@ export function HRAttendancePage() {
                   )}
                 </div>
               </div>
-            )}            
+            )}
           </section>
 
+          {/* Table */}
           <section className="panel hr-attendance-panel">
             <div className="panel__header">
               <div>
@@ -963,6 +1287,7 @@ export function HRAttendancePage() {
                 <p>{content.table.subtitle}</p>
               </div>
             </div>
+
             {attendanceQuery.isLoading ? (
               <div className="attendance-state attendance-state--loading">
                 {content.table.loading}
@@ -988,7 +1313,7 @@ export function HRAttendancePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(attendanceQuery.data ?? []).map((record) => (
+                    {(attendanceQuery.data ?? []).map((record: { id: number; date: string; status: string; method: string; check_in_time: string | null; check_out_time: string | null; late_minutes: number | null; early_leave_minutes: number | null; employee: { full_name: string; employee_code: string } }) => (
                       <tr key={record.id}>
                         <td>
                           <div className="attendance-employee">

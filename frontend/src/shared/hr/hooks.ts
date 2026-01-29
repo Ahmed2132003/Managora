@@ -36,6 +36,128 @@ export type AttendanceActionPayload = {
   qr_token?: string;
 };
 
+
+export type AttendanceOtpPurpose = "checkin" | "checkout";
+
+export type AttendanceSelfRequestOtpResponse = {
+  request_id: number;
+  expires_in: number;
+};
+
+export type AttendancePendingItem = {
+  record_id: number;
+  employee_id: number;
+  employee_name: string;
+  date: string;
+  action: "checkin" | "checkout";
+  time: string;
+  lat: string | null;
+  lng: string | null;
+  distance_meters: number | null;
+  status: string;
+};
+
+export function useAttendanceSelfRequestOtpMutation() {
+  return useMutation({
+    mutationFn: async (payload: { purpose: AttendanceOtpPurpose }) => {
+      const response = await http.post<AttendanceSelfRequestOtpResponse>(
+        endpoints.hr.attendanceSelfRequestOtp,
+        payload
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useAttendanceSelfVerifyOtpMutation() {
+  return useMutation({
+    mutationFn: async (payload: {
+      request_id: number;
+      code: string;
+      lat: number;
+      lng: number;
+    }) => {
+      const response = await http.post<AttendanceRecord>(
+        endpoints.hr.attendanceSelfVerifyOtp,
+        payload
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useAttendanceEmailConfigQuery() {
+  return useQuery({
+    queryKey: ["attendance", "email-config"],
+    queryFn: async () => {
+      const response = await http.get<{
+        configured: boolean;
+        sender_email?: string;
+        is_active?: boolean;
+      }>(endpoints.hr.attendanceEmailConfig);
+      return response.data;
+    },
+  });
+}
+
+export function useAttendanceEmailConfigUpsertMutation() {
+  return useMutation({
+    mutationFn: async (payload: {
+      sender_email: string;
+      app_password: string;
+      is_active: boolean;
+    }) => {
+      const response = await http.post<{ ok: true }>(
+        endpoints.hr.attendanceEmailConfig,
+        payload
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useAttendancePendingApprovalsQuery(params?: {
+  dateFrom?: string;
+  dateTo?: string;
+}) {
+  return useQuery({
+    queryKey: ["attendance", "pending", params],
+    queryFn: async () => {
+      const response = await http.get<AttendancePendingItem[]>(
+        endpoints.hr.attendancePendingApprovals,
+        {
+          params: {
+            date_from: params?.dateFrom,
+            date_to: params?.dateTo,
+          },
+        }
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useAttendanceApproveRejectMutation() {
+  return useMutation({
+    mutationFn: async (payload: {
+      record_id: number;
+      op: "approve" | "reject";
+      action: "checkin" | "checkout";
+      reason?: string | null;
+    }) => {
+      const response = await http.post<AttendanceRecord>(
+        endpoints.hr.attendanceApproveReject(payload.record_id, payload.op),
+        {
+          action: payload.action,
+          reason: payload.reason ?? null,
+        }
+      );
+      return response.data;
+    },
+  });
+}
+
+
 export type AttendanceQrToken = {
   token: string;
   valid_from: string;
@@ -218,29 +340,6 @@ export type UploadDocumentPayload = {
   file: File;
 };
 
-export function useCheckInMutation() {
-  return useMutation({
-    mutationFn: async (payload: AttendanceActionPayload) => {
-      const response = await http.post<AttendanceRecord>(
-        endpoints.hr.attendanceCheckIn,
-        payload
-      );
-      return response.data;
-    },
-  });
-}
-
-export function useCheckOutMutation() {
-  return useMutation({
-    mutationFn: async (payload: AttendanceActionPayload) => {
-      const response = await http.post<AttendanceRecord>(
-        endpoints.hr.attendanceCheckOut,
-        payload
-      );
-      return response.data;
-    },
-  });
-}
 
 export function useMyAttendanceQuery(params?: { dateFrom?: string; dateTo?: string }) {
   return useQuery({
@@ -279,33 +378,6 @@ export function useAttendanceRecordsQuery(filters: AttendanceFilters) {
   });
 }
 
-export function useAttendanceQrGenerateMutation() {
-  return useMutation({
-    mutationFn: async (payload?: {
-      worksite_id?: number;
-      shift_id?: number;
-      expires_in_minutes?: number;
-    }) => {
-      const response = await http.post<AttendanceQrToken>(
-        endpoints.hr.attendanceQrGenerate,
-        payload ?? {}
-      );
-      return response.data;
-    },
-  });
-}
-
-export function useAttendanceCompanyQrQuery() {
-  return useQuery({
-    queryKey: ["attendance", "qr", "company"],
-    queryFn: async () => {
-      const response = await http.get<AttendanceCompanyQrToken>(
-        endpoints.hr.attendanceQrCompany
-      );
-      return response.data;
-    },
-  });
-}
 
 export function useEmployees({ filters, search, page }: UseEmployeesParams) {
   return useQuery({

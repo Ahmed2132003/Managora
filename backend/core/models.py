@@ -1,4 +1,8 @@
+import base64
+import hashlib
+
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
 
@@ -332,6 +336,62 @@ class TemplateApplyLog(models.Model):
 
     def __str__(self):
         return f"{self.company.name} - {self.template_code} v{self.template_version}"
+
+
+
+from cryptography.fernet import Fernet, InvalidToken
+
+
+def _attendance_email_fernet() -> Fernet:
+    """Return a Fernet instance for encrypting per-company email app passwords.
+
+    If ATTENDANCE_EMAIL_ENCRYPTION_KEY is set in settings, it must be a urlsafe_b64 key.
+    Otherwise we derive a stable key from Django SECRET_KEY.
+    """
+    key = getattr(settings, "ATTENDANCE_EMAIL_ENCRYPTION_KEY", None)
+    if key:
+        if isinstance(key, str):
+            key_bytes = key.encode("utf-8")
+        else:
+            key_bytes = key
+        return Fernet(key_bytes)
+
+    # Derive from SECRET_KEY (stable across restarts as long as SECRET_KEY is stable)
+    digest = hashlib.sha256(settings.SECRET_KEY.encode("utf-8")).digest()
+    key_bytes = base64.urlsafe_b64encode(digest[:32])
+    return Fernet(key_bytes)
+
+
+class CompanyEmailConfig(models.Model):
+    """SMTP sender configuration per company for attendance OTP emails.
+
+    We only store sender_email and an encrypted app password.
+    """
+
+    company = models.OneToOneField(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="attendance_email_config",
+    )
+    sender_email = models.EmailField()
+    app_password_encrypted = models.BinaryField()
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def set_app_password(self, raw_password: str) -> None:
+        f = _attendance_email_fernet()
+        self.app_password_encrypted = f.encrypt(raw_password.encode("utf-8"))
+
+    def get_app_password(self) -> str:
+        f = _attendance_email_fernet()
+        try:
+            return f.decrypt(bytes(self.app_password_encrypted)).decode("utf-8")
+        except InvalidToken:
+            # Likely SECRET_KEY changed. Fail loudly.
+            raise ValueError("Unable to decrypt company email config password.")
+
+    def __str__(self) -> str:
+        return f"{self.company.name} attendance email config"
 
 
 class CompanySetupState(models.Model):
