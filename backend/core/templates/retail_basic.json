@@ -19,8 +19,8 @@
       {"name": "Main Store", "lat": 30.0500, "lng": 31.2333, "radius_meters": 120}
     ],
     "shifts": [
-      {"name": "Retail Morning", "start_time": "10:00", "end_time": "18:00", "grace_minutes": 10},
-      {"name": "Retail Evening", "start_time": "14:00", "end_time": "22:00", "grace_minutes": 10}
+      {"name": "Day Shift", "start_time": "09:00", "end_time": "17:00", "grace_minutes": 0},
+      {"name": "Early Shift", "start_time": "03:00", "end_time": "11:00", "grace_minutes": 0}
     ]
   },
   "policies": {

@@ -19,7 +19,8 @@
       {"name": "HQ", "lat": 30.0444, "lng": 31.2357, "radius_meters": 150}
     ],
     "shifts": [
-      {"name": "Morning", "start_time": "09:00", "end_time": "17:00", "grace_minutes": 15}
+      {"name": "Day Shift", "start_time": "09:00", "end_time": "17:00", "grace_minutes": 0},
+      {"name": "Early Shift", "start_time": "03:00", "end_time": "11:00", "grace_minutes": 0}
     ]
   },
   "policies": {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Badge,
@@ -6,6 +6,8 @@ import {
   Card,
   FileInput,
   Group,
+  Modal,
+  NumberInput,
   Select,
   Stack,
   Table,
@@ -22,11 +24,16 @@ import { env } from "../../shared/config/env.ts";
 import { isForbiddenError } from "../../shared/api/errors.ts";
 import {
   useCreateEmployee,
+  useCreateJobTitle,
+  useCreateShift,
   useDepartments,
   useEmployee,
+  useEmployeeDefaults,
   useEmployeeDocuments,
+  useEmployeeSelectableUsers,
   useEmployees,
   useJobTitles,
+  useShifts,
   useUpdateEmployee,
   useUploadEmployeeDocument,
   useDeleteEmployeeDocument,
@@ -44,6 +51,8 @@ const employeeSchema = z.object({
   department_id: z.string().nullable().optional(),
   job_title_id: z.string().nullable().optional(),
   manager_id: z.string().nullable().optional(),
+  user_id: z.string().nullable().optional(),
+  shift_id: z.string().nullable().optional(),
 });
 
 type EmployeeFormValues = z.input<typeof employeeSchema>;
@@ -57,6 +66,8 @@ const employeeDefaults: EmployeeFormValues = {
   department_id: null,
   job_title_id: null,
   manager_id: null,
+  user_id: null,
+  shift_id: null,
 };
 
 const documentSchema = z.object({
@@ -85,20 +96,53 @@ const statusOptions = [
   { value: "terminated", label: "Terminated" },
 ];
 
+const jobTitleSchema = z.object({
+  name: z.string().min(1, "المسمى الوظيفي مطلوب"),
+});
+
+type JobTitleFormValues = z.input<typeof jobTitleSchema>;
+
+const jobTitleDefaults: JobTitleFormValues = {
+  name: "",
+};
+
+const shiftSchema = z.object({
+  name: z.string().min(1, "اسم الشيفت مطلوب"),
+  start_time: z.string().min(1, "وقت البداية مطلوب"),
+  end_time: z.string().min(1, "وقت النهاية مطلوب"),
+  grace_minutes: z.number().min(0, "الدقائق مطلوبة"),
+});
+
+type ShiftFormValues = z.input<typeof shiftSchema>;
+
+const shiftDefaults: ShiftFormValues = {
+  name: "",
+  start_time: "09:00",
+  end_time: "17:00",
+  grace_minutes: 0,
+};
+
 export function EmployeeProfilePage() {
   const navigate = useNavigate();
   const params = useParams();
   const isNew = params.id === "new";
   const parsedId = !isNew && params.id ? Number(params.id) : null;
   const employeeId = parsedId && !Number.isNaN(parsedId) ? parsedId : null;
+  const [jobTitleModalOpen, setJobTitleModalOpen] = useState(false);
+  const [shiftModalOpen, setShiftModalOpen] = useState(false);
 
   const employeeQuery = useEmployee(employeeId);
   const departmentsQuery = useDepartments();
   const jobTitlesQuery = useJobTitles();
+  const shiftsQuery = useShifts();
+  const defaultsQuery = useEmployeeDefaults();
+  const selectableUsersQuery = useEmployeeSelectableUsers();
   const managersQuery = useEmployees({ search: "", page: 1, filters: {} });
   const documentsQuery = useEmployeeDocuments(employeeId);
 
   const createEmployeeMutation = useCreateEmployee();
+  const createJobTitleMutation = useCreateJobTitle();
+  const createShiftMutation = useCreateShift();
   const updateEmployeeMutation = useUpdateEmployee();
   const uploadDocumentMutation = useUploadEmployeeDocument();
   const deleteDocumentMutation = useDeleteEmployeeDocument();
@@ -111,6 +155,16 @@ export function EmployeeProfilePage() {
   const documentForm = useForm<DocumentFormValues>({
     resolver: zodResolver(documentSchema),
     defaultValues: documentDefaults,
+  });
+
+  const jobTitleForm = useForm<JobTitleFormValues>({
+    resolver: zodResolver(jobTitleSchema),
+    defaultValues: jobTitleDefaults,
+  });
+
+  const shiftForm = useForm<ShiftFormValues>({
+    resolver: zodResolver(shiftSchema),
+    defaultValues: shiftDefaults,
   });
 
   useEffect(() => {
@@ -128,9 +182,23 @@ export function EmployeeProfilePage() {
           ? String(employeeQuery.data.job_title.id)
           : null,
         manager_id: employeeQuery.data.manager ? String(employeeQuery.data.manager.id) : null,
+        user_id: employeeQuery.data.user ? String(employeeQuery.data.user) : null,
+        shift_id: employeeQuery.data.shift ? String(employeeQuery.data.shift.id) : null,
       });
     }
   }, [employeeQuery.data, form, isNew]);
+
+  useEffect(() => {
+    if (!isNew || !defaultsQuery.data) {
+      return;
+    }
+    if (defaultsQuery.data.manager) {
+      form.setValue("manager_id", String(defaultsQuery.data.manager.id));
+    }
+    if (defaultsQuery.data.shift) {
+      form.setValue("shift_id", String(defaultsQuery.data.shift.id));
+    }
+  }, [defaultsQuery.data, form, isNew]);
 
   const departmentOptions = useMemo(
     () =>
@@ -150,6 +218,26 @@ export function EmployeeProfilePage() {
     [jobTitlesQuery.data]
   );
 
+  const shiftOptions = useMemo(
+    () =>
+      (shiftsQuery.data ?? []).map((shift) => ({
+        value: String(shift.id),
+        label: `${shift.name} (${shift.start_time} - ${shift.end_time})`,
+      })),
+    [shiftsQuery.data]
+  );
+
+  const selectableUserOptions = useMemo(
+    () =>
+      (selectableUsersQuery.data ?? []).map((user) => ({
+        value: String(user.id),
+        label: user.email
+          ? `${user.username} (${user.email})`
+          : `${user.username}`,
+      })),
+    [selectableUsersQuery.data]
+  );
+
   const managerOptions = useMemo(
     () =>
       (managersQuery.data ?? [])
@@ -165,6 +253,9 @@ export function EmployeeProfilePage() {
     isForbiddenError(employeeQuery.error) ||
     isForbiddenError(departmentsQuery.error) ||
     isForbiddenError(jobTitlesQuery.error) ||
+    isForbiddenError(shiftsQuery.error) ||
+    isForbiddenError(defaultsQuery.error) ||
+    isForbiddenError(selectableUsersQuery.error) ||
     isForbiddenError(managersQuery.error) ||
     isForbiddenError(documentsQuery.error);
 
@@ -182,6 +273,8 @@ export function EmployeeProfilePage() {
       department: values.department_id ? Number(values.department_id) : null,
       job_title: values.job_title_id ? Number(values.job_title_id) : null,
       manager: values.manager_id ? Number(values.manager_id) : null,
+      user: values.user_id ? Number(values.user_id) : null,
+      shift: values.shift_id ? Number(values.shift_id) : null,
     };
 
     try {
@@ -253,6 +346,46 @@ export function EmployeeProfilePage() {
     }
   }
 
+  async function handleCreateJobTitle(values: JobTitleFormValues) {
+    try {
+      const created = await createJobTitleMutation.mutateAsync(values);
+      notifications.show({
+        title: "Job title created",
+        message: "تم إنشاء المسمى الوظيفي",
+      });
+      jobTitlesQuery.refetch();
+      form.setValue("job_title_id", String(created.id));
+      jobTitleForm.reset(jobTitleDefaults);
+      setJobTitleModalOpen(false);
+    } catch (error) {
+      notifications.show({
+        title: "Create failed",
+        message: String(error),
+        color: "red",
+      });
+    }
+  }
+
+  async function handleCreateShift(values: ShiftFormValues) {
+    try {
+      const created = await createShiftMutation.mutateAsync(values);
+      notifications.show({
+        title: "Shift created",
+        message: "تم إنشاء الشيفت",
+      });
+      shiftsQuery.refetch();
+      form.setValue("shift_id", String(created.id));
+      shiftForm.reset(shiftDefaults);
+      setShiftModalOpen(false);
+    } catch (error) {
+      notifications.show({
+        title: "Create failed",
+        message: String(error),
+        color: "red",
+      });
+    }
+  }
+
   return (
     <Stack gap="lg">
       <Group justify="space-between">
@@ -310,6 +443,28 @@ export function EmployeeProfilePage() {
                     />
                   )}
                 />
+                <Controller
+                  name="job_title_id"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Group align="flex-end" grow>
+                      <Select
+                        label="Job Title"
+                        data={jobTitleOptions}
+                        searchable
+                        clearable
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                      <Button
+                        variant="light"
+                        onClick={() => setJobTitleModalOpen(true)}
+                      >
+                        Add job title
+                      </Button>
+                    </Group>
+                  )}
+                />
                 <Group grow>
                   <Controller
                     name="hire_date"
@@ -338,6 +493,53 @@ export function EmployeeProfilePage() {
                     )}
                   />
                 </Group>
+                <Controller
+                  name="manager_id"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Select
+                      label="Manager"
+                      data={managerOptions}
+                      searchable
+                      value={field.value}
+                      onChange={field.onChange}
+                      disabled
+                    />
+                  )}
+                />
+                <Controller
+                  name="user_id"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Select
+                      label="User"
+                      data={selectableUserOptions}
+                      searchable
+                      clearable
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
+                <Controller
+                  name="shift_id"
+                  control={form.control}
+                  render={({ field }) => (
+                    <Group align="flex-end" grow>
+                      <Select
+                        label="Shift"
+                        data={shiftOptions}
+                        searchable
+                        clearable
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                      <Button variant="light" onClick={() => setShiftModalOpen(true)}>
+                        Add shift
+                      </Button>
+                    </Group>
+                  )}
+                />
               </Stack>
             </Tabs.Panel>
 
@@ -350,34 +552,6 @@ export function EmployeeProfilePage() {
                     <Select
                       label="Department"
                       data={departmentOptions}
-                      searchable
-                      clearable
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
-                  )}
-                />
-                <Controller
-                  name="job_title_id"
-                  control={form.control}
-                  render={({ field }) => (
-                    <Select
-                      label="Job Title"
-                      data={jobTitleOptions}
-                      searchable
-                      clearable
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
-                  )}
-                />
-                <Controller
-                  name="manager_id"
-                  control={form.control}
-                  render={({ field }) => (
-                    <Select
-                      label="Manager"
-                      data={managerOptions}
                       searchable
                       clearable
                       value={field.value}
@@ -515,6 +689,114 @@ export function EmployeeProfilePage() {
           </Group>
         </form>
       </Card>
+
+      <Modal
+        opened={jobTitleModalOpen}
+        onClose={() => setJobTitleModalOpen(false)}
+        title="Create Job Title"
+        centered
+      >
+        <Stack>
+          <Controller
+            name="name"
+            control={jobTitleForm.control}
+            render={({ field }) => (
+              <TextInput
+                label="Job Title Name"
+                required
+                {...field}
+                error={jobTitleForm.formState.errors.name?.message}
+              />
+            )}
+          />
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={() => setJobTitleModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={jobTitleForm.handleSubmit(handleCreateJobTitle)}
+              loading={createJobTitleMutation.isPending}
+            >
+              Save
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={shiftModalOpen}
+        onClose={() => setShiftModalOpen(false)}
+        title="Create Shift"
+        centered
+      >
+        <Stack>
+          <Controller
+            name="name"
+            control={shiftForm.control}
+            render={({ field }) => (
+              <TextInput
+                label="Shift Name"
+                required
+                {...field}
+                error={shiftForm.formState.errors.name?.message}
+              />
+            )}
+          />
+          <Group grow>
+            <Controller
+              name="start_time"
+              control={shiftForm.control}
+              render={({ field }) => (
+                <TextInput
+                  label="Start Time"
+                  type="time"
+                  required
+                  {...field}
+                  error={shiftForm.formState.errors.start_time?.message}
+                />
+              )}
+            />
+            <Controller
+              name="end_time"
+              control={shiftForm.control}
+              render={({ field }) => (
+                <TextInput
+                  label="End Time"
+                  type="time"
+                  required
+                  {...field}
+                  error={shiftForm.formState.errors.end_time?.message}
+                />
+              )}
+            />
+          </Group>
+          <Controller
+            name="grace_minutes"
+            control={shiftForm.control}
+            render={({ field }) => (
+              <NumberInput
+                label="Grace Minutes"
+                min={0}
+                required
+                value={field.value}
+                onChange={(value) => field.onChange(value ?? 0)}
+                error={shiftForm.formState.errors.grace_minutes?.message}
+              />
+            )}
+          />
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={() => setShiftModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={shiftForm.handleSubmit(handleCreateShift)}
+              loading={createShiftMutation.isPending}
+            >
+              Save
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

@@ -66,6 +66,22 @@ export type JobTitle = {
   is_active: boolean;
 };
 
+export type Shift = {
+  id: number;
+  name: string;
+  start_time: string;
+  end_time: string;
+  grace_minutes: number;
+  early_leave_grace_minutes: number | null;
+  min_work_minutes: number | null;
+  is_active: boolean;
+};
+
+export type ShiftSummary = {
+  id: number;
+  name: string;
+};
+
 export type EmployeeStatus = "active" | "inactive" | "terminated";
 
 export type EmployeeSummary = {
@@ -77,11 +93,13 @@ export type EmployeeSummary = {
   department: { id: number; name: string } | null;
   job_title: { id: number; name: string } | null;
   manager: { id: number; full_name: string } | null;
+  shift?: ShiftSummary | null;
 };
 
 export type EmployeeDetail = EmployeeSummary & {
   national_id: string | null;
   user: number | null;
+  shift: ShiftSummary | null;
 };
 
 export type EmployeeDocument = {
@@ -157,6 +175,8 @@ export type EmployeePayload = {
   department?: number | null;
   job_title?: number | null;
   manager?: number | null;
+  user?: number | null;
+  shift?: number | null;
 };
 
 export type DepartmentPayload = {
@@ -167,6 +187,28 @@ export type DepartmentPayload = {
 export type JobTitlePayload = {
   name: string;
   is_active: boolean;
+};
+
+export type ShiftPayload = {
+  name: string;
+  start_time: string;
+  end_time: string;
+  grace_minutes: number;
+  early_leave_grace_minutes?: number | null;
+  min_work_minutes?: number | null;
+  is_active?: boolean;
+};
+
+export type SelectableUser = {
+  id: number;
+  username: string;
+  email: string;
+  roles: string[];
+};
+
+export type EmployeeDefaults = {
+  manager: { id: number; full_name: string } | null;
+  shift: ShiftSummary | null;
 };
 
 export type UploadDocumentPayload = {
@@ -320,6 +362,47 @@ export function useJobTitles() {
     queryKey: ["hr", "jobTitles"],
     queryFn: async () => {
       const response = await http.get<JobTitle[]>(endpoints.hr.jobTitles);
+      return response.data;
+    },
+  });
+}
+
+export function useShifts() {
+  return useQuery({
+    queryKey: ["hr", "shifts"],
+    queryFn: async () => {
+      const response = await http.get<Shift[]>(endpoints.hr.shifts);
+      return response.data;
+    },
+  });
+}
+
+export function useCreateShift() {
+  return useMutation({
+    mutationFn: async (payload: ShiftPayload) => {
+      const response = await http.post<Shift>(endpoints.hr.shifts, payload);
+      return response.data;
+    },
+  });
+}
+
+export function useEmployeeDefaults() {
+  return useQuery({
+    queryKey: ["hr", "employeeDefaults"],
+    queryFn: async () => {
+      const response = await http.get<EmployeeDefaults>(endpoints.hr.employeeDefaults);
+      return response.data;
+    },
+  });
+}
+
+export function useEmployeeSelectableUsers() {
+  return useQuery({
+    queryKey: ["hr", "employeeSelectableUsers"],
+    queryFn: async () => {
+      const response = await http.get<SelectableUser[]>(
+        endpoints.hr.employeeSelectableUsers
+      );
       return response.data;
     },
   });

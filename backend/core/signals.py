@@ -11,6 +11,7 @@ from django.forms.models import model_to_dict
 from core.audit import get_audit_context
 from core.models import AuditLog, Company
 from core.services.setup_templates import apply_roles
+from hr.services.defaults import ensure_default_shifts
 
 AUDITED_APPS = {"core", "hr", "accounting", "analytics"}
 EXCLUDED_MODELS = {
@@ -98,6 +99,7 @@ def ensure_company_roles(sender, instance, created, **kwargs):
     if not created:
         return
     apply_roles(instance, roles_data=[])
+    ensure_default_shifts(instance)
     
 
 @receiver(post_delete)

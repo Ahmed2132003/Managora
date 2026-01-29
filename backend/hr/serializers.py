@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from core.permissions import is_admin_user
 from hr.models import (
     AttendanceRecord,
     Department,
@@ -61,6 +62,30 @@ class ShiftMiniSerializer(serializers.ModelSerializer):
         fields = ("id", "name")
 
 
+class ShiftSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Shift
+        fields = (
+            "id",
+            "name",
+            "start_time",
+            "end_time",
+            "grace_minutes",
+            "early_leave_grace_minutes",
+            "min_work_minutes",
+            "is_active",
+        )
+        read_only_fields = ("id",)
+
+
+class UserMiniSerializer(serializers.ModelSerializer):
+    roles = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
+
+    class Meta:
+        model = User
+        fields = ("id", "username", "email", "roles")
+
+
 class EmployeeSerializer(serializers.ModelSerializer):
     department = DepartmentMiniSerializer(read_only=True)
     job_title = JobTitleMiniSerializer(read_only=True)
@@ -103,6 +128,11 @@ class EmployeeDetailSerializer(serializers.ModelSerializer):
             "shift",
             "user",
         )
+
+
+class EmployeeDefaultsSerializer(serializers.Serializer):
+    manager = ManagerMiniSerializer(allow_null=True)
+    shift = ShiftMiniSerializer(allow_null=True)
 
 
 class EmployeeCreateUpdateSerializer(serializers.ModelSerializer):
@@ -167,6 +197,27 @@ class EmployeeCreateUpdateSerializer(serializers.ModelSerializer):
         if user and user.company_id != company.id:
             raise serializers.ValidationError({"user": "User must belong to the same company."})
 
+        if user and request:
+            actor = request.user
+            if not actor.is_superuser and not is_admin_user(actor):
+                actor_roles = {
+                    name.strip().lower() for name in actor.roles.values_list("name", flat=True)
+                }
+                allowed_roles = None
+                if "manager" in actor_roles:
+                    allowed_roles = None
+                elif "hr" in actor_roles:
+                    allowed_roles = {"accountant", "employee"}
+                if allowed_roles is not None:
+                    user_roles = {
+                        name.strip().lower()
+                        for name in user.roles.values_list("name", flat=True)
+                    }
+                    if not user_roles.intersection(allowed_roles):
+                        raise serializers.ValidationError(
+                            {"user": "User role is not allowed for this action."}
+                        )
+
         return attrs
     
     def validate_employee_code(self, value):
@@ -188,7 +239,18 @@ class EmployeeCreateUpdateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         request = self.context.get("request")
         company = request.user.company
+        from hr.services.defaults import (
+            ensure_default_shifts,
+            get_company_manager,
+            get_default_shift,
+        )
+
         validated_data["company"] = company
+        ensure_default_shifts(company)
+        if not validated_data.get("manager"):
+            validated_data["manager"] = get_company_manager(company)
+        if not validated_data.get("shift"):
+            validated_data["shift"] = get_default_shift(company)
         return super().create(validated_data)
 
     def update(self, instance, validated_data):

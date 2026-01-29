@@ -22,6 +22,8 @@ from hr.views import (
     EmployeeDocumentDeleteView,
     EmployeeDocumentDownloadView,
     EmployeeDocumentListCreateView,
+    EmployeeDefaultsView,
+    EmployeeSelectableUsersView,
     EmployeeViewSet,          
     JobTitleViewSet,
     PayrollPeriodCreateView,
@@ -31,12 +33,14 @@ from hr.views import (
     PayrollRunDetailView,
     PayrollRunPayslipPDFView,
     PolicyRuleViewSet,
+    ShiftViewSet,
 )
 
 router = DefaultRouter()
 router.register("departments", DepartmentViewSet, basename="department")
 router.register("job-titles", JobTitleViewSet, basename="job-title")
 router.register("employees", EmployeeViewSet, basename="employee")
+router.register("shifts", ShiftViewSet, basename="shift")
 router.register("leaves/types", LeaveTypeViewSet, basename="leave-type")
 router.register("leaves/balances", LeaveBalanceViewSet, basename="leave-balance")
 router.register(
@@ -86,6 +90,16 @@ urlpatterns = [
         "employees/<int:employee_id>/documents/",
         EmployeeDocumentListCreateView.as_view(),
         name="employee-documents",        
+    ),
+    path(
+        "employees/selectable-users/",
+        EmployeeSelectableUsersView.as_view(),
+        name="employee-selectable-users",
+    ),
+    path(
+        "employees/defaults/",
+        EmployeeDefaultsView.as_view(),
+        name="employee-defaults",
     ),
     path(
         "documents/<int:pk>/download/",

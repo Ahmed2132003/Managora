@@ -49,10 +49,16 @@ BUILTIN_TEMPLATE_BUNDLES = {
             ],
             "shifts": [
                 {
-                    "name": "Morning",
+                    "name": "Day Shift",
                     "start_time": "09:00",
                     "end_time": "17:00",
-                    "grace_minutes": 15,
+                    "grace_minutes": 0,
+                },
+                {
+                    "name": "Early Shift",
+                    "start_time": "03:00",
+                    "end_time": "11:00",
+                    "grace_minutes": 0,
                 }
             ],
         },

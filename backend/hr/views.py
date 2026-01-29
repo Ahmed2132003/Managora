@@ -9,12 +9,23 @@ from django.utils.dateparse import parse_date
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import filters, status, viewsets
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.generics import CreateAPIView, DestroyAPIView, ListAPIView, ListCreateAPIView
+from rest_framework.generics import (
+    CreateAPIView,
+    DestroyAPIView,
+    ListAPIView,
+    ListCreateAPIView,
+)
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.permissions import HasAnyPermission, PermissionByActionMixin, user_has_permission
+from core.models import User
+from core.permissions import (
+    HasAnyPermission,
+    PermissionByActionMixin,
+    is_admin_user,
+    user_has_permission,
+)
 from hr.models import (
     AttendanceRecord,
     Department,
@@ -28,8 +39,10 @@ from hr.models import (
     PayrollPeriod,
     PayrollRun,
     PolicyRule,
+    Shift,
 )
 from hr.services.attendance import check_in, check_out, generate_qr_token
+from hr.services.defaults import ensure_default_shifts, get_company_manager, get_default_shift
 from hr.serializers import (
     DepartmentSerializer,
     AttendanceActionSerializer,
@@ -39,6 +52,7 @@ from hr.serializers import (
     EmployeeCreateUpdateSerializer,
     EmployeeDetailSerializer,
     EmployeeSerializer,
+    EmployeeDefaultsSerializer,
     EmployeeDocumentCreateSerializer,
     EmployeeDocumentSerializer,
     JobTitleSerializer,
@@ -52,6 +66,8 @@ from hr.serializers import (
     PayrollPeriodSerializer,
     PayrollRunDetailSerializer,
     PayrollRunListSerializer,
+    ShiftSerializer,
+    UserMiniSerializer,
 )
 from hr.services.generator import generate_period
 from hr.services.leaves import approve_leave, reject_leave
@@ -109,6 +125,31 @@ class JobTitleViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
 
 
 @extend_schema_view(
+    list=extend_schema(tags=["Shifts"], summary="List shifts"),
+    retrieve=extend_schema(tags=["Shifts"], summary="Retrieve shift"),
+    create=extend_schema(tags=["Shifts"], summary="Create shift"),
+    partial_update=extend_schema(tags=["Shifts"], summary="Update shift"),
+    destroy=extend_schema(tags=["Shifts"], summary="Delete shift"),
+)
+class ShiftViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
+    serializer_class = ShiftSerializer
+    permission_classes = [IsAuthenticated]
+    permission_map = {
+        "list": "hr.shifts.view",
+        "retrieve": "hr.shifts.view",
+        "create": "hr.shifts.create",
+        "partial_update": "hr.shifts.edit",
+        "destroy": "hr.shifts.delete",
+    }
+
+    def get_queryset(self):
+        return Shift.objects.filter(company=self.request.user.company)
+
+    def perform_create(self, serializer):
+        serializer.save(company=self.request.user.company)
+
+
+@extend_schema_view(
     list=extend_schema(tags=["Employees"], summary="List employees"),
     retrieve=extend_schema(tags=["Employees"], summary="Retrieve employee"),
     create=extend_schema(tags=["Employees"], summary="Create employee"),
@@ -153,6 +194,56 @@ class EmployeeViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         if self.action == "retrieve":
             return EmployeeDetailSerializer
         return EmployeeSerializer
+
+
+@extend_schema(tags=["Employees"], summary="Selectable users for employee linking")
+class EmployeeSelectableUsersView(ListAPIView):
+    serializer_class = UserMiniSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["hr.employees.create", "hr.employees.edit"]))
+        return permissions
+
+    def get_queryset(self):
+        company = self.request.user.company
+        qs = User.objects.filter(company=company)
+        actor = self.request.user
+        actor_roles = {
+            name.strip().lower() for name in actor.roles.values_list("name", flat=True)
+        }
+        if actor.is_superuser or is_admin_user(actor) or "manager" in actor_roles:
+            return qs.distinct().order_by("id")
+        if "hr" in actor_roles:
+            return (
+                qs.filter(
+                    Q(roles__name__iexact="accountant")
+                    | Q(roles__name__iexact="employee")
+                )
+                .distinct()
+                .order_by("id")
+            )
+        return qs.none()
+
+
+@extend_schema(tags=["Employees"], summary="Default employee form values")
+class EmployeeDefaultsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["hr.employees.create", "hr.employees.edit"]))
+        return permissions
+
+    def get(self, request):
+        company = request.user.company
+        ensure_default_shifts(company)
+        payload = {
+            "manager": get_company_manager(company),
+            "shift": get_default_shift(company),
+        }
+        return Response(EmployeeDefaultsSerializer(payload).data)
 
 
 @extend_schema(
