@@ -356,6 +356,58 @@ def _get_user_employee(user):
     return employee
 
 
+def _user_can_approve_attendance(user, attendance_record: AttendanceRecord) -> bool:
+    if user_has_permission(user, "attendance.*"):
+        return True
+    if user_has_permission(user, "approvals.*"):
+        manager_employee = getattr(user, "employee_profile", None)
+        if not manager_employee or manager_employee.is_deleted:
+            return False
+        return attendance_record.employee.manager_id == manager_employee.id
+    return False
+
+
+def _build_pending_attendance_items(record: AttendanceRecord) -> list[dict]:
+    items = []
+    if (
+        record.check_in_time
+        and record.check_in_approval_status == AttendanceRecord.ApprovalStatus.PENDING
+    ):
+        items.append(
+            {
+                "record_id": record.id,
+                "employee_id": record.employee_id,
+                "employee_name": record.employee.full_name,
+                "date": record.date,
+                "action": "checkin",
+                "time": record.check_in_time,
+                "lat": record.check_in_lat,
+                "lng": record.check_in_lng,
+                "distance_meters": record.check_in_distance_meters,
+                "status": record.check_in_approval_status,
+            }
+        )
+    if (
+        record.check_out_time
+        and record.check_out_approval_status == AttendanceRecord.ApprovalStatus.PENDING
+    ):
+        items.append(
+            {
+                "record_id": record.id,
+                "employee_id": record.employee_id,
+                "employee_name": record.employee.full_name,
+                "date": record.date,
+                "action": "checkout",
+                "time": record.check_out_time,
+                "lat": record.check_out_lat,
+                "lng": record.check_out_lng,
+                "distance_meters": record.check_out_distance_meters,
+                "status": record.check_out_approval_status,
+            }
+        )
+    return items
+
+
 def _user_can_approve(user, leave_request):
     if user_has_permission(user, "leaves.*"):
         return True
@@ -598,24 +650,44 @@ class AttendancePendingApprovalsView(ListAPIView):
         qs = AttendanceRecord.objects.select_related("employee").filter(
             company=self.request.user.company
         )
-
-        # Try to filter by "pending" status if the model provides enums.
-        pending = None
-        status_enum = getattr(AttendanceRecord, "Status", None)
-        if status_enum is not None:
-            pending = (
-                getattr(status_enum, "PENDING", None)
-                or getattr(status_enum, "PENDING_APPROVAL", None)
-                or getattr(status_enum, "PENDING_REVIEW", None)
-            )
-        if pending is not None:
-            qs = qs.filter(status=pending)
+        user = self.request.user
+        
+        if user_has_permission(user, "attendance.*"):
+            pass
+        elif user_has_permission(user, "approvals.*"):
+            manager_employee = getattr(user, "employee_profile", None)
+            if not manager_employee or manager_employee.is_deleted:
+                raise PermissionDenied("Manager profile is required.")
+            qs = qs.filter(employee__manager=manager_employee)
+                        
         else:
-            # Fallback (common convention)
-            if hasattr(AttendanceRecord, "status"):
-                qs = qs.filter(status__in=["pending", "pending_approval"])
+            raise PermissionDenied("You do not have permission to view approvals.")
+
+        date_from = _parse_date_param(
+            self.request.query_params.get("date_from"), "date_from"
+        )
+        date_to = _parse_date_param(
+            self.request.query_params.get("date_to"), "date_to"
+        )
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+
+        pending_status = AttendanceRecord.ApprovalStatus.PENDING
+        qs = qs.filter(
+            Q(check_in_approval_status=pending_status)
+            | Q(check_out_approval_status=pending_status)
+        )                
         return qs.order_by("-date", "-check_in_time")
 
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        items = []
+        for record in queryset:
+            items.extend(_build_pending_attendance_items(record))
+        serializer = self.get_serializer(items, many=True)
+        return Response(serializer.data)
 
 @extend_schema(
     tags=["Attendance"],
@@ -640,18 +712,26 @@ class AttendanceApproveRejectView(APIView):
         record = get_object_or_404(
             AttendanceRecord, id=record_id, company=request.user.company
         )
-
+        if not _user_can_approve_attendance(request.user, record):
+            raise PermissionDenied("You do not have permission to approve this request.")
+        
         action_value = (action or "").lower()
         if action_value not in {"approve", "reject"}:
             raise ValidationError({"action": "Invalid action. Use approve or reject."})
 
         if action_value == "approve":
-            record = approve_attendance_action(request.user, record.id)
+            record = approve_attendance_action(
+                approver=request.user,
+                record=record,
+                action=serializer.validated_data["action"],
+            )
+                        
         else:
             record = reject_attendance_action(
-                request.user,
-                record.id,
-                serializer.validated_data.get("reason"),
+                approver=request.user,
+                record=record,
+                action=serializer.validated_data["action"],
+                reason=serializer.validated_data.get("reason"),                
             )
 
         return Response(AttendanceRecordSerializer(record).data)
