@@ -221,19 +221,17 @@ class EmployeeSelectableUsersView(ListAPIView):
         return permissions
 
     def get_queryset(self):
-        company = self.request.user.company
-        qs = User.objects.filter(company=company)
-        actor = self.request.user
-        actor_roles = {
-            name.strip().lower() for name in actor.roles.values_list("name", flat=True)
-        }
-        if actor.is_superuser or is_admin_user(actor):            
-            return qs.distinct().order_by("id")
-        if "manager" in actor_roles:
-            return qs.distinct().order_by("id")            
-        if "hr" in actor_roles:
-            return qs.distinct().order_by("id")
-        return qs.none()
+        # Permission is already enforced in get_permissions().
+        # Here we only return users belonging to the same company so the UI can link
+        # an employee record to an existing company user account.
+        company = getattr(self.request.user, "company", None)
+        if not company:
+            return User.objects.none()
+        return (
+            User.objects.filter(company=company, is_active=True)
+            .distinct()
+            .order_by("id")
+        )
 
 
 @extend_schema(tags=["Employees"], summary="Default employee form values")
