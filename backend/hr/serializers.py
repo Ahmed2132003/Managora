@@ -234,15 +234,13 @@ class EmployeeCreateUpdateSerializer(serializers.ModelSerializer):
                     name.strip().lower() for name in actor.roles.values_list("name", flat=True)
                 }
                 allowed_roles = None
-                if "manager" in actor_roles:
+                if "manager" in actor_roles or "hr" in actor_roles:
                     allowed_roles = None
-                elif "hr" in actor_roles:
-                    allowed_roles = {"accountant", "employee"}
                 if allowed_roles is not None:
                     user_roles = {
                         name.strip().lower()
                         for name in user.roles.values_list("name", flat=True)
-                    }
+                    }                    
                     if not user_roles.intersection(allowed_roles):
                         raise serializers.ValidationError(
                             {"user": "User role is not allowed for this action."}
