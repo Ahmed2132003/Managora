@@ -543,15 +543,14 @@ class AttendanceSelfVerifyOtpView(APIView):
         )
         serializer.is_valid(raise_exception=True)
 
-        try:
-            record = verify_self_attendance_otp(
-                request.user, employee.id, serializer.validated_data
-            )
-        except TypeError:
-            payload = dict(serializer.validated_data)
-            payload["user"] = request.user
-            payload["employee_id"] = employee.id
-            record = verify_self_attendance_otp(payload)
+        payload = serializer.validated_data
+        record = verify_self_attendance_otp(
+            request.user,
+            request_id=payload["request_id"],
+            code=payload["code"],
+            lat=payload["lat"],
+            lng=payload["lng"],
+        )            
         return Response(
             AttendanceRecordSerializer(record).data,
             status=status.HTTP_201_CREATED,

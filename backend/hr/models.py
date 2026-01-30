@@ -252,11 +252,11 @@ class AttendanceRecord(BaseModel):
     check_out_time = models.DateTimeField(null=True, blank=True)
 
     # Locations
-    check_in_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    check_in_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    check_out_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    check_out_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-
+    check_in_lat = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
+    check_in_lng = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
+    check_out_lat = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
+    check_out_lng = models.DecimalField(max_digits=18, decimal_places=6, null=True, blank=True)
+    
     # Distance to allowed worksite (meters)
     check_in_distance_meters = models.PositiveIntegerField(null=True, blank=True)
     check_out_distance_meters = models.PositiveIntegerField(null=True, blank=True)
