@@ -472,15 +472,11 @@ export function EmployeeProfilePage() {
     isForbiddenError(managersQuery.error) ||
     isForbiddenError(documentsQuery.error);
 
-  if (showAccessDenied) {
-    return <AccessDenied />;
-  }
-
   const shellCopy = useMemo(
     () => ({
       en: {
         title: isNew ? "New employee" : pageCopy.en.title,
-        subtitle: pageCopy.en.subtitle,
+        subtitle: pageCopy.en.subtitle,        
         helper: pageCopy.en.helper,
       },
       ar: {
@@ -491,6 +487,10 @@ export function EmployeeProfilePage() {
     }),
     [isNew]
   );
+
+  if (showAccessDenied) {
+    return <AccessDenied />;
+  }
 
   async function handleSubmit(values: EmployeeFormValues) {
     const payload = {
@@ -987,7 +987,7 @@ export function EmployeeProfilePage() {
                             name="file"
                             control={documentForm.control}
                             render={({ field }) => {
-                              const { value: _value, onChange, ...rest } = field;
+                              const { onChange, ...rest } = field;                              
                               return (
                                 <label className="form-field">
                                   <span>
