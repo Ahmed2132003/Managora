@@ -227,8 +227,18 @@ class EmployeeSelectableUsersView(ListAPIView):
         actor_roles = {
             name.strip().lower() for name in actor.roles.values_list("name", flat=True)
         }
-        if actor.is_superuser or is_admin_user(actor) or "manager" in actor_roles:
+        if actor.is_superuser or is_admin_user(actor):            
             return qs.distinct().order_by("id")
+        if "manager" in actor_roles:
+            return (
+                qs.filter(
+                    Q(roles__name__iexact="hr")
+                    | Q(roles__name__iexact="accountant")
+                    | Q(roles__name__iexact="employee")
+                )
+                .distinct()
+                .order_by("id")
+            )
         if "hr" in actor_roles:
             return (
                 qs.filter(
