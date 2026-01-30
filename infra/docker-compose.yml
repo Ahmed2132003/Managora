@@ -38,6 +38,13 @@ services:
       DEBUG: ${DJANGO_DEBUG}
       ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
 
+      # Used to encrypt/decrypt per-company email app passwords (must stay constant)
+      ATTENDANCE_EMAIL_ENCRYPTION_KEY: ${ATTENDANCE_EMAIL_ENCRYPTION_KEY}
+      ATTENDANCE_OTP_SENDER_EMAIL: ${ATTENDANCE_OTP_SENDER_EMAIL}
+      ATTENDANCE_OTP_APP_PASSWORD: ${ATTENDANCE_OTP_APP_PASSWORD}
+      ATTENDANCE_OTP_SMTP_HOST: ${ATTENDANCE_OTP_SMTP_HOST:-smtp.gmail.com}
+      ATTENDANCE_OTP_SMTP_PORT: ${ATTENDANCE_OTP_SMTP_PORT:-587}
+
       # مهم جدًا عشان تقسيم settings
       DJANGO_SETTINGS_MODULE: config.settings.dev
     ports:

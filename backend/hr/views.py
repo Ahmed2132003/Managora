@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.conf import settings
 from django.utils.dateparse import parse_date
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import filters, status, viewsets
@@ -492,6 +493,169 @@ class AttendanceMyView(ListAPIView):
         if date_to:
             queryset = queryset.filter(date__lte=date_to)
         return queryset.order_by("-date", "-check_in_time")
+
+
+# =========================
+# Attendance (NEW EMAIL OTP FLOW)
+# =========================
+
+
+@extend_schema(
+    tags=["Attendance"],
+    summary="Request OTP for self-attendance",
+    request=AttendanceSelfRequestOtpSerializer,
+    responses={201: dict},
+)
+class AttendanceSelfRequestOtpView(APIView):
+    """Send an OTP to the employee email for self attendance."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        employee = _get_user_employee(request.user)
+        serializer = AttendanceSelfRequestOtpSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        # Service is responsible for creating/sending the OTP.
+        payload = request_self_attendance_otp(
+            request.user, serializer.validated_data.get("purpose")
+        )
+        return Response(payload, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(
+    tags=["Attendance"],
+    summary="Verify OTP and create attendance record",
+    request=AttendanceSelfVerifyOtpSerializer,
+    responses={201: AttendanceRecordSerializer},
+)
+class AttendanceSelfVerifyOtpView(APIView):
+    """Verify an OTP and apply the attendance action (check-in/out)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        employee = _get_user_employee(request.user)
+        serializer = AttendanceSelfVerifyOtpSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            record = verify_self_attendance_otp(
+                request.user, employee.id, serializer.validated_data
+            )
+        except TypeError:
+            payload = dict(serializer.validated_data)
+            payload["user"] = request.user
+            payload["employee_id"] = employee.id
+            record = verify_self_attendance_otp(payload)
+        return Response(
+            AttendanceRecordSerializer(record).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+@extend_schema(
+    tags=["Attendance"],
+    summary="Get or update company email config for attendance OTP",
+)
+class AttendanceEmailConfigView(APIView):
+    """Return OTP sender configuration.
+
+    The system uses a single global sender (configured via env/settings) rather than per-company.
+    We keep this endpoint for UI compatibility but it no longer stores secrets in the database.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        sender_email = getattr(settings, "ATTENDANCE_OTP_SENDER_EMAIL", "") or ""
+        configured = bool(sender_email and getattr(settings, "ATTENDANCE_OTP_APP_PASSWORD", ""))
+        return Response({"configured": configured, "sender_email": sender_email, "is_active": True})
+
+    def post(self, request):
+        # Ignore body; configuration comes from settings.
+        sender_email = getattr(settings, "ATTENDANCE_OTP_SENDER_EMAIL", "") or ""
+        configured = bool(sender_email and getattr(settings, "ATTENDANCE_OTP_APP_PASSWORD", ""))
+        return Response({"configured": configured, "sender_email": sender_email, "is_active": True})
+@extend_schema(
+    tags=["Attendance"],
+    summary="List pending attendance items that require approval",
+    responses={200: AttendancePendingItemSerializer(many=True)},
+)
+class AttendancePendingApprovalsView(ListAPIView):
+    serializer_class = AttendancePendingItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["attendance.*", "approvals.*"]))
+        return permissions
+
+    def get_queryset(self):
+        qs = AttendanceRecord.objects.select_related("employee").filter(
+            company=self.request.user.company
+        )
+
+        # Try to filter by "pending" status if the model provides enums.
+        pending = None
+        status_enum = getattr(AttendanceRecord, "Status", None)
+        if status_enum is not None:
+            pending = (
+                getattr(status_enum, "PENDING", None)
+                or getattr(status_enum, "PENDING_APPROVAL", None)
+                or getattr(status_enum, "PENDING_REVIEW", None)
+            )
+        if pending is not None:
+            qs = qs.filter(status=pending)
+        else:
+            # Fallback (common convention)
+            if hasattr(AttendanceRecord, "status"):
+                qs = qs.filter(status__in=["pending", "pending_approval"])
+        return qs.order_by("-date", "-check_in_time")
+
+
+@extend_schema(
+    tags=["Attendance"],
+    summary="Approve or reject a pending attendance item",
+    request=AttendanceApproveRejectSerializer,
+    responses={200: AttendanceRecordSerializer},
+)
+class AttendanceApproveRejectView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["attendance.*", "approvals.*"]))
+        return permissions
+
+    def post(self, request, record_id=None, action=None):
+        serializer = AttendanceApproveRejectSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        record = get_object_or_404(
+            AttendanceRecord, id=record_id, company=request.user.company
+        )
+
+        action_value = (action or "").lower()
+        if action_value not in {"approve", "reject"}:
+            raise ValidationError({"action": "Invalid action. Use approve or reject."})
+
+        if action_value == "approve":
+            record = approve_attendance_action(request.user, record.id)
+        else:
+            record = reject_attendance_action(
+                request.user,
+                record.id,
+                serializer.validated_data.get("reason"),
+            )
+
+        return Response(AttendanceRecordSerializer(record).data)
 
 
 @extend_schema_view(

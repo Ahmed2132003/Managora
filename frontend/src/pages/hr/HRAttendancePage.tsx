@@ -8,8 +8,6 @@ import {
   useAttendanceRecordsQuery,
   useDepartments,
   useEmployees,
-  useAttendanceEmailConfigQuery,
-  useAttendanceEmailConfigUpsertMutation,
   useAttendancePendingApprovalsQuery,
   useAttendanceApproveRejectMutation,
   type AttendancePendingItem,
@@ -22,6 +20,48 @@ import "./HRAttendancePage.css";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
+
+type AttendanceQrTokenResponse = {
+  token: string;
+  valid_from: string;
+  valid_until: string;
+  worksite_id: number;
+};
+
+function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  // try common keys used across JWT setups
+  return (
+    window.localStorage.getItem("access") ||
+    window.localStorage.getItem("access_token") ||
+    window.localStorage.getItem("token") ||
+    window.localStorage.getItem("jwt") ||
+    null
+  );
+}
+
+function useAttendanceQrGenerateMutationLocal() {
+  return useMutation<AttendanceQrTokenResponse, Error, { worksite_id?: number; expires_minutes?: number }>({
+    mutationFn: async (payload) => {
+      const token = getAuthToken();
+      const res = await fetch("/api/attendance/qr/generate/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload ?? {}),
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `Request failed (${res.status})`);
+      }
+
+      return (await res.json()) as AttendanceQrTokenResponse;
+    },
+  });
+}
 
 type Content = {
   brand: string;
@@ -616,98 +656,13 @@ export function HRAttendancePage() {
     search: employeeSearch || undefined,
   });
 
-  const qrGenerateMutation = useMutation({
-    mutationFn: async (): Promise<{
-      token: string;
-      valid_from: string;
-      valid_until: string;
-      worksite_id: number;
-    }> => {
-      const accessToken =
-        typeof window !== "undefined"
-          ? window.localStorage.getItem("access_token") ||
-            window.localStorage.getItem("token") ||
-            window.localStorage.getItem("access")
-          : null;
+  // QR generate (local hook so this page doesn't depend on a missing export)
+  const qrGenerateMutation = useAttendanceQrGenerateMutationLocal();
 
-      const res = await fetch("/api/attendance/qr/generate/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-        body: JSON.stringify({}),
-      });
-
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-          const data = (await res.json()) as { detail?: string };
-          detail = data.detail || detail;
-        } catch {
-          // ignore
-        }
-        throw new Error(detail);
-      }
-
-      return (await res.json()) as {
-        token: string;
-        valid_from: string;
-        valid_until: string;
-        worksite_id: number;
-      };
-    },
-  });
-
-  // Email OTP config + approvals
-  const emailCfgQuery = useAttendanceEmailConfigQuery();
-  const emailCfgUpsert = useAttendanceEmailConfigUpsertMutation();
+  // Approvals
   const pendingApprovals = useAttendancePendingApprovalsQuery();
   const approveReject = useAttendanceApproveRejectMutation();
-
-  const [senderEmailDraft, setSenderEmailDraft] = useState("");
-  const [senderEmailTouched, setSenderEmailTouched] = useState(false);
-  const [appPassword, setAppPassword] = useState("");
-  const [isActiveDraft, setIsActiveDraft] = useState(true);
-  const [isActiveTouched, setIsActiveTouched] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
-
-  const effectiveSenderEmail = useMemo(() => {
-    return senderEmailTouched
-      ? senderEmailDraft
-      : emailCfgQuery.data?.sender_email ?? "";
-  }, [emailCfgQuery.data?.sender_email, senderEmailDraft, senderEmailTouched]);
-
-  const effectiveIsActive = useMemo(() => {
-    if (isActiveTouched) return isActiveDraft;
-    // If config not loaded yet, default to true.
-    return Boolean(emailCfgQuery.data?.is_active ?? true);
-  }, [emailCfgQuery.data?.is_active, isActiveDraft, isActiveTouched]);
-
-
-  async function saveEmailConfig() {
-    try {
-      await emailCfgUpsert.mutateAsync({
-        sender_email: effectiveSenderEmail,
-        app_password: appPassword,
-        is_active: effectiveIsActive,
-      });
-      notifications.show({
-        title: content.email.savedTitle,
-        message: content.email.savedMessage,
-      });
-      setAppPassword("");
-      setSenderEmailTouched(false);
-      setIsActiveTouched(false);
-      await emailCfgQuery.refetch();
-    } catch (error: unknown) {
-      notifications.show({
-        title: content.email.failedTitle,
-        message: getErrorDetail(error, content.email.failedMessage),
-        color: "red",
-      });
-    }
-  }
 
   async function handleApproval(item: AttendancePendingItem, op: "approve" | "reject") {
     try {
@@ -839,7 +794,7 @@ export function HRAttendancePage() {
 
   async function handleGenerateQr() {
     try {
-      const token = await qrGenerateMutation.mutateAsync();
+      const token = await qrGenerateMutation.mutateAsync({});
       setQrToken(token);
       notifications.show({
         title: content.notifications.qrTitle,
@@ -987,65 +942,6 @@ export function HRAttendancePage() {
                   <div className="stat-card__spark" aria-hidden="true" />
                 </div>
               ))}
-            </div>
-          </section>
-
-          {/* Email OTP config */}
-          <section className="panel hr-attendance-panel">
-            <div className="panel__header">
-              <div>
-                <h2>{content.email.title}</h2>
-                <p>{content.email.subtitle}</p>
-              </div>
-            </div>
-
-            <div className="attendance-filters">
-              <label className="filter-field">
-                {content.email.senderEmail}
-                <input
-                  type="email"
-                  value={effectiveSenderEmail}
-                  onChange={(event) => {
-                    setSenderEmailTouched(true);
-                    setSenderEmailDraft(event.target.value);
-                  }}
-                  placeholder="company@gmail.com"
-                />
-              </label>
-              <label className="filter-field">
-                {content.email.appPassword}
-                <input
-                  type="password"
-                  value={appPassword}
-                  onChange={(event) => setAppPassword(event.target.value)}
-                  placeholder={emailCfgQuery.data?.configured ? "••••••••••" : ""}
-                />
-                <span className="sidebar-note">{content.email.passwordHint}</span>
-              </label>
-              <label className="filter-field" style={{ alignSelf: "end" }}>
-                <span style={{ display: "block", marginBottom: 8 }}>
-                  {content.email.active}
-                </span>
-                <input
-                  type="checkbox"
-                  checked={effectiveIsActive}
-                  onChange={(event) => {
-                    setIsActiveTouched(true);
-                    setIsActiveDraft(event.currentTarget.checked);
-                  }}
-                />
-              </label>
-
-              <div className="attendance-actions" style={{ alignSelf: "end" }}>
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={saveEmailConfig}
-                  disabled={emailCfgUpsert.isPending}
-                >
-                  {emailCfgUpsert.isPending ? `${content.email.save}...` : content.email.save}
-                </button>
-              </div>
             </div>
           </section>
 

@@ -371,8 +371,8 @@ def check_out(user, employee_id: int, payload: dict[str, Any]) -> AttendanceReco
 
 import secrets
 import hashlib
+from django.conf import settings
 from django.core.mail import EmailMessage, get_connection
-from core.models import CompanyEmailConfig
 from hr.models import AttendanceOtpRequest
 
 OTP_VALID_SECONDS = 60
@@ -392,24 +392,32 @@ def _get_attendance_worksite(company) -> WorkSite:
     return ws
 
 
-def _send_otp_email(*, cfg: CompanyEmailConfig, to_email: str, code: str, purpose: str) -> None:
-    subject = "Managora Attendance Verification Code"
+def _send_otp_email(*, to_email: str, code: str, purpose: str) -> None:
+    sender_email = getattr(settings, 'ATTENDANCE_OTP_SENDER_EMAIL', None)
+    app_password = getattr(settings, 'ATTENDANCE_OTP_APP_PASSWORD', None)
+
+    if not sender_email or not app_password:
+        raise serializers.ValidationError({
+            'email_config': 'OTP email sender is not configured. '
+                           'Set ATTENDANCE_OTP_SENDER_EMAIL and ATTENDANCE_OTP_APP_PASSWORD.'
+        })
+
+    subject = 'Managora Attendance Verification Code'
     body = (
-        f"Your verification code for {purpose} is: {code}\n"
-        f"This code expires in {OTP_VALID_SECONDS} seconds.\n\n"
-        "— Managora"
+        f'Your verification code for {purpose} is: {code}\n'
+        f'This code expires in {OTP_VALID_SECONDS} seconds.\n\n'
+        '— Managora'
     )
-    # Gmail SMTP (works with App Passwords). If you need other providers later, add fields to CompanyEmailConfig.
     connection = get_connection(
-        backend="django.core.mail.backends.smtp.EmailBackend",
-        host="smtp.gmail.com",
-        port=587,
-        username=cfg.sender_email,
-        password=cfg.get_app_password(),
+        backend='django.core.mail.backends.smtp.EmailBackend',
+        host=getattr(settings, 'ATTENDANCE_OTP_SMTP_HOST', 'smtp.gmail.com'),
+        port=getattr(settings, 'ATTENDANCE_OTP_SMTP_PORT', 587),
+        username=sender_email,
+        password=app_password,
         use_tls=True,
         fail_silently=False,
     )
-    msg = EmailMessage(subject=subject, body=body, from_email=cfg.sender_email, to=[to_email], connection=connection)
+    msg = EmailMessage(subject=subject, body=body, from_email=sender_email, to=[to_email], connection=connection)
     msg.send(fail_silently=False)
 
 
@@ -417,10 +425,6 @@ def request_self_attendance_otp(user, purpose: str) -> dict[str, Any]:
     employee = getattr(user, "employee_profile", None)
     if not employee:
         raise serializers.ValidationError({"employee": "This user is not linked to an employee profile."})
-
-    cfg = CompanyEmailConfig.objects.filter(company=user.company, is_active=True).first()
-    if not cfg:
-        raise serializers.ValidationError({"email_config": "Company email config is not set or inactive."})
     if not user.email:
         raise serializers.ValidationError({"email": "User email is required to send OTP."})
 
@@ -435,7 +439,7 @@ def request_self_attendance_otp(user, purpose: str) -> dict[str, Any]:
         expires_at=timezone.now() + timedelta(seconds=OTP_VALID_SECONDS),
     )
 
-    _send_otp_email(cfg=cfg, to_email=user.email, code=code, purpose=purpose)
+    _send_otp_email(to_email=user.email, code=code, purpose=purpose)
     return {"request_id": otp.id, "expires_in": OTP_VALID_SECONDS}
 
 

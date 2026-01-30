@@ -1,6 +1,36 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
+
+class CoordinateField(serializers.Field):
+    """Accepts float/str/Decimal and returns a Decimal rounded to 6 dp.
+    Designed to tolerate very long fractional inputs coming from GPS.
+    """
+
+    def to_internal_value(self, data):
+        try:
+            if data is None:
+                raise serializers.ValidationError("This field is required.")
+            # Convert via string to avoid float representation issues.
+            d = Decimal(str(data))
+        except (InvalidOperation, ValueError, TypeError):
+            raise serializers.ValidationError("A valid number is required.")
+
+        # Round to 6 decimal places (GPS precision) to keep DB-compatible.
+        q = Decimal("0.000001")
+        d = d.quantize(q, rounding=ROUND_HALF_UP)
+
+        return d
+
+    def to_representation(self, value):
+        try:
+            return str(Decimal(value))
+        except Exception:
+            return str(value)
+
+
 from core.permissions import is_admin_user
 from hr.models import (
     AttendanceRecord,
@@ -353,8 +383,8 @@ class AttendanceSelfRequestOtpSerializer(serializers.Serializer):
 class AttendanceSelfVerifyOtpSerializer(serializers.Serializer):
     request_id = serializers.IntegerField()
     code = serializers.CharField(min_length=6, max_length=6)
-    lat = serializers.DecimalField(max_digits=9, decimal_places=6)
-    lng = serializers.DecimalField(max_digits=9, decimal_places=6)
+    lat = CoordinateField()
+    lng = CoordinateField()
 
 
 class AttendanceApproveRejectSerializer(serializers.Serializer):
