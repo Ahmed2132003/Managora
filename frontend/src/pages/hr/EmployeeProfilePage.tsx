@@ -378,9 +378,8 @@ export function EmployeeProfilePage() {
     defaultValues: shiftDefaults,
   });
 
-  const userSelectDisabled =
-    selectableUsersQuery.isLoading || (selectableUsersQuery.data ?? []).length === 0;
-
+  const userSelectDisabled = selectableUsersQuery.isLoading;
+    
   useEffect(() => {
     if (employeeQuery.data && !isNew) {
       form.reset({
