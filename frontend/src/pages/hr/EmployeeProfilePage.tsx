@@ -1,21 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Badge,
-  Button,
-  Card,
-  FileInput,
-  Group,
-  Modal,
-  NumberInput,
-  Select,
-  Stack,
-  Table,
-  Tabs,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Button, Group, Modal, NumberInput, Stack, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
@@ -41,6 +26,223 @@ import {
 } from "../../shared/hr/hooks.ts";
 import { AccessDenied } from "../../shared/ui/AccessDenied.tsx";
 import { endpoints } from "../../shared/api/endpoints.ts";
+import { DashboardShell } from "../DashboardShell.tsx";
+import "../DashboardPage.css";
+import "./EmployeeProfilePage.css";
+
+type Language = "en" | "ar";
+
+type PageContent = {
+  title: string;
+  subtitle: string;
+  helper: string;
+  tabs: {
+    basic: string;
+    job: string;
+    documents: string;
+  };
+  section: {
+    basicTitle: string;
+    basicSubtitle: string;
+    jobTitle: string;
+    jobSubtitle: string;
+    documentsTitle: string;
+    documentsSubtitle: string;
+  };
+  fields: {
+    employeeCode: string;
+    fullName: string;
+    nationalId: string;
+    jobTitle: string;
+    hireDate: string;
+    status: string;
+    manager: string;
+    user: string;
+    userPlaceholder: string;
+    userEmpty: string;
+    shift: string;
+    department: string;
+  };
+  buttons: {
+    addJobTitle: string;
+    addShift: string;
+    save: string;
+    back: string;
+    upload: string;
+    download: string;
+    delete: string;
+    cancel: string;
+  };
+  documents: {
+    docType: string;
+    title: string;
+    file: string;
+    placeholder: string;
+    loading: string;
+    empty: string;
+    uploaded: string;
+    actions: string;
+    saveHint: string;
+  };
+  status: {
+    active: string;
+    inactive: string;
+    terminated: string;
+  };
+  modals: {
+    jobTitle: string;
+    jobTitleName: string;
+    shift: string;
+    shiftName: string;
+    startTime: string;
+    endTime: string;
+    graceMinutes: string;
+  };
+  statusBadge: {
+    active: string;
+    inactive: string;
+    terminated: string;
+  };
+};
+
+const pageCopy: Record<Language, PageContent> = {
+  en: {
+    title: "Employee profile",
+    subtitle: "Maintain employee identity, assignments, and documents in one place.",
+    helper: "Complete the required fields and link a company user account.",
+    tabs: { basic: "Basic info", job: "Job", documents: "Documents" },
+    section: {
+      basicTitle: "Employee basics",
+      basicSubtitle: "Core details for the employee record.",
+      jobTitle: "Job assignment",
+      jobSubtitle: "Department and manager details.",
+      documentsTitle: "Documents",
+      documentsSubtitle: "Upload contracts, IDs, and certificates.",
+    },
+    fields: {
+      employeeCode: "Employee code",
+      fullName: "Full name",
+      nationalId: "National ID",
+      jobTitle: "Job title",
+      hireDate: "Hire date",
+      status: "Status",
+      manager: "Manager",
+      user: "User",
+      userPlaceholder: "Select a company user",
+      userEmpty: "No users found",
+      shift: "Shift",
+      department: "Department",
+    },
+    buttons: {
+      addJobTitle: "Add job title",
+      addShift: "Add shift",
+      save: "Save",
+      back: "Back to list",
+      upload: "Upload",
+      download: "Download",
+      delete: "Delete",
+      cancel: "Cancel",
+    },
+    documents: {
+      docType: "Document type",
+      title: "Title",
+      file: "File",
+      placeholder: "Select file",
+      loading: "Loading documents...",
+      empty: "No documents yet.",
+      uploaded: "Uploaded",
+      actions: "Actions",
+      saveHint: "Save the employee first to add documents.",
+    },
+    status: {
+      active: "Active",
+      inactive: "Inactive",
+      terminated: "Terminated",
+    },
+    modals: {
+      jobTitle: "Create job title",
+      jobTitleName: "Job title name",
+      shift: "Create shift",
+      shiftName: "Shift name",
+      startTime: "Start time",
+      endTime: "End time",
+      graceMinutes: "Grace minutes",
+    },
+    statusBadge: {
+      active: "Active",
+      inactive: "Inactive",
+      terminated: "Terminated",
+    },
+  },
+  ar: {
+    title: "ملف الموظف",
+    subtitle: "إدارة بيانات الموظف وتعييناته ومستنداته من مكان واحد.",
+    helper: "املأ الحقول المطلوبة واربط حساب المستخدم بالشركة.",
+    tabs: { basic: "البيانات الأساسية", job: "الوظيفة", documents: "المستندات" },
+    section: {
+      basicTitle: "بيانات الموظف الأساسية",
+      basicSubtitle: "التفاصيل الرئيسية لسجل الموظف.",
+      jobTitle: "تعيين الوظيفة",
+      jobSubtitle: "بيانات الإدارة والمدير المباشر.",
+      documentsTitle: "المستندات",
+      documentsSubtitle: "رفع العقود والهوية والشهادات.",
+    },
+    fields: {
+      employeeCode: "كود الموظف",
+      fullName: "الاسم بالكامل",
+      nationalId: "الرقم القومي",
+      jobTitle: "المسمى الوظيفي",
+      hireDate: "تاريخ التعيين",
+      status: "الحالة",
+      manager: "المدير",
+      user: "المستخدم",
+      userPlaceholder: "اختر مستخدم الشركة",
+      userEmpty: "لا يوجد مستخدمون",
+      shift: "الشيفت",
+      department: "القسم",
+    },
+    buttons: {
+      addJobTitle: "إضافة مسمى وظيفي",
+      addShift: "إضافة شيفت",
+      save: "حفظ",
+      back: "رجوع للقائمة",
+      upload: "رفع",
+      download: "تنزيل",
+      delete: "حذف",
+      cancel: "إلغاء",
+    },
+    documents: {
+      docType: "نوع المستند",
+      title: "العنوان",
+      file: "الملف",
+      placeholder: "اختر ملف",
+      loading: "جاري تحميل المستندات...",
+      empty: "لا توجد مستندات بعد.",
+      uploaded: "تاريخ الرفع",
+      actions: "الإراءات",
+      saveHint: "احفظ الموظف أولاً لإضافة مستندات.",
+    },
+    status: {
+      active: "نشط",
+      inactive: "غير نشط",
+      terminated: "منتهي الخدمة",
+    },
+    modals: {
+      jobTitle: "إنشاء مسمى وظيفي",
+      jobTitleName: "اسم المسمى الوظيفي",
+      shift: "إنشاء شيفت",
+      shiftName: "اسم الشيفت",
+      startTime: "وقت البداية",
+      endTime: "وقت النهاية",
+      graceMinutes: "دقائق السماح",
+    },
+    statusBadge: {
+      active: "نشط",
+      inactive: "غير نشط",
+      terminated: "منتهي الخدمة",
+    },
+  },
+};
 
 const employeeSchema = z.object({
   employee_code: z.string().min(1, "الكود مطلوب"),
@@ -51,7 +253,7 @@ const employeeSchema = z.object({
   department_id: z.string().nullable().optional(),
   job_title_id: z.string().nullable().optional(),
   manager_id: z.string().nullable().optional(),
-  user_id: z.string().nullable().optional(),
+  user_id: z.string().min(1, "المستخدم مطلوب"),
   shift_id: z.string().nullable().optional(),
 });
 
@@ -66,7 +268,7 @@ const employeeDefaults: EmployeeFormValues = {
   department_id: null,
   job_title_id: null,
   manager_id: null,
-  user_id: null,
+  user_id: "",
   shift_id: null,
 };
 
@@ -90,11 +292,18 @@ const documentDefaults: DocumentFormValues = {
   file: null,
 };
 
-const statusOptions = [
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
-  { value: "terminated", label: "Terminated" },
-];
+const statusOptionsByLanguage: Record<Language, { value: EmployeeStatus; label: string }[]> = {
+  en: [
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+    { value: "terminated", label: "Terminated" },
+  ],
+  ar: [
+    { value: "active", label: "نشط" },
+    { value: "inactive", label: "غير نشط" },
+    { value: "terminated", label: "منتهي الخدمة" },
+  ],
+};
 
 const jobTitleSchema = z.object({
   name: z.string().min(1, "المسمى الوظيفي مطلوب"),
@@ -130,6 +339,7 @@ export function EmployeeProfilePage() {
   const employeeId = parsedId && !Number.isNaN(parsedId) ? parsedId : null;
   const [jobTitleModalOpen, setJobTitleModalOpen] = useState(false);
   const [shiftModalOpen, setShiftModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"basic" | "job" | "documents">("basic");
 
   const employeeQuery = useEmployee(employeeId);
   const departmentsQuery = useDepartments();
@@ -167,6 +377,9 @@ export function EmployeeProfilePage() {
     defaultValues: shiftDefaults,
   });
 
+  const userSelectDisabled =
+    selectableUsersQuery.isLoading || (selectableUsersQuery.data ?? []).length === 0;
+
   useEffect(() => {
     if (employeeQuery.data && !isNew) {
       form.reset({
@@ -182,7 +395,7 @@ export function EmployeeProfilePage() {
           ? String(employeeQuery.data.job_title.id)
           : null,
         manager_id: employeeQuery.data.manager ? String(employeeQuery.data.manager.id) : null,
-        user_id: employeeQuery.data.user ? String(employeeQuery.data.user) : null,
+        user_id: employeeQuery.data.user ? String(employeeQuery.data.user) : "",
         shift_id: employeeQuery.data.shift ? String(employeeQuery.data.shift.id) : null,
       });
     }
@@ -263,6 +476,22 @@ export function EmployeeProfilePage() {
     return <AccessDenied />;
   }
 
+  const shellCopy = useMemo(
+    () => ({
+      en: {
+        title: isNew ? "New employee" : pageCopy.en.title,
+        subtitle: pageCopy.en.subtitle,
+        helper: pageCopy.en.helper,
+      },
+      ar: {
+        title: isNew ? "موظف جديد" : pageCopy.ar.title,
+        subtitle: pageCopy.ar.subtitle,
+        helper: pageCopy.ar.helper,
+      },
+    }),
+    [isNew]
+  );
+
   async function handleSubmit(values: EmployeeFormValues) {
     const payload = {
       employee_code: values.employee_code,
@@ -312,7 +541,7 @@ export function EmployeeProfilePage() {
         employeeId,
         doc_type: values.doc_type,
         title: values.title,
-        file: values.file,        
+        file: values.file,
       });
       notifications.show({
         title: "Document uploaded",
@@ -391,416 +620,587 @@ export function EmployeeProfilePage() {
   }
 
   return (
-    <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={3}>{isNew ? "New Employee" : "Employee Profile"}</Title>
-        {!isNew && employeeQuery.data && (
-          <Badge color="blue">{employeeQuery.data.status}</Badge>
-        )}
-      </Group>
+    <DashboardShell copy={shellCopy} className="employee-profile-page">
+      {({ language, isArabic }) => {
+        const content = pageCopy[language];
+        const statusOptions = statusOptionsByLanguage[language];
+        const userOptions =
+          selectableUserOptions.length > 0
+            ? selectableUserOptions
+            : [{ value: "", label: content.fields.userEmpty }];
+        return (
+          <div className="employee-profile">
+            <section className="panel employee-profile__panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.section.basicTitle}</h2>
+                  <p>{content.section.basicSubtitle}</p>
+                </div>
+                {!isNew && employeeQuery.data && (
+                  <span className="status-pill" data-status={employeeQuery.data.status}>
+                    {content.statusBadge[employeeQuery.data.status] ?? employeeQuery.data.status}
+                  </span>
+                )}
+              </div>
 
-      <Card withBorder radius="md" p="md">
-        <form onSubmit={form.handleSubmit(handleSubmit)}>
-          <Tabs defaultValue="basic">
-            <Tabs.List>
-              <Tabs.Tab value="basic">Basic Info</Tabs.Tab>
-              <Tabs.Tab value="job">Job</Tabs.Tab>
-              <Tabs.Tab value="documents" disabled={isNew}>
-                Documents
-              </Tabs.Tab>
-            </Tabs.List>
+              <form className="employee-profile__form" onSubmit={form.handleSubmit(handleSubmit)}>
+                <div className="employee-profile__tabs" role="tablist">
+                  <button
+                    type="button"
+                    className={`tab-button${activeTab === "basic" ? " tab-button--active" : ""}`}
+                    onClick={() => setActiveTab("basic")}
+                    role="tab"
+                    aria-selected={activeTab === "basic"}
+                  >
+                    {content.tabs.basic}
+                  </button>
+                  <button
+                    type="button"
+                    className={`tab-button${activeTab === "job" ? " tab-button--active" : ""}`}
+                    onClick={() => setActiveTab("job")}
+                    role="tab"
+                    aria-selected={activeTab === "job"}
+                  >
+                    {content.tabs.job}
+                  </button>
+                  <button
+                    type="button"
+                    className={`tab-button${activeTab === "documents" ? " tab-button--active" : ""}`}
+                    onClick={() => setActiveTab("documents")}
+                    role="tab"
+                    aria-selected={activeTab === "documents"}
+                    disabled={isNew}
+                  >
+                    {content.tabs.documents}
+                  </button>
+                </div>
 
-            <Tabs.Panel value="basic" pt="md">
-              <Stack gap="md">
-                <Controller
-                  name="employee_code"
-                  control={form.control}
-                  render={({ field }) => (
-                    <TextInput
-                      label="Employee Code"
-                      required
-                      {...field}
-                      error={form.formState.errors.employee_code?.message}
-                    />
-                  )}
-                />
-                <Controller
-                  name="full_name"
-                  control={form.control}
-                  render={({ field }) => (
-                    <TextInput
-                      label="Full Name"
-                      required
-                      {...field}
-                      error={form.formState.errors.full_name?.message}
-                    />
-                  )}
-                />
-                <Controller
-                  name="national_id"
-                  control={form.control}
-                  render={({ field }) => (
-                    <TextInput
-                      label="National ID"
-                      {...field}
-                      error={form.formState.errors.national_id?.message}
-                    />
-                  )}
-                />
-                <Controller
-                  name="job_title_id"
-                  control={form.control}
-                  render={({ field }) => (
-                    <Group align="flex-end" grow>
-                      <Select
-                        label="Job Title"
-                        data={jobTitleOptions}
-                        searchable
-                        clearable
-                        value={field.value}
-                        onChange={field.onChange}
+                {activeTab === "basic" && (
+                  <div className="employee-profile__grid">
+                    <label className="form-field">
+                      <span>
+                        {content.fields.employeeCode} <span className="required">*</span>
+                      </span>
+                      <input
+                        type="text"
+                        {...form.register("employee_code")}
+                        required
+                        aria-invalid={Boolean(form.formState.errors.employee_code)}
                       />
-                      <Button
-                        variant="light"
-                        onClick={() => setJobTitleModalOpen(true)}
-                      >
-                        Add job title
-                      </Button>
-                    </Group>
+                      {form.formState.errors.employee_code?.message && (
+                        <span className="field-error">
+                          {form.formState.errors.employee_code?.message}
+                        </span>
+                      )}
+                    </label>
+                    <label className="form-field">
+                      <span>
+                        {content.fields.fullName} <span className="required">*</span>
+                      </span>
+                      <input
+                        type="text"
+                        {...form.register("full_name")}
+                        required
+                        aria-invalid={Boolean(form.formState.errors.full_name)}
+                      />
+                      {form.formState.errors.full_name?.message && (
+                        <span className="field-error">
+                          {form.formState.errors.full_name?.message}
+                        </span>
+                      )}
+                    </label>
+                    <label className="form-field">
+                      <span>{content.fields.nationalId}</span>
+                      <input
+                        type="text"
+                        {...form.register("national_id")}
+                        aria-invalid={Boolean(form.formState.errors.national_id)}
+                      />
+                      {form.formState.errors.national_id?.message && (
+                        <span className="field-error">
+                          {form.formState.errors.national_id?.message}
+                        </span>
+                      )}
+                    </label>
+                    <div className="form-field form-field--inline">
+                      <Controller
+                        name="job_title_id"
+                        control={form.control}
+                        render={({ field }) => (
+                          <>
+                            <label>
+                              <span>{content.fields.jobTitle}</span>
+                              <select
+                                value={field.value ?? ""}
+                                onChange={(event) =>
+                                  field.onChange(event.target.value || null)
+                                }
+                              >
+                                <option value="">{isArabic ? "اختر المسمى" : "Select job title"}</option>
+                                {jobTitleOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() => setJobTitleModalOpen(true)}
+                            >
+                              {content.buttons.addJobTitle}
+                            </button>
+                          </>
+                        )}
+                      />
+                    </div>
+                    <div className="form-field form-field--row">
+                      <label>
+                        <span>
+                          {content.fields.hireDate} <span className="required">*</span>
+                        </span>
+                        <input
+                          type="date"
+                          {...form.register("hire_date")}
+                          required
+                          aria-invalid={Boolean(form.formState.errors.hire_date)}
+                        />
+                        {form.formState.errors.hire_date?.message && (
+                          <span className="field-error">
+                            {form.formState.errors.hire_date?.message}
+                          </span>
+                        )}
+                      </label>
+                      <Controller
+                        name="status"
+                        control={form.control}
+                        render={({ field }) => (
+                          <label>
+                            <span>
+                              {content.fields.status} <span className="required">*</span>
+                            </span>
+                            <select
+                              value={field.value}
+                              onChange={(event) => field.onChange(event.target.value)}
+                              required
+                            >
+                              {statusOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            {form.formState.errors.status?.message && (
+                              <span className="field-error">
+                                {form.formState.errors.status?.message}
+                              </span>
+                            )}
+                          </label>
+                        )}
+                      />
+                    </div>
+                    <Controller
+                      name="manager_id"
+                      control={form.control}
+                      render={({ field }) => (
+                        <label className="form-field">
+                          <span>{content.fields.manager}</span>
+                          <select
+                            value={field.value ?? ""}
+                            onChange={(event) =>
+                              field.onChange(event.target.value || null)
+                            }
+                          >
+                            <option value="">
+                              {isArabic ? "اختر المدير" : "Select manager"}
+                            </option>
+                            {managerOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                    />
+                    <Controller
+                      name="user_id"
+                      control={form.control}
+                      render={({ field }) => (
+                        <label className="form-field">
+                          <span>
+                            {content.fields.user} <span className="required">*</span>
+                          </span>
+                          <select
+                            value={field.value ?? ""}
+                            onChange={(event) => field.onChange(event.target.value)}
+                            required
+                            disabled={userSelectDisabled}
+                          >
+                            <option value="">{content.fields.userPlaceholder}</option>
+                            {userOptions.map((option) => (
+                              <option key={option.value || option.label} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          {form.formState.errors.user_id?.message && (
+                            <span className="field-error">
+                              {form.formState.errors.user_id?.message}
+                            </span>
+                          )}
+                        </label>
+                      )}
+                    />
+                    <div className="form-field form-field--inline">
+                      <Controller
+                        name="shift_id"
+                        control={form.control}
+                        render={({ field }) => (
+                          <>
+                            <label>
+                              <span>{content.fields.shift}</span>
+                              <select
+                                value={field.value ?? ""}
+                                onChange={(event) =>
+                                  field.onChange(event.target.value || null)
+                                }
+                              >
+                                <option value="">
+                                  {isArabic ? "اختر الشيفت" : "Select shift"}
+                                </option>
+                                {shiftOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() => setShiftModalOpen(true)}
+                            >
+                              {content.buttons.addShift}
+                            </button>
+                          </>
+                        )}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "job" && (
+                  <section className="panel employee-profile__subpanel">
+                    <div className="panel__header">
+                      <div>
+                        <h2>{content.section.jobTitle}</h2>
+                        <p>{content.section.jobSubtitle}</p>
+                      </div>
+                    </div>
+                    <div className="employee-profile__grid">
+                      <Controller
+                        name="department_id"
+                        control={form.control}
+                        render={({ field }) => (
+                          <label className="form-field">
+                            <span>{content.fields.department}</span>
+                            <select
+                              value={field.value ?? ""}
+                              onChange={(event) =>
+                                field.onChange(event.target.value || null)
+                              }
+                            >
+                              <option value="">
+                                {isArabic ? "اختر القسم" : "Select department"}
+                              </option>
+                              {departmentOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                      />
+                    </div>
+                  </section>
+                )}
+
+                {activeTab === "documents" && (
+                  <section className="panel employee-profile__subpanel">
+                    <div className="panel__header">
+                      <div>
+                        <h2>{content.section.documentsTitle}</h2>
+                        <p>{content.section.documentsSubtitle}</p>
+                      </div>
+                    </div>
+                    {!employeeId ? (
+                      <p className="helper-text">{content.documents.saveHint}</p>
+                    ) : (
+                      <div className="employee-documents">
+                        <div className="employee-documents__form">
+                          <Controller
+                            name="doc_type"
+                            control={documentForm.control}
+                            render={({ field }) => (
+                              <label className="form-field">
+                                <span>
+                                  {content.documents.docType} <span className="required">*</span>
+                                </span>
+                                <input
+                                  type="text"
+                                  {...field}
+                                  aria-invalid={Boolean(documentForm.formState.errors.doc_type)}
+                                />
+                                {documentForm.formState.errors.doc_type?.message && (
+                                  <span className="field-error">
+                                    {documentForm.formState.errors.doc_type?.message}
+                                  </span>
+                                )}
+                              </label>
+                            )}
+                          />
+                          <Controller
+                            name="title"
+                            control={documentForm.control}
+                            render={({ field }) => (
+                              <label className="form-field">
+                                <span>
+                                  {content.documents.title} <span className="required">*</span>
+                                </span>
+                                <input
+                                  type="text"
+                                  {...field}
+                                  aria-invalid={Boolean(documentForm.formState.errors.title)}
+                                />
+                                {documentForm.formState.errors.title?.message && (
+                                  <span className="field-error">
+                                    {documentForm.formState.errors.title?.message}
+                                  </span>
+                                )}
+                              </label>
+                            )}
+                          />
+                          <Controller
+                            name="file"
+                            control={documentForm.control}
+                            render={({ field }) => {
+                              const { value: _value, onChange, ...rest } = field;
+                              return (
+                                <label className="form-field">
+                                  <span>
+                                    {content.documents.file} <span className="required">*</span>
+                                  </span>
+                                  <input
+                                    type="file"
+                                    {...rest}
+                                    onChange={(event) =>
+                                      onChange(event.target.files?.[0] ?? null)
+                                    }
+                                  />
+                                  {documentForm.formState.errors.file?.message && (
+                                    <span className="field-error">
+                                      {documentForm.formState.errors.file?.message}
+                                    </span>
+                                  )}
+                                </label>
+                              );
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="primary-button"
+                            onClick={documentForm.handleSubmit(handleDocumentSubmit)}
+                            disabled={uploadDocumentMutation.isPending}
+                          >
+                            {content.buttons.upload}
+                          </button>
+                        </div>
+                        <div className="employee-documents__list">
+                          {documentsQuery.isLoading ? (
+                            <p className="helper-text">{content.documents.loading}</p>
+                          ) : (documentsQuery.data ?? []).length === 0 ? (
+                            <p className="helper-text">{content.documents.empty}</p>
+                          ) : (
+                            <div className="employees-table-wrapper">
+                              <table className="employees-table">
+                                <thead>
+                                  <tr>
+                                    <th>{content.documents.title}</th>
+                                    <th>{content.documents.docType}</th>
+                                    <th>{content.documents.uploaded}</th>
+                                    <th>{content.documents.actions}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(documentsQuery.data ?? []).map((doc) => (
+                                    <tr key={doc.id}>
+                                      <td>{doc.title}</td>
+                                      <td>{doc.doc_type}</td>
+                                      <td>{new Date(doc.created_at).toLocaleDateString()}</td>
+                                      <td>
+                                        <div className="table-actions">
+                                          <a
+                                            className="ghost-button"
+                                            href={`${env.API_BASE_URL}${endpoints.hr.documentDownload(doc.id)}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                          >
+                                            {content.buttons.download}
+                                          </a>
+                                          <button
+                                            type="button"
+                                            className="ghost-button ghost-button--danger"
+                                            onClick={() => handleDeleteDocument(doc.id)}
+                                            disabled={deleteDocumentMutation.isPending}
+                                          >
+                                            {content.buttons.delete}
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                )}
+
+                <div className="employee-profile__actions">
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={createEmployeeMutation.isPending || updateEmployeeMutation.isPending}
+                  >
+                    {content.buttons.save}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => navigate("/hr/employees")}
+                  >
+                    {content.buttons.back}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <Modal
+              opened={jobTitleModalOpen}
+              onClose={() => setJobTitleModalOpen(false)}
+              title={content.modals.jobTitle}
+              centered
+            >
+              <Stack>
+                <Controller
+                  name="name"
+                  control={jobTitleForm.control}
+                  render={({ field }) => (
+                    <TextInput
+                      label={content.modals.jobTitleName}
+                      required
+                      {...field}
+                      error={jobTitleForm.formState.errors.name?.message}
+                    />
+                  )}
+                />
+                <Group justify="flex-end">
+                  <Button variant="subtle" onClick={() => setJobTitleModalOpen(false)}>
+                    {content.buttons.cancel}
+                  </Button>
+                  <Button
+                    onClick={jobTitleForm.handleSubmit(handleCreateJobTitle)}
+                    loading={createJobTitleMutation.isPending}
+                  >
+                    {content.buttons.save}
+                  </Button>
+                </Group>
+              </Stack>
+            </Modal>
+
+            <Modal
+              opened={shiftModalOpen}
+              onClose={() => setShiftModalOpen(false)}
+              title={content.modals.shift}
+              centered
+            >
+              <Stack>
+                <Controller
+                  name="name"
+                  control={shiftForm.control}
+                  render={({ field }) => (
+                    <TextInput
+                      label={content.modals.shiftName}
+                      required
+                      {...field}
+                      error={shiftForm.formState.errors.name?.message}
+                    />
                   )}
                 />
                 <Group grow>
                   <Controller
-                    name="hire_date"
-                    control={form.control}
+                    name="start_time"
+                    control={shiftForm.control}
                     render={({ field }) => (
                       <TextInput
-                        label="Hire Date"
-                        type="date"
+                        label={content.modals.startTime}
+                        type="time"
                         required
                         {...field}
-                        error={form.formState.errors.hire_date?.message}
+                        error={shiftForm.formState.errors.start_time?.message}
                       />
                     )}
                   />
                   <Controller
-                    name="status"
-                    control={form.control}
+                    name="end_time"
+                    control={shiftForm.control}
                     render={({ field }) => (
-                      <Select
-                        label="Status"
-                        data={statusOptions}
+                      <TextInput
+                        label={content.modals.endTime}
+                        type="time"
                         required
                         {...field}
-                        error={form.formState.errors.status?.message}
+                        error={shiftForm.formState.errors.end_time?.message}
                       />
                     )}
                   />
                 </Group>
                 <Controller
-                  name="manager_id"
-                  control={form.control}
+                  name="grace_minutes"
+                  control={shiftForm.control}
                   render={({ field }) => (
-                    <Select
-                      label="Manager"
-                      data={managerOptions}
-                      searchable
+                    <NumberInput
+                      label={content.modals.graceMinutes}
+                      min={0}
+                      required
                       value={field.value}
-                      onChange={field.onChange}
-                      disabled
+                      onChange={(value) => field.onChange(value ?? 0)}
+                      error={shiftForm.formState.errors.grace_minutes?.message}
                     />
                   )}
                 />
-                <Controller
-                  name="user_id"
-                  control={form.control}
-                  render={({ field }) => (
-                    <Select
-                      label="User"
-                      data={selectableUserOptions}
-                      searchable
-                      clearable
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
-                  )}
-                />
-                <Controller
-                  name="shift_id"
-                  control={form.control}
-                  render={({ field }) => (
-                    <Group align="flex-end" grow>
-                      <Select
-                        label="Shift"
-                        data={shiftOptions}
-                        searchable
-                        clearable
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
-                      <Button variant="light" onClick={() => setShiftModalOpen(true)}>
-                        Add shift
-                      </Button>
-                    </Group>
-                  )}
-                />
+                <Group justify="flex-end">
+                  <Button variant="subtle" onClick={() => setShiftModalOpen(false)}>
+                    {content.buttons.cancel}
+                  </Button>
+                  <Button
+                    onClick={shiftForm.handleSubmit(handleCreateShift)}
+                    loading={createShiftMutation.isPending}
+                  >
+                    {content.buttons.save}
+                  </Button>
+                </Group>
               </Stack>
-            </Tabs.Panel>
-
-            <Tabs.Panel value="job" pt="md">
-              <Stack gap="md">
-                <Controller
-                  name="department_id"
-                  control={form.control}
-                  render={({ field }) => (
-                    <Select
-                      label="Department"
-                      data={departmentOptions}
-                      searchable
-                      clearable
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
-                  )}
-                />
-              </Stack>
-            </Tabs.Panel>
-
-            <Tabs.Panel value="documents" pt="md">
-              {!employeeId ? (
-                <Text c="dimmed">احفظ الموظف أولاً لإضافة مستندات.</Text>
-              ) : (
-                <Stack gap="md">
-                  <Card withBorder radius="md" p="md">
-                    <Stack gap="sm">
-                      <Controller
-                        name="doc_type"
-                        control={documentForm.control}
-                        render={({ field }) => (
-                          <TextInput
-                            label="Document Type"
-                            required
-                            {...field}
-                            error={documentForm.formState.errors.doc_type?.message}
-                          />
-                        )}
-                      />
-                      <Controller
-                        name="title"
-                        control={documentForm.control}
-                        render={({ field }) => (
-                          <TextInput
-                            label="Title"
-                            required
-                            {...field}
-                            error={documentForm.formState.errors.title?.message}
-                          />
-                        )}
-                      />
-                      <Controller
-                        name="file"
-                        control={documentForm.control}
-                        render={({ field }) => (
-                          <FileInput
-                            label="File"
-                            placeholder="Select file"
-                            required
-                            value={field.value}
-                            onChange={field.onChange}
-                            error={documentForm.formState.errors.file?.message}
-                          />
-                        )}
-                      />
-                      <Button
-                        type="button"
-                        loading={uploadDocumentMutation.isPending}
-                        onClick={documentForm.handleSubmit(handleDocumentSubmit)}
-                      >
-                        Upload
-                      </Button>
-                    </Stack>
-                  </Card>
-
-                  <Card withBorder radius="md" p="md">
-                    {documentsQuery.isLoading ? (
-                      <Text c="dimmed">Loading documents...</Text>
-                    ) : (
-                      <Table striped highlightOnHover>
-                        <Table.Thead>
-                          <Table.Tr>
-                            <Table.Th>Title</Table.Th>
-                            <Table.Th>Type</Table.Th>
-                            <Table.Th>Uploaded</Table.Th>
-                            <Table.Th>Actions</Table.Th>
-                          </Table.Tr>
-                        </Table.Thead>
-                        <Table.Tbody>
-                          {(documentsQuery.data ?? []).length === 0 ? (
-                            <Table.Tr>
-                              <Table.Td colSpan={4}>
-                                <Text c="dimmed">لا توجد مستندات بعد.</Text>
-                              </Table.Td>
-                            </Table.Tr>
-                          ) : (
-                            (documentsQuery.data ?? []).map((doc) => (
-                              <Table.Tr key={doc.id}>
-                                <Table.Td>{doc.title}</Table.Td>
-                                <Table.Td>{doc.doc_type}</Table.Td>
-                                <Table.Td>
-                                  {new Date(doc.created_at).toLocaleDateString()}
-                                </Table.Td>
-                                <Table.Td>
-                                  <Group gap="xs">
-                                    <Button
-                                      size="xs"
-                                      variant="light"
-                                      component="a"
-                                      href={`${env.API_BASE_URL}${endpoints.hr.documentDownload(doc.id)}`}
-                                      target="_blank"
-                                    >
-                                      Download
-                                    </Button>
-                                    <Button
-                                      size="xs"
-                                      variant="light"
-                                      color="red"
-                                      onClick={() => handleDeleteDocument(doc.id)}
-                                      loading={deleteDocumentMutation.isPending}
-                                    >
-                                      Delete
-                                    </Button>
-                                  </Group>
-                                </Table.Td>
-                              </Table.Tr>
-                            ))
-                          )}
-                        </Table.Tbody>
-                      </Table>
-                    )}
-                  </Card>
-                </Stack>
-              )}
-            </Tabs.Panel>
-          </Tabs>
-
-          <Group mt="md">
-            <Button type="submit" loading={createEmployeeMutation.isPending || updateEmployeeMutation.isPending}>
-              Save
-            </Button>
-            <Button variant="subtle" onClick={() => navigate("/hr/employees")}>
-              Back to list
-            </Button>
-          </Group>
-        </form>
-      </Card>
-
-      <Modal
-        opened={jobTitleModalOpen}
-        onClose={() => setJobTitleModalOpen(false)}
-        title="Create Job Title"
-        centered
-      >
-        <Stack>
-          <Controller
-            name="name"
-            control={jobTitleForm.control}
-            render={({ field }) => (
-              <TextInput
-                label="Job Title Name"
-                required
-                {...field}
-                error={jobTitleForm.formState.errors.name?.message}
-              />
-            )}
-          />
-          <Group justify="flex-end">
-            <Button variant="subtle" onClick={() => setJobTitleModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={jobTitleForm.handleSubmit(handleCreateJobTitle)}
-              loading={createJobTitleMutation.isPending}
-            >
-              Save
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-
-      <Modal
-        opened={shiftModalOpen}
-        onClose={() => setShiftModalOpen(false)}
-        title="Create Shift"
-        centered
-      >
-        <Stack>
-          <Controller
-            name="name"
-            control={shiftForm.control}
-            render={({ field }) => (
-              <TextInput
-                label="Shift Name"
-                required
-                {...field}
-                error={shiftForm.formState.errors.name?.message}
-              />
-            )}
-          />
-          <Group grow>
-            <Controller
-              name="start_time"
-              control={shiftForm.control}
-              render={({ field }) => (
-                <TextInput
-                  label="Start Time"
-                  type="time"
-                  required
-                  {...field}
-                  error={shiftForm.formState.errors.start_time?.message}
-                />
-              )}
-            />
-            <Controller
-              name="end_time"
-              control={shiftForm.control}
-              render={({ field }) => (
-                <TextInput
-                  label="End Time"
-                  type="time"
-                  required
-                  {...field}
-                  error={shiftForm.formState.errors.end_time?.message}
-                />
-              )}
-            />
-          </Group>
-          <Controller
-            name="grace_minutes"
-            control={shiftForm.control}
-            render={({ field }) => (
-              <NumberInput
-                label="Grace Minutes"
-                min={0}
-                required
-                value={field.value}
-                onChange={(value) => field.onChange(value ?? 0)}
-                error={shiftForm.formState.errors.grace_minutes?.message}
-              />
-            )}
-          />
-          <Group justify="flex-end">
-            <Button variant="subtle" onClick={() => setShiftModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={shiftForm.handleSubmit(handleCreateShift)}
-              loading={createShiftMutation.isPending}
-            >
-              Save
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-    </Stack>
+            </Modal>
+          </div>
+        );
+      }}
+    </DashboardShell>
   );
 }
