@@ -16,7 +16,6 @@ import {
   useEmployeeDefaults,
   useEmployeeDocuments,
   useEmployeeSelectableUsers,
-  useEmployees,
   useJobTitles,
   useShifts,
   useUpdateEmployee,
@@ -57,6 +56,7 @@ type PageContent = {
     hireDate: string;
     status: string;
     manager: string;
+    managerPlaceholder: string;
     user: string;
     userPlaceholder: string;
     userEmpty: string;
@@ -127,6 +127,7 @@ const pageCopy: Record<Language, PageContent> = {
       hireDate: "Hire date",
       status: "Status",
       manager: "Manager",
+      managerPlaceholder: "Assigned automatically",
       user: "User",
       userPlaceholder: "Select a company user",
       userEmpty: "No users found",
@@ -195,6 +196,7 @@ const pageCopy: Record<Language, PageContent> = {
       hireDate: "تاريخ التعيين",
       status: "الحالة",
       manager: "المدير",
+      managerPlaceholder: "يتحدد تلقائياً",
       user: "المستخدم",
       userPlaceholder: "اختر مستخدم الشركة",
       userEmpty: "لا يوجد مستخدمون",
@@ -347,7 +349,6 @@ export function EmployeeProfilePage() {
   const shiftsQuery = useShifts();
   const defaultsQuery = useEmployeeDefaults();
   const selectableUsersQuery = useEmployeeSelectableUsers();
-  const managersQuery = useEmployees({ search: "", page: 1, filters: {} });
   const documentsQuery = useEmployeeDocuments(employeeId);
 
   const createEmployeeMutation = useCreateEmployee();
@@ -451,16 +452,15 @@ export function EmployeeProfilePage() {
     [selectableUsersQuery.data]
   );
 
-  const managerOptions = useMemo(
-    () =>
-      (managersQuery.data ?? [])
-        .filter((manager) => manager.id !== employeeId)
-        .map((manager) => ({
-          value: String(manager.id),
-          label: manager.full_name,
-        })),
-    [employeeId, managersQuery.data]
-  );
+  const managerDisplayName = useMemo(() => {
+    if (!isNew && employeeQuery.data?.manager) {
+      return employeeQuery.data.manager.full_name;
+    }
+    if (isNew && defaultsQuery.data?.manager) {
+      return defaultsQuery.data.manager.full_name;
+    }
+    return "";
+  }, [defaultsQuery.data?.manager, employeeQuery.data?.manager, isNew]);
 
   const showAccessDenied =
     isForbiddenError(employeeQuery.error) ||
@@ -469,14 +469,13 @@ export function EmployeeProfilePage() {
     isForbiddenError(shiftsQuery.error) ||
     isForbiddenError(defaultsQuery.error) ||
     isForbiddenError(selectableUsersQuery.error) ||
-    isForbiddenError(managersQuery.error) ||
     isForbiddenError(documentsQuery.error);
 
   const shellCopy = useMemo(
     () => ({
       en: {
         title: isNew ? "New employee" : pageCopy.en.title,
-        subtitle: pageCopy.en.subtitle,        
+        subtitle: pageCopy.en.subtitle,
         helper: pageCopy.en.helper,
       },
       ar: {
@@ -800,30 +799,16 @@ export function EmployeeProfilePage() {
                         )}
                       />
                     </div>
-                    <Controller
-                      name="manager_id"
-                      control={form.control}
-                      render={({ field }) => (
-                        <label className="form-field">
-                          <span>{content.fields.manager}</span>
-                          <select
-                            value={field.value ?? ""}
-                            onChange={(event) =>
-                              field.onChange(event.target.value || null)
-                            }
-                          >
-                            <option value="">
-                              {isArabic ? "اختر المدير" : "Select manager"}
-                            </option>
-                            {managerOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      )}
-                    />
+                    <label className="form-field">
+                      <span>{content.fields.manager}</span>
+                      <input
+                        type="text"
+                        value={managerDisplayName}
+                        placeholder={content.fields.managerPlaceholder}
+                        readOnly
+                        aria-readonly="true"
+                      />
+                    </label>
                     <Controller
                       name="user_id"
                       control={form.control}
@@ -987,7 +972,7 @@ export function EmployeeProfilePage() {
                             name="file"
                             control={documentForm.control}
                             render={({ field }) => {
-                              const { onChange, ...rest } = field;                              
+                              const { onChange, ...rest } = field;
                               return (
                                 <label className="form-field">
                                   <span>
