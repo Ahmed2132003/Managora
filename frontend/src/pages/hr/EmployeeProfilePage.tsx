@@ -452,15 +452,11 @@ export function EmployeeProfilePage() {
     [selectableUsersQuery.data]
   );
 
-  const managerDisplayName = useMemo(() => {
-    if (!isNew && employeeQuery.data?.manager) {
-      return employeeQuery.data.manager.full_name;
-    }
-    if (isNew && defaultsQuery.data?.manager) {
-      return defaultsQuery.data.manager.full_name;
-    }
-    return "";
-  }, [defaultsQuery.data?.manager, employeeQuery.data?.manager, isNew]);
+  const managerDisplayName = !isNew && employeeQuery.data?.manager
+    ? employeeQuery.data.manager.full_name
+    : isNew && defaultsQuery.data?.manager
+      ? defaultsQuery.data.manager.full_name
+      : "";
 
   const showAccessDenied =
     isForbiddenError(employeeQuery.error) ||
@@ -972,19 +968,22 @@ export function EmployeeProfilePage() {
                             name="file"
                             control={documentForm.control}
                             render={({ field }) => {
-                              const { onChange, ...rest } = field;
+                              const { onChange,  ...rest } = field; 
                               return (
                                 <label className="form-field">
                                   <span>
                                     {content.documents.file} <span className="required">*</span>
                                   </span>
+
                                   <input
                                     type="file"
-                                    {...rest}
-                                    onChange={(event) =>
-                                      onChange(event.target.files?.[0] ?? null)
-                                    }
+                                    name={rest.name}
+                                    ref={rest.ref}
+                                    onBlur={rest.onBlur}
+                                    disabled={rest.disabled}
+                                    onChange={(event) => onChange(event.target.files?.[0] ?? null)}
                                   />
+
                                   {documentForm.formState.errors.file?.message && (
                                     <span className="field-error">
                                       {documentForm.formState.errors.file?.message}
@@ -994,6 +993,7 @@ export function EmployeeProfilePage() {
                               );
                             }}
                           />
+                          
                           <button
                             type="button"
                             className="primary-button"
