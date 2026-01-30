@@ -31,27 +31,40 @@ class QrWindow:
     worksite: WorkSite
 
 
-def calculate_late(record_date, shift: Shift, now: datetime) -> int:    
-    expected_start = timezone.make_aware(
-        datetime.combine(record_date, shift.start_time), timezone.get_current_timezone()
-    )
+def _shift_start_datetime(record_date: date, shift: Shift, now_local: datetime) -> datetime:
+    tz = now_local.tzinfo or timezone.get_current_timezone()
+    expected_start = timezone.make_aware(datetime.combine(record_date, shift.start_time), tz)
+    if shift.end_time <= shift.start_time and now_local.time() < shift.end_time:
+        expected_start -= timedelta(days=1)
+    return expected_start
+
+
+def _shift_end_datetime(record_date: date, shift: Shift, now_local: datetime) -> datetime:
+    tz = now_local.tzinfo or timezone.get_current_timezone()
+    expected_end = timezone.make_aware(datetime.combine(record_date, shift.end_time), tz)
+    if shift.end_time <= shift.start_time and now_local.time() >= shift.start_time:
+        expected_end += timedelta(days=1)
+    return expected_end
+
+
+def calculate_late(record_date, shift: Shift, now: datetime) -> int:
+    now_local = timezone.localtime(now)
+    expected_start = _shift_start_datetime(record_date, shift, now_local)
     grace_minutes = shift.grace_minutes or 0
     grace_delta = timedelta(minutes=grace_minutes)
-    if now > expected_start + grace_delta:
-        return int((now - expected_start - grace_delta).total_seconds() // 60)
+    if now_local > expected_start + grace_delta:
+        return int((now_local - expected_start - grace_delta).total_seconds() // 60)
     return 0
 
 
 def calculate_early_leave(record_date, shift: Shift, now: datetime) -> int:
-    expected_end = timezone.make_aware(
-        datetime.combine(record_date, shift.end_time), timezone.get_current_timezone()
-    )
+    now_local = timezone.localtime(now)
+    expected_end = _shift_end_datetime(record_date, shift, now_local)
     grace_minutes = shift.early_leave_grace_minutes or 0
     grace_delta = timedelta(minutes=grace_minutes)
-    if now < expected_end - grace_delta:
-        return int((expected_end - grace_delta - now).total_seconds() // 60)
+    if now_local < expected_end - grace_delta:
+        return int((expected_end - grace_delta - now_local).total_seconds() // 60)
     return 0
-
 
 def distance_meters(worksite: WorkSite, lat: float, lng: float) -> int:
     earth_radius_m = 6_371_000
