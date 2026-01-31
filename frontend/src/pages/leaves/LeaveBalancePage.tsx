@@ -25,7 +25,12 @@ type Content = {
   navigationLabel: string;
   logoutLabel: string;
   pageTitle: string;
-  tableSubtitle: string;
+  pageSubtitle: string;
+  userFallback: string;
+  summaryTitle: string;
+  summarySubtitle: string;
+  tableTitle: string;
+  tableSubtitle: string;  
   tableHeaders: {
     type: string;
     year: string;
@@ -54,11 +59,6 @@ type Content = {
     used: string;
     remaining: string;
   };  
-  totals: {
-    allocated: string;
-    used: string;
-    remaining: string;
-  };
   emptyState: string;
   loadingLabel: string;
   nav: {
@@ -598,7 +598,7 @@ export function LeaveBalancePage() {
       });
       setManagerStatus({ type: "success", message: content.managerSuccessMessage });
       setAllocatedDays("");
-    } catch (error) {
+    } catch {      
       setManagerStatus({ type: "error", message: content.managerErrorMessage });
     }
   }
