@@ -5,6 +5,7 @@ import { notifications } from "@mantine/notifications";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
 import { z } from "zod";
+import axios, { AxiosError } from "axios";
 import { env } from "../../shared/config/env.ts";
 import { isForbiddenError } from "../../shared/api/errors.ts";
 import {
@@ -333,6 +334,24 @@ const shiftDefaults: ShiftFormValues = {
   grace_minutes: 0,
 };
 
+function extractApiErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const ae = err as AxiosError<unknown>;
+    const data = ae.response?.data;
+    if (typeof data === "string" && data.trim()) return data;
+    if (data && typeof data === "object") {
+      try {
+        return JSON.stringify(data);
+      } catch {
+        return "Request failed with a server error.";
+      }
+    }
+    return ae.message || "Request failed.";
+  }
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 export function EmployeeProfilePage() {
   const navigate = useNavigate();
   const params = useParams();
@@ -379,7 +398,7 @@ export function EmployeeProfilePage() {
   });
 
   const userSelectDisabled = selectableUsersQuery.isLoading;
-    
+
   useEffect(() => {
     if (employeeQuery.data && !isNew) {
       form.reset({
@@ -388,12 +407,8 @@ export function EmployeeProfilePage() {
         national_id: employeeQuery.data.national_id ?? "",
         hire_date: employeeQuery.data.hire_date,
         status: employeeQuery.data.status,
-        department_id: employeeQuery.data.department
-          ? String(employeeQuery.data.department.id)
-          : null,
-        job_title_id: employeeQuery.data.job_title
-          ? String(employeeQuery.data.job_title.id)
-          : null,
+        department_id: employeeQuery.data.department ? String(employeeQuery.data.department.id) : null,
+        job_title_id: employeeQuery.data.job_title ? String(employeeQuery.data.job_title.id) : null,
         manager_id: employeeQuery.data.manager ? String(employeeQuery.data.manager.id) : null,
         user_id: employeeQuery.data.user ? String(employeeQuery.data.user) : "",
         shift_id: employeeQuery.data.shift ? String(employeeQuery.data.shift.id) : null,
@@ -402,9 +417,8 @@ export function EmployeeProfilePage() {
   }, [employeeQuery.data, form, isNew]);
 
   useEffect(() => {
-    if (!isNew || !defaultsQuery.data) {
-      return;
-    }
+    if (!isNew || !defaultsQuery.data) return;
+
     if (defaultsQuery.data.manager) {
       form.setValue("manager_id", String(defaultsQuery.data.manager.id));
     }
@@ -444,18 +458,17 @@ export function EmployeeProfilePage() {
     () =>
       (selectableUsersQuery.data ?? []).map((user) => ({
         value: String(user.id),
-        label: user.email
-          ? `${user.username} (${user.email})`
-          : `${user.username}`,
+        label: user.email ? `${user.username} (${user.email})` : `${user.username}`,
       })),
     [selectableUsersQuery.data]
   );
 
-  const managerDisplayName = !isNew && employeeQuery.data?.manager
-    ? employeeQuery.data.manager.full_name
-    : isNew && defaultsQuery.data?.manager
-      ? defaultsQuery.data.manager.full_name
-      : "";
+  const managerDisplayName =
+    !isNew && employeeQuery.data?.manager
+      ? employeeQuery.data.manager.full_name
+      : isNew && defaultsQuery.data?.manager
+        ? defaultsQuery.data.manager.full_name
+        : "";
 
   const showAccessDenied =
     isForbiddenError(employeeQuery.error) ||
@@ -518,7 +531,7 @@ export function EmployeeProfilePage() {
     } catch (error) {
       notifications.show({
         title: "Save failed",
-        message: String(error),
+        message: extractApiErrorMessage(error),
         color: "red",
       });
     }
@@ -546,7 +559,7 @@ export function EmployeeProfilePage() {
     } catch (error) {
       notifications.show({
         title: "Upload failed",
-        message: String(error),
+        message: extractApiErrorMessage(error),
         color: "red",
       });
     }
@@ -563,7 +576,7 @@ export function EmployeeProfilePage() {
     } catch (error) {
       notifications.show({
         title: "Delete failed",
-        message: String(error),
+        message: extractApiErrorMessage(error),
         color: "red",
       });
     }
@@ -587,7 +600,7 @@ export function EmployeeProfilePage() {
     } catch (error) {
       notifications.show({
         title: "Create failed",
-        message: String(error),
+        message: extractApiErrorMessage(error),
         color: "red",
       });
     }
@@ -607,7 +620,7 @@ export function EmployeeProfilePage() {
     } catch (error) {
       notifications.show({
         title: "Create failed",
-        message: String(error),
+        message: extractApiErrorMessage(error),
         color: "red",
       });
     }
@@ -622,6 +635,7 @@ export function EmployeeProfilePage() {
           selectableUserOptions.length > 0
             ? selectableUserOptions
             : [{ value: "", label: content.fields.userEmpty }];
+
         return (
           <div className="employee-profile">
             <section className="panel employee-profile__panel">
@@ -682,11 +696,10 @@ export function EmployeeProfilePage() {
                         aria-invalid={Boolean(form.formState.errors.employee_code)}
                       />
                       {form.formState.errors.employee_code?.message && (
-                        <span className="field-error">
-                          {form.formState.errors.employee_code?.message}
-                        </span>
+                        <span className="field-error">{form.formState.errors.employee_code?.message}</span>
                       )}
                     </label>
+
                     <label className="form-field">
                       <span>
                         {content.fields.fullName} <span className="required">*</span>
@@ -698,11 +711,10 @@ export function EmployeeProfilePage() {
                         aria-invalid={Boolean(form.formState.errors.full_name)}
                       />
                       {form.formState.errors.full_name?.message && (
-                        <span className="field-error">
-                          {form.formState.errors.full_name?.message}
-                        </span>
+                        <span className="field-error">{form.formState.errors.full_name?.message}</span>
                       )}
                     </label>
+
                     <label className="form-field">
                       <span>{content.fields.nationalId}</span>
                       <input
@@ -711,11 +723,10 @@ export function EmployeeProfilePage() {
                         aria-invalid={Boolean(form.formState.errors.national_id)}
                       />
                       {form.formState.errors.national_id?.message && (
-                        <span className="field-error">
-                          {form.formState.errors.national_id?.message}
-                        </span>
+                        <span className="field-error">{form.formState.errors.national_id?.message}</span>
                       )}
                     </label>
+
                     <div className="form-field form-field--inline">
                       <Controller
                         name="job_title_id"
@@ -726,9 +737,7 @@ export function EmployeeProfilePage() {
                               <span>{content.fields.jobTitle}</span>
                               <select
                                 value={field.value ?? ""}
-                                onChange={(event) =>
-                                  field.onChange(event.target.value || null)
-                                }
+                                onChange={(event) => field.onChange(event.target.value || null)}
                               >
                                 <option value="">{isArabic ? "اختر المسمى" : "Select job title"}</option>
                                 {jobTitleOptions.map((option) => (
@@ -749,6 +758,7 @@ export function EmployeeProfilePage() {
                         )}
                       />
                     </div>
+
                     <div className="form-field form-field--row">
                       <label>
                         <span>
@@ -761,11 +771,10 @@ export function EmployeeProfilePage() {
                           aria-invalid={Boolean(form.formState.errors.hire_date)}
                         />
                         {form.formState.errors.hire_date?.message && (
-                          <span className="field-error">
-                            {form.formState.errors.hire_date?.message}
-                          </span>
+                          <span className="field-error">{form.formState.errors.hire_date?.message}</span>
                         )}
                       </label>
+
                       <Controller
                         name="status"
                         control={form.control}
@@ -786,14 +795,13 @@ export function EmployeeProfilePage() {
                               ))}
                             </select>
                             {form.formState.errors.status?.message && (
-                              <span className="field-error">
-                                {form.formState.errors.status?.message}
-                              </span>
+                              <span className="field-error">{form.formState.errors.status?.message}</span>
                             )}
                           </label>
                         )}
                       />
                     </div>
+
                     <label className="form-field">
                       <span>{content.fields.manager}</span>
                       <input
@@ -804,6 +812,7 @@ export function EmployeeProfilePage() {
                         aria-readonly="true"
                       />
                     </label>
+
                     <Controller
                       name="user_id"
                       control={form.control}
@@ -826,13 +835,12 @@ export function EmployeeProfilePage() {
                             ))}
                           </select>
                           {form.formState.errors.user_id?.message && (
-                            <span className="field-error">
-                              {form.formState.errors.user_id?.message}
-                            </span>
+                            <span className="field-error">{form.formState.errors.user_id?.message}</span>
                           )}
                         </label>
                       )}
                     />
+
                     <div className="form-field form-field--inline">
                       <Controller
                         name="shift_id"
@@ -843,13 +851,9 @@ export function EmployeeProfilePage() {
                               <span>{content.fields.shift}</span>
                               <select
                                 value={field.value ?? ""}
-                                onChange={(event) =>
-                                  field.onChange(event.target.value || null)
-                                }
+                                onChange={(event) => field.onChange(event.target.value || null)}
                               >
-                                <option value="">
-                                  {isArabic ? "اختر الشيفت" : "Select shift"}
-                                </option>
+                                <option value="">{isArabic ? "اختر الشيفت" : "Select shift"}</option>
                                 {shiftOptions.map((option) => (
                                   <option key={option.value} value={option.value}>
                                     {option.label}
@@ -888,13 +892,9 @@ export function EmployeeProfilePage() {
                             <span>{content.fields.department}</span>
                             <select
                               value={field.value ?? ""}
-                              onChange={(event) =>
-                                field.onChange(event.target.value || null)
-                              }
+                              onChange={(event) => field.onChange(event.target.value || null)}
                             >
-                              <option value="">
-                                {isArabic ? "اختر القسم" : "Select department"}
-                              </option>
+                              <option value="">{isArabic ? "اختر القسم" : "Select department"}</option>
                               {departmentOptions.map((option) => (
                                 <option key={option.value} value={option.value}>
                                   {option.label}
@@ -916,6 +916,7 @@ export function EmployeeProfilePage() {
                         <p>{content.section.documentsSubtitle}</p>
                       </div>
                     </div>
+
                     {!employeeId ? (
                       <p className="helper-text">{content.documents.saveHint}</p>
                     ) : (
@@ -935,13 +936,12 @@ export function EmployeeProfilePage() {
                                   aria-invalid={Boolean(documentForm.formState.errors.doc_type)}
                                 />
                                 {documentForm.formState.errors.doc_type?.message && (
-                                  <span className="field-error">
-                                    {documentForm.formState.errors.doc_type?.message}
-                                  </span>
+                                  <span className="field-error">{documentForm.formState.errors.doc_type?.message}</span>
                                 )}
                               </label>
                             )}
                           />
+
                           <Controller
                             name="title"
                             control={documentForm.control}
@@ -956,18 +956,17 @@ export function EmployeeProfilePage() {
                                   aria-invalid={Boolean(documentForm.formState.errors.title)}
                                 />
                                 {documentForm.formState.errors.title?.message && (
-                                  <span className="field-error">
-                                    {documentForm.formState.errors.title?.message}
-                                  </span>
+                                  <span className="field-error">{documentForm.formState.errors.title?.message}</span>
                                 )}
                               </label>
                             )}
                           />
+
                           <Controller
                             name="file"
                             control={documentForm.control}
                             render={({ field }) => {
-                              const { onChange,  ...rest } = field; 
+                              const { onChange, ...rest } = field;
                               return (
                                 <label className="form-field">
                                   <span>
@@ -984,15 +983,13 @@ export function EmployeeProfilePage() {
                                   />
 
                                   {documentForm.formState.errors.file?.message && (
-                                    <span className="field-error">
-                                      {documentForm.formState.errors.file?.message}
-                                    </span>
+                                    <span className="field-error">{documentForm.formState.errors.file?.message}</span>
                                   )}
                                 </label>
                               );
                             }}
                           />
-                          
+
                           <button
                             type="button"
                             className="primary-button"
@@ -1002,6 +999,7 @@ export function EmployeeProfilePage() {
                             {content.buttons.upload}
                           </button>
                         </div>
+
                         <div className="employee-documents__list">
                           {documentsQuery.isLoading ? (
                             <p className="helper-text">{content.documents.loading}</p>
@@ -1064,11 +1062,7 @@ export function EmployeeProfilePage() {
                   >
                     {content.buttons.save}
                   </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => navigate("/hr/employees")}
-                  >
+                  <button type="button" className="ghost-button" onClick={() => navigate("/hr/employees")}>
                     {content.buttons.back}
                   </button>
                 </div>
@@ -1098,10 +1092,7 @@ export function EmployeeProfilePage() {
                   <Button variant="subtle" onClick={() => setJobTitleModalOpen(false)}>
                     {content.buttons.cancel}
                   </Button>
-                  <Button
-                    onClick={jobTitleForm.handleSubmit(handleCreateJobTitle)}
-                    loading={createJobTitleMutation.isPending}
-                  >
+                  <Button onClick={jobTitleForm.handleSubmit(handleCreateJobTitle)} loading={createJobTitleMutation.isPending}>
                     {content.buttons.save}
                   </Button>
                 </Group>
@@ -1173,10 +1164,7 @@ export function EmployeeProfilePage() {
                   <Button variant="subtle" onClick={() => setShiftModalOpen(false)}>
                     {content.buttons.cancel}
                   </Button>
-                  <Button
-                    onClick={shiftForm.handleSubmit(handleCreateShift)}
-                    loading={createShiftMutation.isPending}
-                  >
+                  <Button onClick={shiftForm.handleSubmit(handleCreateShift)} loading={createShiftMutation.isPending}>
                     {content.buttons.save}
                   </Button>
                 </Group>

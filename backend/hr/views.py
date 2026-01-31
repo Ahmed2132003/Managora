@@ -24,7 +24,6 @@ from core.models import User
 from core.permissions import (
     HasAnyPermission,
     PermissionByActionMixin,
-    is_admin_user,
     user_has_permission,
 )
 from hr.models import (
@@ -50,7 +49,6 @@ from hr.services.attendance import (
     approve_attendance_action,
     reject_attendance_action,
 )
-from core.models import CompanyEmailConfig
 from hr.services.defaults import ensure_default_shifts, get_company_manager, get_default_shift
 from hr.serializers import (
     DepartmentSerializer,
@@ -87,6 +85,7 @@ from hr.services.generator import generate_period
 from hr.services.leaves import approve_leave, reject_leave
 from hr.services.lock import lock_period
 from hr.services.payslip import render_payslip_pdf
+
 
 @extend_schema_view(
     list=extend_schema(tags=["Departments"], summary="List departments"),
@@ -136,6 +135,7 @@ class JobTitleViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(company=self.request.user.company)
+
 
 
 @extend_schema_view(
@@ -221,14 +221,17 @@ class EmployeeSelectableUsersView(ListAPIView):
         return permissions
 
     def get_queryset(self):
-        # Permission is already enforced in get_permissions().
-        # Here we only return users belonging to the same company so the UI can link
-        # an employee record to an existing company user account.
+        """
+        Return ONLY users in the same company that are NOT already linked
+        to an active (not deleted) employee profile.
+        """
         company = getattr(self.request.user, "company", None)
         if not company:
             return User.objects.none()
+
         return (
             User.objects.filter(company=company, is_active=True)
+            .filter(Q(employee_profile__isnull=True) | Q(employee_profile__is_deleted=True))
             .distinct()
             .order_by("id")
         )

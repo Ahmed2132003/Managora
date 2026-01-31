@@ -54,7 +54,15 @@ router.register("policies", PolicyRuleViewSet, basename="policy-rule")
 router.register("actions", HRActionViewSet, basename="hr-action")
 
 urlpatterns = [
-    path("", include(router.urls)),
+    # =========================
+    # Employees (custom endpoints MUST be before router)
+    # =========================
+    path("employees/selectable-users/", EmployeeSelectableUsersView.as_view(), name="employee-selectable-users"),
+    path("employees/defaults/", EmployeeDefaultsView.as_view(), name="employee-defaults"),
+
+    path("employees/<int:employee_id>/documents/", EmployeeDocumentListCreateView.as_view(), name="employee-documents"),
+    path("documents/<int:pk>/download/", EmployeeDocumentDownloadView.as_view(), name="employee-document-download"),
+    path("documents/<int:pk>/", EmployeeDocumentDeleteView.as_view(), name="employee-document-delete"),
 
     # =========================
     # Leaves
@@ -68,16 +76,7 @@ urlpatterns = [
     path("leaves/requests/<int:id>/reject/", LeaveRejectView.as_view(), name="leave-request-reject"),
 
     # =========================
-    # Employees
-    # =========================
-    path("employees/<int:employee_id>/documents/", EmployeeDocumentListCreateView.as_view(), name="employee-documents"),
-    path("employees/selectable-users/", EmployeeSelectableUsersView.as_view(), name="employee-selectable-users"),
-    path("employees/defaults/", EmployeeDefaultsView.as_view(), name="employee-defaults"),
-    path("documents/<int:pk>/download/", EmployeeDocumentDownloadView.as_view(), name="employee-document-download"),
-    path("documents/<int:pk>/", EmployeeDocumentDeleteView.as_view(), name="employee-document-delete"),
-
-    # =========================
-    # Attendance (OLD - will be deprecated)
+    # Attendance (OLD)
     # =========================
     path("attendance/check-in/", AttendanceCheckInView.as_view(), name="attendance-check-in"),
     path("attendance/check-out/", AttendanceCheckOutView.as_view(), name="attendance-check-out"),
@@ -88,8 +87,6 @@ urlpatterns = [
     # =========================
     path("attendance/self/request-otp/", AttendanceSelfRequestOtpView.as_view(), name="attendance-self-request-otp"),
     path("attendance/self/verify-otp/", AttendanceSelfVerifyOtpView.as_view(), name="attendance-self-verify-otp"),
-
-    # HR / Manager
     path("attendance/hr/email-config/", AttendanceEmailConfigView.as_view(), name="attendance-email-config"),
     path("attendance/hr/pending/", AttendancePendingApprovalsView.as_view(), name="attendance-pending"),
     path("attendance/hr/<int:record_id>/<str:action>/", AttendanceApproveRejectView.as_view(), name="attendance-approve-reject"),
@@ -103,4 +100,7 @@ urlpatterns = [
     path("payroll/periods/<int:id>/lock/", PayrollPeriodLockView.as_view(), name="payroll-period-lock"),
     path("payroll/runs/<int:id>/", PayrollRunDetailView.as_view(), name="payroll-run-detail"),
     path("payroll/runs/<int:id>/payslip.pdf", PayrollRunPayslipPDFView.as_view(), name="payroll-run-payslip"),
+
+    # ✅ Router URLs MUST be last
+    path("", include(router.urls)),
 ]
