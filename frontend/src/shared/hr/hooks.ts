@@ -245,6 +245,16 @@ export type PayrollPeriod = {
   created_by: number | null;
 };
 
+export type SalaryType = "daily" | "monthly" | "weekly" | "commission";
+
+export type SalaryStructure = {
+  id: number;
+  employee: number;
+  basic_salary: number | string;
+  salary_type: SalaryType;
+  currency: string | null;
+};
+
 export type PayrollEmployee = {
   id: number;
   employee_code: string;
@@ -338,6 +348,13 @@ export type UploadDocumentPayload = {
   doc_type: string;
   title: string;
   file: File;
+};
+
+export type SalaryStructurePayload = {
+  employee: number;
+  basic_salary: number;
+  salary_type: SalaryType;
+  currency?: string | null;
 };
 
 
@@ -496,9 +513,61 @@ export function useEmployeeDocuments(employeeId: number | null) {
   });
 }
 
+export function useSalaryStructures(params?: { employeeId?: number | null }) {
+  return useQuery({
+    queryKey: ["hr", "salary-structures", params],
+    queryFn: async () => {
+      const response = await http.get<
+        SalaryStructure[] | { results: SalaryStructure[] }
+      >(endpoints.hr.salaryStructures, {
+        params: {
+          employee: params?.employeeId ?? undefined,
+        },
+      });
+      if (Array.isArray(response.data)) {
+        return response.data;
+      }
+      if ("results" in response.data && Array.isArray(response.data.results)) {
+        return response.data.results;
+      }
+      return [];
+    },
+  });
+}
+
+export function useCreateSalaryStructure() {
+  return useMutation({
+    mutationFn: async (payload: SalaryStructurePayload) => {
+      const response = await http.post<SalaryStructure>(
+        endpoints.hr.salaryStructures,
+        {
+          ...payload,
+          currency: payload.currency ?? null,
+        }
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useUpdateSalaryStructure() {
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: SalaryStructurePayload }) => {
+      const response = await http.patch<SalaryStructure>(
+        endpoints.hr.salaryStructure(id),
+        {
+          ...payload,
+          currency: payload.currency ?? null,
+        }
+      );
+      return response.data;
+    },
+  });
+}
+
 export function useCreateEmployee() {
   return useMutation({
-    mutationFn: async (payload: EmployeePayload) => {
+    mutationFn: async (payload: EmployeePayload) => {      
       const response = await http.post<EmployeeDetail>(endpoints.hr.employees, payload);
       return response.data;
     },

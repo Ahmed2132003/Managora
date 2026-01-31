@@ -44,6 +44,7 @@ from hr.views import (
     PayrollRunDetailView,
     PayrollRunPayslipPDFView,
     PolicyRuleViewSet,
+    SalaryStructureViewSet,
     ShiftViewSet,
 )
 
@@ -51,6 +52,7 @@ router = DefaultRouter()
 router.register("departments", DepartmentViewSet, basename="department")
 router.register("job-titles", JobTitleViewSet, basename="job-title")
 router.register("employees", EmployeeViewSet, basename="employee")
+router.register("salary-structures", SalaryStructureViewSet, basename="salary-structure")
 router.register("shifts", ShiftViewSet, basename="shift")
 router.register("leaves/types", LeaveTypeViewSet, basename="leave-type")
 router.register("leaves/balances", LeaveBalanceViewSet, basename="leave-balance")

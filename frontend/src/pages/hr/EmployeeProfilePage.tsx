@@ -18,11 +18,15 @@ import {
   useEmployeeDocuments,
   useEmployeeSelectableUsers,
   useJobTitles,
+  useSalaryStructures,
+  useCreateSalaryStructure,
+  useUpdateSalaryStructure,
   useShifts,
   useUpdateEmployee,
   useUploadEmployeeDocument,
   useDeleteEmployeeDocument,
   type EmployeeStatus,
+  type SalaryType,
 } from "../../shared/hr/hooks.ts";
 import { AccessDenied } from "../../shared/ui/AccessDenied.tsx";
 import { endpoints } from "../../shared/api/endpoints.ts";
@@ -40,6 +44,7 @@ type PageContent = {
     basic: string;
     job: string;
     documents: string;
+    payroll: string;
   };
   section: {
     basicTitle: string;
@@ -48,11 +53,13 @@ type PageContent = {
     jobSubtitle: string;
     documentsTitle: string;
     documentsSubtitle: string;
+    payrollTitle: string;
+    payrollSubtitle: string;
   };
   fields: {
     employeeCode: string;
     fullName: string;
-    nationalId: string;
+    nationalId: string;    
     jobTitle: string;
     hireDate: string;
     status: string;
@@ -63,15 +70,20 @@ type PageContent = {
     userEmpty: string;
     shift: string;
     department: string;
+    salaryType: string;
+    basicSalary: string;
+    currency: string;
+    dailyRate: string;
   };
   buttons: {
     addJobTitle: string;
     addShift: string;
     save: string;
+    savePayroll: string;
     back: string;
     upload: string;
     download: string;
-    delete: string;
+    delete: string;    
     cancel: string;
   };
   documents: {
@@ -104,6 +116,11 @@ type PageContent = {
     inactive: string;
     terminated: string;
   };
+  payroll: {
+    salaryTypePlaceholder: string;
+    missingEmployee: string;
+    dailyRateHint: string;
+  };
 };
 
 const pageCopy: Record<Language, PageContent> = {
@@ -111,7 +128,7 @@ const pageCopy: Record<Language, PageContent> = {
     title: "Employee profile",
     subtitle: "Maintain employee identity, assignments, and documents in one place.",
     helper: "Complete the required fields and link a company user account.",
-    tabs: { basic: "Basic info", job: "Job", documents: "Documents" },
+    tabs: { basic: "Basic info", job: "Job", documents: "Documents", payroll: "Payroll" },
     section: {
       basicTitle: "Employee basics",
       basicSubtitle: "Core details for the employee record.",
@@ -119,11 +136,13 @@ const pageCopy: Record<Language, PageContent> = {
       jobSubtitle: "Department and manager details.",
       documentsTitle: "Documents",
       documentsSubtitle: "Upload contracts, IDs, and certificates.",
+      payrollTitle: "Payroll details",
+      payrollSubtitle: "Set salary type, base salary, and currency.",
     },
     fields: {
       employeeCode: "Employee code",
       fullName: "Full name",
-      nationalId: "National ID",
+      nationalId: "National ID",      
       jobTitle: "Job title",
       hireDate: "Hire date",
       status: "Status",
@@ -134,16 +153,21 @@ const pageCopy: Record<Language, PageContent> = {
       userEmpty: "No users found",
       shift: "Shift",
       department: "Department",
+      salaryType: "Salary type",
+      basicSalary: "Base salary",
+      currency: "Currency",
+      dailyRate: "Daily rate",
     },
     buttons: {
       addJobTitle: "Add job title",
       addShift: "Add shift",
       save: "Save",
+      savePayroll: "Save payroll",
       back: "Back to list",
       upload: "Upload",
       download: "Download",
       delete: "Delete",
-      cancel: "Cancel",
+      cancel: "Cancel",      
     },
     documents: {
       docType: "Document type",
@@ -175,12 +199,17 @@ const pageCopy: Record<Language, PageContent> = {
       inactive: "Inactive",
       terminated: "Terminated",
     },
+    payroll: {
+      salaryTypePlaceholder: "Select salary type",
+      missingEmployee: "Save the employee first to set payroll details.",
+      dailyRateHint: "Daily rate is derived from the salary type.",
+    },
   },
   ar: {
     title: "ملف الموظف",
     subtitle: "إدارة بيانات الموظف وتعييناته ومستنداته من مكان واحد.",
     helper: "املأ الحقول المطلوبة واربط حساب المستخدم بالشركة.",
-    tabs: { basic: "البيانات الأساسية", job: "الوظيفة", documents: "المستندات" },
+    tabs: { basic: "البيانات الأساسية", job: "الوظيفة", documents: "المستندات", payroll: "الرواتب" },
     section: {
       basicTitle: "بيانات الموظف الأساسية",
       basicSubtitle: "التفاصيل الرئيسية لسجل الموظف.",
@@ -188,11 +217,13 @@ const pageCopy: Record<Language, PageContent> = {
       jobSubtitle: "بيانات الإدارة والمدير المباشر.",
       documentsTitle: "المستندات",
       documentsSubtitle: "رفع العقود والهوية والشهادات.",
+      payrollTitle: "بيانات الرواتب",
+      payrollSubtitle: "تحديد نوع الراتب والأساسي والعملة.",
     },
     fields: {
       employeeCode: "كود الموظف",
       fullName: "الاسم بالكامل",
-      nationalId: "الرقم القومي",
+      nationalId: "الرقم القومي",      
       jobTitle: "المسمى الوظيفي",
       hireDate: "تاريخ التعيين",
       status: "الحالة",
@@ -203,16 +234,21 @@ const pageCopy: Record<Language, PageContent> = {
       userEmpty: "لا يوجد مستخدمون",
       shift: "الشيفت",
       department: "القسم",
+      salaryType: "نوع الراتب",
+      basicSalary: "الراتب الأساسي",
+      currency: "العملة",
+      dailyRate: "الأجر اليومي",
     },
     buttons: {
       addJobTitle: "إضافة مسمى وظيفي",
       addShift: "إضافة شيفت",
       save: "حفظ",
+      savePayroll: "حفظ الرواتب",
       back: "رجوع للقائمة",
       upload: "رفع",
       download: "تنزيل",
       delete: "حذف",
-      cancel: "إلغاء",
+      cancel: "إلغاء",      
     },
     documents: {
       docType: "نوع المستند",
@@ -243,6 +279,11 @@ const pageCopy: Record<Language, PageContent> = {
       active: "نشط",
       inactive: "غير نشط",
       terminated: "منتهي الخدمة",
+    },
+    payroll: {
+      salaryTypePlaceholder: "اختر نوع الراتب",
+      missingEmployee: "احفظ الموظف أولاً لإضافة بيانات الرواتب.",
+      dailyRateHint: "الأجر اليومي يتم حسابه حسب نوع الراتب.",
     },
   },
 };
@@ -308,6 +349,24 @@ const statusOptionsByLanguage: Record<Language, { value: EmployeeStatus; label: 
   ],
 };
 
+const salaryTypeOptionsByLanguage: Record<
+  Language,
+  { value: SalaryType; label: string }[]
+> = {
+  en: [
+    { value: "monthly", label: "Monthly" },
+    { value: "daily", label: "Daily" },
+    { value: "weekly", label: "Weekly" },
+    { value: "commission", label: "Commission" },
+  ],
+  ar: [
+    { value: "monthly", label: "شهري" },
+    { value: "daily", label: "يومي" },
+    { value: "weekly", label: "أسبوعي" },
+    { value: "commission", label: "عمولة" },
+  ],
+};
+
 const jobTitleSchema = z.object({
   name: z.string().min(1, "المسمى الوظيفي مطلوب"),
 });
@@ -333,6 +392,27 @@ const shiftDefaults: ShiftFormValues = {
   end_time: "17:00",
   grace_minutes: 0,
 };
+
+const salarySchema = z.object({
+  salary_type: z.enum(["daily", "monthly", "weekly", "commission"]),
+  basic_salary: z.coerce.number().min(0, "الراتب الأساسي مطلوب"),
+  currency: z.string().optional().or(z.literal("")),
+});
+
+type SalaryFormValues = z.input<typeof salarySchema>;
+
+const salaryDefaults: SalaryFormValues = {
+  salary_type: "monthly",
+  basic_salary: 0,
+  currency: "",
+};
+
+function resolveDailyRate(type: SalaryType, basicSalary: number): number | null {
+  if (type === "daily") return basicSalary;
+  if (type === "weekly") return basicSalary / 7;
+  if (type === "commission") return null;
+  return basicSalary / 30;
+}
 
 function extractApiErrorMessage(err: unknown): string {
   if (axios.isAxiosError(err)) {
@@ -360,7 +440,9 @@ export function EmployeeProfilePage() {
   const employeeId = parsedId && !Number.isNaN(parsedId) ? parsedId : null;
   const [jobTitleModalOpen, setJobTitleModalOpen] = useState(false);
   const [shiftModalOpen, setShiftModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"basic" | "job" | "documents">("basic");
+  const [activeTab, setActiveTab] = useState<"basic" | "job" | "documents" | "payroll">(
+    "basic"
+  );
 
   const employeeQuery = useEmployee(employeeId);
   const departmentsQuery = useDepartments();
@@ -369,6 +451,7 @@ export function EmployeeProfilePage() {
   const defaultsQuery = useEmployeeDefaults();
   const selectableUsersQuery = useEmployeeSelectableUsers();
   const documentsQuery = useEmployeeDocuments(employeeId);
+  const salaryStructuresQuery = useSalaryStructures({ employeeId });
 
   const createEmployeeMutation = useCreateEmployee();
   const createJobTitleMutation = useCreateJobTitle();
@@ -376,6 +459,8 @@ export function EmployeeProfilePage() {
   const updateEmployeeMutation = useUpdateEmployee();
   const uploadDocumentMutation = useUploadEmployeeDocument();
   const deleteDocumentMutation = useDeleteEmployeeDocument();
+  const createSalaryStructureMutation = useCreateSalaryStructure();
+  const updateSalaryStructureMutation = useUpdateSalaryStructure();
 
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
@@ -395,6 +480,11 @@ export function EmployeeProfilePage() {
   const shiftForm = useForm<ShiftFormValues>({
     resolver: zodResolver(shiftSchema),
     defaultValues: shiftDefaults,
+  });
+
+  const salaryForm = useForm<SalaryFormValues>({
+    resolver: zodResolver(salarySchema),
+    defaultValues: salaryDefaults,
   });
 
   const userSelectDisabled = selectableUsersQuery.isLoading;
@@ -426,6 +516,23 @@ export function EmployeeProfilePage() {
       form.setValue("shift_id", String(defaultsQuery.data.shift.id));
     }
   }, [defaultsQuery.data, form, isNew]);
+
+  useEffect(() => {
+    if (!employeeId) {
+      salaryForm.reset(salaryDefaults);
+      return;
+    }
+    const structure = salaryStructuresQuery.data?.[0];
+    if (structure) {
+      salaryForm.reset({
+        salary_type: structure.salary_type,
+        basic_salary: Number(structure.basic_salary),
+        currency: structure.currency ?? "",
+      });
+    } else {
+      salaryForm.reset(salaryDefaults);
+    }
+  }, [employeeId, salaryForm, salaryStructuresQuery.data]);
 
   const departmentOptions = useMemo(
     () =>
@@ -477,7 +584,8 @@ export function EmployeeProfilePage() {
     isForbiddenError(shiftsQuery.error) ||
     isForbiddenError(defaultsQuery.error) ||
     isForbiddenError(selectableUsersQuery.error) ||
-    isForbiddenError(documentsQuery.error);
+    isForbiddenError(documentsQuery.error) ||
+    isForbiddenError(salaryStructuresQuery.error);
 
   const shellCopy = useMemo(
     () => ({
@@ -626,15 +734,61 @@ export function EmployeeProfilePage() {
     }
   }
 
+  async function handleSalarySubmit(values: SalaryFormValues) {
+    if (!employeeId) {
+      notifications.show({
+        title: "Employee required",
+        message: "احفظ الموظف أولاً لإضافة بيانات الرواتب.",
+        color: "red",
+      });
+      return;
+    }
+
+    const payload = {
+      employee: employeeId,
+      basic_salary: Number(values.basic_salary),
+      salary_type: values.salary_type,
+      currency: values.currency ? values.currency : null,
+    };
+
+    try {
+      const existing = salaryStructuresQuery.data?.[0];
+      if (existing) {
+        await updateSalaryStructureMutation.mutateAsync({
+          id: existing.id,
+          payload,
+        });
+      } else {
+        await createSalaryStructureMutation.mutateAsync(payload);
+      }
+      notifications.show({
+        title: "Payroll saved",
+        message: "تم حفظ بيانات الراتب.",
+      });
+      salaryStructuresQuery.refetch();
+    } catch (error) {
+      notifications.show({
+        title: "Save failed",
+        message: extractApiErrorMessage(error),
+        color: "red",
+      });
+    }
+  }
+
   return (
     <DashboardShell copy={shellCopy} className="employee-profile-page">
       {({ language, isArabic }) => {
         const content = pageCopy[language];
         const statusOptions = statusOptionsByLanguage[language];
+        const salaryTypeOptions = salaryTypeOptionsByLanguage[language];
         const userOptions =
           selectableUserOptions.length > 0
             ? selectableUserOptions
             : [{ value: "", label: content.fields.userEmpty }];
+        const salaryTypeValue = salaryForm.watch("salary_type");
+        const basicSalaryValue = Number(salaryForm.watch("basic_salary") || 0);
+        const dailyRateValue = resolveDailyRate(salaryTypeValue, basicSalaryValue);
+        const dailyRateLabel = dailyRateValue === null ? "—" : dailyRateValue.toFixed(2);
 
         return (
           <div className="employee-profile">
@@ -681,7 +835,16 @@ export function EmployeeProfilePage() {
                   >
                     {content.tabs.documents}
                   </button>
-                </div>
+                  <button
+                    type="button"
+                    className={`tab-button${activeTab === "payroll" ? " tab-button--active" : ""}`}
+                    onClick={() => setActiveTab("payroll")}
+                    role="tab"
+                    aria-selected={activeTab === "payroll"}
+                    disabled={isNew}
+                  >
+                    {content.tabs.payroll}
+                  </button>
 
                 {activeTab === "basic" && (
                   <div className="employee-profile__grid">
@@ -1054,7 +1217,103 @@ export function EmployeeProfilePage() {
                   </section>
                 )}
 
-                <div className="employee-profile__actions">
+                {activeTab === "payroll" && (
+                  <section className="panel employee-profile__subpanel">
+                    <div className="panel__header">
+                      <div>
+                        <h2>{content.section.payrollTitle}</h2>
+                        <p>{content.section.payrollSubtitle}</p>
+                      </div>
+                    </div>
+
+                    {!employeeId && <p className="helper-text">{content.payroll.missingEmployee}</p>}
+
+                    <div className="employee-profile__grid">
+                      <label className="form-field">
+                        <span>{content.fields.salaryType}</span>
+                        <Controller
+                          name="salary_type"
+                          control={salaryForm.control}
+                          render={({ field }) => (
+                            <select
+                              value={field.value ?? ""}
+                              onChange={(event) => field.onChange(event.target.value)}
+                              disabled={!employeeId}
+                            >
+                              <option value="" disabled>
+                                {content.payroll.salaryTypePlaceholder}
+                              </option>
+                              {salaryTypeOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>{content.fields.basicSalary}</span>
+                        <Controller
+                          name="basic_salary"
+                          control={salaryForm.control}
+                          render={({ field }) => (
+                            <NumberInput
+                              value={field.value ?? 0}
+                              onChange={(value) => field.onChange(value ?? 0)}
+                              min={0}
+                              hideControls
+                              thousandSeparator=","
+                              disabled={!employeeId}
+                            />
+                          )}
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>{content.fields.currency}</span>
+                        <Controller
+                          name="currency"
+                          control={salaryForm.control}
+                          render={({ field }) => (
+                            <TextInput
+                              value={field.value ?? ""}
+                              onChange={field.onChange}
+                              disabled={!employeeId}
+                            />
+                          )}
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>{content.fields.dailyRate}</span>
+                        <input
+                          type="text"
+                          value={dailyRateLabel}
+                          readOnly
+                        />
+                        <span className="helper-text">{content.payroll.dailyRateHint}</span>
+                      </label>
+                    </div>
+
+                    <Group>
+                      <Button
+                        type="button"
+                        onClick={salaryForm.handleSubmit(handleSalarySubmit)}
+                        disabled={!employeeId}
+                        loading={
+                          createSalaryStructureMutation.isPending ||
+                          updateSalaryStructureMutation.isPending
+                        }
+                      >
+                        {content.buttons.savePayroll}
+                      </Button>
+                    </Group>
+                  </section>
+                )}
+
+                <div className="employee-profile__actions">                  
                   <button
                     type="submit"
                     className="primary-button"

@@ -29,9 +29,16 @@
       {"type": "absence_deduction", "amount_per_day": 250}
     ]
   },
+  "leaves": {
+    "types": [
+      {"name": "Annual Leave", "code": "annual", "requires_approval": true, "paid": true, "max_per_request_days": 30},
+      {"name": "Sick Leave", "code": "sick", "requires_approval": true, "paid": true, "max_per_request_days": 15},
+      {"name": "Unpaid Leave", "code": "unpaid", "requires_approval": true, "paid": false, "max_per_request_days": 30}
+    ]
+  },
   "accounting": {
     "chart_of_accounts_template": "retail_basic",
-    "mappings": {
+    "mappings": {      
       "payroll_expense": "5200",
       "payroll_payable": "2100",
       "cash": "1000",

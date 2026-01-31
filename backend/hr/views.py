@@ -40,6 +40,7 @@ from hr.models import (
     PayrollPeriod,
     PayrollRun,
     PolicyRule,
+    SalaryStructure,
     Shift,
 )
 from hr.services.attendance import (
@@ -82,6 +83,7 @@ from hr.serializers import (
     PayrollPeriodSerializer,
     PayrollRunDetailSerializer,
     PayrollRunListSerializer,
+    SalaryStructureSerializer,
     ShiftSerializer,
     UserMiniSerializer,
 )
@@ -212,6 +214,34 @@ class EmployeeViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         if self.action == "retrieve":
             return EmployeeDetailSerializer
         return EmployeeSerializer
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Payroll"], summary="List salary structures"),
+    retrieve=extend_schema(tags=["Payroll"], summary="Retrieve salary structure"),
+    create=extend_schema(tags=["Payroll"], summary="Create salary structure"),
+    partial_update=extend_schema(tags=["Payroll"], summary="Update salary structure"),
+    destroy=extend_schema(tags=["Payroll"], summary="Delete salary structure"),
+)
+class SalaryStructureViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
+    serializer_class = SalaryStructureSerializer
+    permission_classes = [IsAuthenticated]
+    permission_map = {
+        "list": "hr.payroll.view",
+        "retrieve": "hr.payroll.view",
+        "create": "hr.payroll.create",
+        "partial_update": "hr.payroll.create",
+        "destroy": "hr.payroll.create",
+    }
+
+    def get_queryset(self):
+        queryset = SalaryStructure.objects.select_related("employee").filter(
+            company=self.request.user.company
+        )
+        employee_id = self.request.query_params.get("employee")
+        if employee_id:
+            queryset = queryset.filter(employee_id=employee_id)
+        return queryset.order_by("id")
 
 
 @extend_schema(tags=["Employees"], summary="Selectable users for employee linking")

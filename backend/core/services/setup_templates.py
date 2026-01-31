@@ -10,7 +10,7 @@ from accounting.services.seed import TEMPLATES, seed_coa_template
 
 from core.models import CompanySetupState, Permission, Role, RolePermission
 from core.permissions import PERMISSION_DEFINITIONS, ROLE_PERMISSION_MAP
-from hr.models import PolicyRule, Shift, WorkSite
+from hr.models import LeaveType, PolicyRule, Shift, WorkSite
 
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -62,6 +62,31 @@ BUILTIN_TEMPLATE_BUNDLES = {
                 }
             ],
         },
+        "leaves": {
+            "types": [
+                {
+                    "name": "Annual Leave",
+                    "code": "annual",
+                    "requires_approval": True,
+                    "paid": True,
+                    "max_per_request_days": 30,
+                },
+                {
+                    "name": "Sick Leave",
+                    "code": "sick",
+                    "requires_approval": True,
+                    "paid": True,
+                    "max_per_request_days": 15,
+                },
+                {
+                    "name": "Unpaid Leave",
+                    "code": "unpaid",
+                    "requires_approval": True,
+                    "paid": False,
+                    "max_per_request_days": 30,
+                },
+            ],
+        },
         "policies": {},
         "accounting": {},
     }
@@ -85,10 +110,11 @@ def build_template_overview(bundle):
     return {
         "roles": bundle.get("roles", []),
         "attendance": bundle.get("attendance", {}),
+        "leaves": bundle.get("leaves", {}),
         "policies": bundle.get("policies", {}),
         "accounting": bundle.get("accounting", {}),
     }
-
+    
 
 def _permission_has_company_field() -> bool:
     return any(f.name == "company" for f in Permission._meta.fields)
@@ -207,6 +233,22 @@ def apply_attendance(company, attendance_data):
                 "end_time": shift["end_time"],      # string
                 "grace_minutes": shift.get("grace_minutes", 0),
                 "is_active": True,
+            },
+        )
+
+
+def apply_leaves(company, leaves_data):
+    for leave_type in leaves_data.get("types", []):
+        LeaveType.objects.update_or_create(
+            company=company,
+            code=leave_type["code"],
+            defaults={
+                "name": leave_type["name"],
+                "requires_approval": leave_type.get("requires_approval", True),
+                "paid": leave_type.get("paid", True),
+                "max_per_request_days": leave_type.get("max_per_request_days"),
+                "allow_negative_balance": leave_type.get("allow_negative_balance", False),
+                "is_active": leave_type.get("is_active", True),
             },
         )
 
@@ -367,11 +409,14 @@ def apply_template_bundle(company, bundle):
             state.shifts_applied = True
             update_fields.append("shifts_applied")
 
+        if bundle.get("leaves"):
+            apply_leaves(company, bundle["leaves"])
+
         if bundle.get("policies"):
             apply_policies(company, bundle["policies"])
             state.policies_applied = True
             update_fields.append("policies_applied")
-
+            
         if bundle.get("accounting"):
             try:
                 apply_accounting(company, bundle["accounting"])
