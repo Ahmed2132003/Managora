@@ -966,6 +966,38 @@ class LeaveBalanceViewSet(viewsets.ModelViewSet):
             .order_by("-year", "employee__id")
         )
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.action == "create":
+            context["allow_upsert"] = True
+        return context
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        employee = serializer.validated_data["employee"]
+        leave_type = serializer.validated_data["leave_type"]
+        year = serializer.validated_data["year"]
+        existing_balance = LeaveBalance.objects.filter(
+            company=request.user.company,
+            employee=employee,
+            leave_type=leave_type,
+            year=year,
+        ).first()
+
+        if existing_balance:
+            update_serializer = self.get_serializer(
+                existing_balance, data=request.data, partial=True
+            )
+            update_serializer.is_valid(raise_exception=True)
+            self.perform_update(update_serializer)
+            return Response(update_serializer.data, status=status.HTTP_200_OK)
+
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
     def perform_create(self, serializer):
         serializer.save(company=self.request.user.company)
 

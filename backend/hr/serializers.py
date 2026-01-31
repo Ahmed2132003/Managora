@@ -543,7 +543,8 @@ class LeaveBalanceSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         request = self.context.get("request")
         company = request.user.company if request else None
-
+        allow_upsert = self.context.get("allow_upsert", False)
+        
         employee = attrs.get("employee") or getattr(self.instance, "employee", None)
         if employee and company and employee.company_id != company.id:
             raise serializers.ValidationError(
@@ -566,7 +567,7 @@ class LeaveBalanceSerializer(serializers.ModelSerializer):
             )
             if self.instance:
                 balance_exists = balance_exists.exclude(id=self.instance.id)
-            if balance_exists.exists():
+            if balance_exists.exists() and not (allow_upsert and not self.instance):                
                 raise serializers.ValidationError(
                     {
                         "non_field_errors": [
