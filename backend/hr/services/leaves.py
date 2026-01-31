@@ -65,13 +65,15 @@ def request_leave(user, payload: dict[str, Any]) -> LeaveRequest:
         raise serializers.ValidationError({"leave_type": "Leave type is inactive."})
 
     days = calculate_leave_days(start_date, end_date)
+    if leave_type.max_per_request_days and days > leave_type.max_per_request_days:
+        raise serializers.ValidationError(
+            {"days": "Leave days exceed maximum allowed for this leave type."}
+        )
     validate_leave_overlap(employee, start_date, end_date)
 
     if leave_type.paid:
-        balance = get_or_create_balance(employee, leave_type, start_date.year)
-        if not leave_type.allow_negative_balance and balance.remaining_days < days:
-            raise serializers.ValidationError("Insufficient leave balance.")
-        
+        get_or_create_balance(employee, leave_type, start_date.year)
+                
     return LeaveRequest.objects.create(
         company=user.company,
         employee=employee,
