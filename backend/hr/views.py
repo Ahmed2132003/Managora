@@ -465,8 +465,6 @@ def _user_can_approve(user, leave_request):
             return True        
         return True
     if "hr" in approver_roles:
-        if "hr" in requester_roles or "manager" in requester_roles:
-            return False
         return True
 
     return False
