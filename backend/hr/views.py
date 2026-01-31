@@ -36,6 +36,7 @@ from hr.models import (
     LeaveBalance,
     LeaveRequest,
     LeaveType,
+    CommissionRequest,
     PayrollPeriod,
     PayrollRun,
     PolicyRule,
@@ -74,6 +75,9 @@ from hr.serializers import (
     LeaveRequestCreateSerializer,
     LeaveRequestSerializer,
     LeaveTypeSerializer,
+    CommissionRequestSerializer,
+    CommissionRequestCreateSerializer,
+    CommissionDecisionSerializer,
     PolicyRuleSerializer,
     PayrollPeriodSerializer,
     PayrollRunDetailSerializer,
@@ -345,6 +349,14 @@ def _parse_date_param(value, label):
         raise ValidationError({label: "Invalid date format. Use YYYY-MM-DD."})
     return parsed
 
+
+def _user_role_names(user) -> set[str]:
+    if not user or not user.is_authenticated:
+        return set()
+    return {name.strip().lower() for name in user.roles.values_list("name", flat=True)}
+
+
+
 def _get_user_employee(user):
     employee = getattr(user, "employee_profile", None)
     if not employee or employee.is_deleted or employee.company_id != user.company_id:
@@ -403,15 +415,55 @@ def _build_pending_attendance_items(record: AttendanceRecord) -> list[dict]:
         )
     return items
 
-
 def _user_can_approve(user, leave_request):
-    if user_has_permission(user, "leaves.*"):
+    if not (
+        user_has_permission(user, "leaves.*") or user_has_permission(user, "approvals.*")
+    ):
+        return False
+    if leave_request.employee.user_id == user.id:
+        return False
+
+    approver_roles = _user_role_names(user)
+    requester_user = getattr(leave_request.employee, "user", None)
+    requester_roles = _user_role_names(requester_user)
+
+    if "manager" in approver_roles:
+        if "manager" in requester_roles:
+            if leave_request.employee.manager_id:
+                manager_employee = getattr(user, "employee_profile", None)
+                return bool(manager_employee and manager_employee.id == leave_request.employee.manager_id)
+            return True        
         return True
-    if user_has_permission(user, "approvals.*"):
-        manager_employee = getattr(user, "employee_profile", None)
-        if not manager_employee or manager_employee.is_deleted:
+    if "hr" in approver_roles:
+        if "hr" in requester_roles or "manager" in requester_roles:
             return False
-        return leave_request.employee.manager_id == manager_employee.id
+        return True
+
+    return False
+
+
+def _user_can_approve_commission(user, commission_request):
+    if not (
+        user_has_permission(user, "commissions.*")
+        or user_has_permission(user, "approvals.*")
+    ):
+        return False
+    if commission_request.employee.user_id == user.id:
+        return False
+
+    approver_roles = _user_role_names(user)
+    requester_user = getattr(commission_request.employee, "user", None)
+    requester_roles = _user_role_names(requester_user)
+
+    if "manager" in approver_roles:
+        return True
+
+    if "hr" in approver_roles:
+        if "hr" in requester_roles or "manager" in requester_roles:
+                        
+            return False
+        return True
+        
     return False
 
 
@@ -1003,12 +1055,16 @@ class LeaveApprovalsInboxView(ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        roles = _user_role_names(user)
         queryset = LeaveRequest.objects.select_related("employee", "leave_type").filter(
             company=user.company
         )
 
         if user_has_permission(user, "leaves.*"):
-            pass
+            if "hr" in roles and "manager" not in roles:
+                queryset = queryset.exclude(
+                    employee__user__roles__name__iexact="HR"
+                ).exclude(employee__user__roles__name__iexact="Manager")        
         elif user_has_permission(user, "approvals.*"):
             manager_employee = getattr(user, "employee_profile", None)
             if not manager_employee or manager_employee.is_deleted:
@@ -1075,6 +1131,166 @@ class LeaveRejectView(APIView):
             request.user, leave_request.id, serializer.validated_data.get("reason")
         )
         return Response(LeaveRequestSerializer(leave_request).data)
+
+
+@extend_schema(
+    tags=["Commissions"],
+    summary="Create commission request",
+    request=CommissionRequestCreateSerializer,
+    responses={201: CommissionRequestSerializer},
+)
+class CommissionRequestCreateView(CreateAPIView):
+    serializer_class = CommissionRequestCreateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["employee"] = _get_user_employee(self.request.user)
+        return context
+
+    def create(self, request, *args, **kwargs):
+        roles = _user_role_names(request.user)
+        if "employee" not in roles and "accountant" not in roles:
+            raise PermissionDenied("Only employees or accountants can request commissions.")
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        commission_request = serializer.save()
+        return Response(
+            CommissionRequestSerializer(commission_request).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+@extend_schema(
+    tags=["Commissions"],
+    summary="List my commission requests",
+)
+class CommissionRequestMyListView(ListAPIView):
+    serializer_class = CommissionRequestSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        employee = _get_user_employee(self.request.user)
+        queryset = CommissionRequest.objects.select_related("employee").filter(
+            company=self.request.user.company, employee=employee
+        )
+
+        status_filter = self.request.query_params.get("status")
+        if status_filter:
+            status_value = status_filter.lower()
+            if status_value not in CommissionRequest.Status.values:
+                raise ValidationError({"status": "Invalid status value."})
+            queryset = queryset.filter(status=status_value)
+
+        date_from = _parse_date_param(
+            self.request.query_params.get("date_from"), "date_from"
+        )
+        date_to = _parse_date_param(
+            self.request.query_params.get("date_to"), "date_to"
+        )
+        if date_from:
+            queryset = queryset.filter(earned_date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(earned_date__lte=date_to)
+
+        return queryset.order_by("-requested_at")
+
+
+@extend_schema(
+    tags=["Commissions"],
+    summary="Commission approvals inbox",
+)
+class CommissionApprovalsInboxView(ListAPIView):
+    serializer_class = CommissionRequestSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        roles = _user_role_names(user)
+        queryset = CommissionRequest.objects.select_related("employee").filter(
+            company=user.company
+        )
+
+        if "manager" in roles:
+            pass
+        elif "hr" in roles:
+            queryset = queryset.exclude(employee__user__roles__name__iexact="HR").exclude(
+                employee__user__roles__name__iexact="Manager"
+            )
+        else:
+            raise PermissionDenied("You do not have permission to view commission approvals.")
+
+        status_filter = self.request.query_params.get("status") or CommissionRequest.Status.PENDING
+        if status_filter:
+            status_value = status_filter.lower()
+            if status_value not in CommissionRequest.Status.values:
+                raise ValidationError({"status": "Invalid status value."})
+            queryset = queryset.filter(status=status_value)
+
+        employee_search = self.request.query_params.get("employee")
+        if employee_search:
+            queryset = queryset.filter(
+                Q(employee__full_name__icontains=employee_search)
+                | Q(employee__employee_code__icontains=employee_search)
+            )
+
+        return queryset.order_by("-requested_at")
+
+
+@extend_schema(
+    tags=["Commissions"],
+    summary="Approve commission request",
+    responses={200: CommissionRequestSerializer},
+)
+class CommissionApproveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, id=None):
+        commission_request = get_object_or_404(
+            CommissionRequest, id=id, company=request.user.company
+        )
+        if not _user_can_approve_commission(request.user, commission_request):
+            raise PermissionDenied("You do not have permission to approve this request.")
+
+        if commission_request.status != CommissionRequest.Status.PENDING:
+            raise ValidationError("Only pending requests can be approved.")
+
+        commission_request.status = CommissionRequest.Status.APPROVED
+        commission_request.decided_by = request.user
+        commission_request.decided_at = timezone.now()
+        commission_request.save(update_fields=["status", "decided_by", "decided_at"])
+        return Response(CommissionRequestSerializer(commission_request).data)
+
+
+@extend_schema(
+    tags=["Commissions"],
+    summary="Reject commission request",
+    request=CommissionDecisionSerializer,
+    responses={200: CommissionRequestSerializer},
+)
+class CommissionRejectView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, id=None):
+        commission_request = get_object_or_404(
+            CommissionRequest, id=id, company=request.user.company
+        )
+        if not _user_can_approve_commission(request.user, commission_request):
+            raise PermissionDenied("You do not have permission to reject this request.")
+
+        if commission_request.status != CommissionRequest.Status.PENDING:
+            raise ValidationError("Only pending requests can be rejected.")
+
+        serializer = CommissionDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        commission_request.status = CommissionRequest.Status.REJECTED
+        commission_request.decided_by = request.user
+        commission_request.decided_at = timezone.now()
+        commission_request.reject_reason = serializer.validated_data.get("reason")
+        commission_request.save(
+            update_fields=["status", "decided_by", "decided_at", "reject_reason"]
+        )
+        return Response(CommissionRequestSerializer(commission_request).data)
 
 
 @extend_schema(

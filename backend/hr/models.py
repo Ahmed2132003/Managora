@@ -579,12 +579,23 @@ class PayrollPeriod(BaseModel):
 
 
 class SalaryStructure(BaseModel):
+    class SalaryType(models.TextChoices):
+        DAILY = "daily", "Daily"
+        MONTHLY = "monthly", "Monthly"
+        WEEKLY = "weekly", "Weekly / Part-time"
+        COMMISSION = "commission", "Commission"
+
     employee = models.OneToOneField(
         "hr.Employee",
         on_delete=models.CASCADE,
         related_name="salary_structure",
     )
     basic_salary = models.DecimalField(max_digits=12, decimal_places=2)
+    salary_type = models.CharField(
+        max_length=20,
+        choices=SalaryType.choices,
+        default=SalaryType.MONTHLY,
+    )
     currency = models.CharField(max_length=10, null=True, blank=True)
 
     def save(self, *args, **kwargs):
@@ -594,6 +605,47 @@ class SalaryStructure(BaseModel):
 
     def __str__(self):
         return f"{self.company.name} - {self.employee.full_name}"
+
+
+class CommissionRequest(BaseModel):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
+    employee = models.ForeignKey(
+        "hr.Employee",
+        on_delete=models.CASCADE,
+        related_name="commission_requests",
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    earned_date = models.DateField()
+    note = models.TextField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    requested_at = models.DateTimeField(default=timezone.now)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decided_commission_requests",
+    )
+    reject_reason = models.TextField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["company", "status"], name="commission_comp_status_idx"),
+            models.Index(fields=["company", "employee"], name="commission_comp_emp_idx"),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.employee_id:
+            self.company_id = self.employee.company_id
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.company.name} - {self.employee.full_name} - {self.amount}"
 
 
 class SalaryComponent(BaseModel):

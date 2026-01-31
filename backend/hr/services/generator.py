@@ -16,11 +16,22 @@ from hr.models import (
     PayrollPeriod,
     PayrollRun,
     SalaryComponent,
+    SalaryStructure,
+    CommissionRequest,
 )
 
 WORKING_DAYS_PER_MONTH = Decimal("30")
 MINUTES_PER_DAY = Decimal("480")
 
+
+def _resolve_daily_rate(salary_structure: SalaryStructure) -> Decimal | None:
+    if salary_structure.salary_type == SalaryStructure.SalaryType.DAILY:
+        return salary_structure.basic_salary
+    if salary_structure.salary_type == SalaryStructure.SalaryType.WEEKLY:
+        return salary_structure.basic_salary / Decimal("7")
+    if salary_structure.salary_type == SalaryStructure.SalaryType.COMMISSION:
+        return None
+    return salary_structure.basic_salary / WORKING_DAYS_PER_MONTH
 
 def _month_date_range(year, month):
     last_day = monthrange(year, month)[1]
@@ -70,26 +81,30 @@ def generate_period(company, year, month, actor):
                 continue
 
             basic_salary = salary_structure.basic_salary
-            daily_rate = basic_salary / WORKING_DAYS_PER_MONTH
-            minute_rate = daily_rate / MINUTES_PER_DAY
+            daily_rate = _resolve_daily_rate(salary_structure)
+            minute_rate = (daily_rate / MINUTES_PER_DAY) if daily_rate else None
 
             earnings_total = Decimal("0")
             deductions_total = Decimal("0")
             lines = []
 
-            lines.append(
-                PayrollLine(
-                    company=company,
-                    payroll_run=None,
-                    code="BASIC",
-                    name="Basic Salary",
-                    type=PayrollLine.LineType.EARNING,
-                    amount=_quantize_amount(basic_salary),
-                    meta={"rate": str(_quantize_amount(daily_rate))},
+            if salary_structure.salary_type != SalaryStructure.SalaryType.COMMISSION and basic_salary > 0:
+                meta = {}
+                if daily_rate is not None:
+                    meta["rate"] = str(_quantize_amount(daily_rate))
+                lines.append(
+                    PayrollLine(
+                        company=company,
+                        payroll_run=None,
+                        code="BASIC",
+                        name="Basic Salary",
+                        type=PayrollLine.LineType.EARNING,
+                        amount=_quantize_amount(basic_salary),
+                        meta=meta,
+                    )
                 )
-            )
-            earnings_total += basic_salary
-
+                earnings_total += basic_salary
+                
             components = salary_structure.components.filter(is_recurring=True)
             for component in components:
                 line_type = (
@@ -126,7 +141,7 @@ def generate_period(company, year, month, actor):
                 status=AttendanceRecord.Status.ABSENT
             ).count()
 
-            if late_minutes_total:
+            if late_minutes_total and minute_rate is not None:                
                 late_amount = _quantize_amount(
                     minute_rate * Decimal(late_minutes_total)
                 )
@@ -147,7 +162,7 @@ def generate_period(company, year, month, actor):
                     )
                     deductions_total += late_amount
 
-            if absent_days:
+            if absent_days and daily_rate is not None:                
                 absent_amount = _quantize_amount(
                     daily_rate * Decimal(absent_days)
                 )
@@ -182,7 +197,7 @@ def generate_period(company, year, month, actor):
                     request.start_date, request.end_date, start_date, end_date
                 )
 
-            if unpaid_leave_days:
+            if unpaid_leave_days and daily_rate is not None:
                 unpaid_amount = _quantize_amount(daily_rate * unpaid_leave_days)
                 if unpaid_amount > 0:
                     lines.append(
@@ -201,6 +216,27 @@ def generate_period(company, year, month, actor):
                     )
                     deductions_total += unpaid_amount
 
+            approved_commissions = CommissionRequest.objects.filter(
+                company=company,
+                employee=employee,
+                status=CommissionRequest.Status.APPROVED,
+                earned_date__range=(start_date, end_date),
+            )
+            for commission in approved_commissions:
+                if commission.amount > 0:
+                    lines.append(
+                        PayrollLine(
+                            company=company,
+                            payroll_run=None,
+                            code=f"COMM-{commission.id}",
+                            name="Commission",
+                            type=PayrollLine.LineType.EARNING,
+                            amount=_quantize_amount(commission.amount),
+                            meta={"earned_date": str(commission.earned_date)},
+                        )
+                    )
+                    earnings_total += commission.amount
+                    
             loans = LoanAdvance.objects.filter(
                 company=company,
                 employee=employee,

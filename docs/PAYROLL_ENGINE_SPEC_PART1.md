@@ -36,6 +36,7 @@ Detailed items in a payroll run (basic, allowance, deduction, loan installment, 
 ### Earnings
 - **Basic Salary**: fixed value from Salary Structure
 - **Allowances**: sum of fixed allowances
+- **Commission**: only added when an approved commission request exists (see Commission System)
 
 ### Deductions
 - **Absence deduction**: `absent_days × daily_rate`
@@ -55,6 +56,18 @@ daily_rate = basic_salary / working_days_in_month
 - `working_days_in_month` is a company-level constant (e.g., **30**) for MVP.
 - Later can be derived from calendar settings.
 
+### Salary Types (MVP)
+Each employee must have **one** salary type:
+- **Daily**: daily_rate is the fixed daily value.
+- **Monthly**: daily_rate = monthly_salary ÷ 30.
+- **Weekly / Part-time**: daily_rate = weekly_salary ÷ 7.
+- **Commission**: no automatic daily_rate (used only when approved commission requests exist).
+
+These values feed:
+- Unpaid leave deductions
+- Late/absence deductions
+- “Earned to date” calculations
+
 ## 3) Data Sources (link to Phase 4 + 5)
 
 ### AttendanceRecord
@@ -67,11 +80,51 @@ Provides:
 - `paid_leave_days`
 - `unpaid_leave_days`
 
+Leave request creation:
+- Any user role can submit a leave request: **Employee, Manager, Accountant, HR**.
+- Entry points: **Leave Balance**, **Leave Requests**, **My Leave Requests**, **Leave Inbox**.
+
+Leave request types:
+- **Paid Leave**: deducts from paid leave balance; **no salary deduction**.
+- **Unpaid Leave**: **salary deduction** applies via daily_rate; must be visible on payroll lines.
+
+Leave approval matrix:
+| Requester | Approver(s) |
+| --- | --- |
+| Employee | Manager / HR |
+| Accountant | Manager / HR |
+| HR | Manager only |
+| Manager | Higher manager or auto-approve (policy-defined) |
+
+Rules:
+- HR **cannot** approve HR requests.
+- Manager has the highest approval authority.
+
 ### HRAction (Policy Rule Engine — Phase 5)
 Provides:
 - explicit deduction items (e.g., “deduct X amount”)
 
 **MVP scope:** Start with **absence + late** from attendance and **unpaid leave**. Add HRAction-derived deductions next.
+
+### Commission System (MVP)
+- Eligible roles: **Employee**, **Accountant**.
+- Flow:
+  1. Employee/Accountant completes work.
+  2. Submits a **commission request** with the requested amount.
+  3. Request is routed to **Manager or HR**.
+  4. On approval, the amount is included as **earnings** in payroll.
+  5. On rejection, no payroll impact.
+
+Approval matrix:
+| Requester | Approver(s) |
+| --- | --- |
+| Employee | Manager / HR |
+| Accountant | Manager / HR |
+| HR | Manager only |
+
+Rules:
+- HR **cannot** approve their own commission requests.
+- Manager can approve for all.
 
 ## 4) Data Integrity Rules
 

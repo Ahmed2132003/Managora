@@ -24,7 +24,12 @@ from hr.views import (
     LeaveRequestCreateView,
     LeaveRequestMyListView,
     LeaveTypeViewSet,
-    HRActionViewSet,
+    CommissionApprovalsInboxView,
+    CommissionApproveView,
+    CommissionRejectView,
+    CommissionRequestCreateView,
+    CommissionRequestMyListView,
+    HRActionViewSet,    
     EmployeeDocumentDeleteView,
     EmployeeDocumentDownloadView,
     EmployeeDocumentListCreateView,
@@ -75,6 +80,15 @@ urlpatterns = [
     path("leaves/requests/<int:id>/approve/", LeaveApproveView.as_view(), name="leave-request-approve"),
     path("leaves/requests/<int:id>/reject/", LeaveRejectView.as_view(), name="leave-request-reject"),
 
+    # =========================
+    # Commissions
+    # =========================
+    path("commissions/requests/my/", CommissionRequestMyListView.as_view(), name="commission-request-my"),
+    path("commissions/requests/", CommissionRequestCreateView.as_view(), name="commission-request-create"),
+    path("commissions/approvals/inbox/", CommissionApprovalsInboxView.as_view(), name="commission-approvals-inbox"),
+    path("commissions/requests/<int:id>/approve/", CommissionApproveView.as_view(), name="commission-request-approve"),
+    path("commissions/requests/<int:id>/reject/", CommissionRejectView.as_view(), name="commission-request-reject"),
+    
     # =========================
     # Attendance (OLD)
     # =========================

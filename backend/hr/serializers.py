@@ -42,11 +42,12 @@ from hr.models import (
     LeaveBalance,
     LeaveRequest,
     LeaveType,
+    CommissionRequest,
     LoanAdvance,
     PayrollLine,
     PayrollPeriod,
     PayrollRun,
-    PolicyRule,
+    PolicyRule,    
     SalaryComponent,
     SalaryStructure,
     Shift,
@@ -623,6 +624,49 @@ class LeaveDecisionSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
 
+class CommissionRequestSerializer(serializers.ModelSerializer):
+    employee = LeaveEmployeeSerializer(read_only=True)
+    decided_by = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = CommissionRequest
+        fields = (
+            "id",
+            "employee",
+            "amount",
+            "earned_date",
+            "note",
+            "status",
+            "requested_at",
+            "decided_at",
+            "decided_by",
+            "reject_reason",
+        )
+        read_only_fields = ("id", "status", "requested_at", "decided_at", "decided_by")
+
+
+class CommissionRequestCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CommissionRequest
+        fields = ("id", "amount", "earned_date", "note")
+        read_only_fields = ("id",)
+
+    def validate(self, attrs):
+        employee = self.context.get("employee")
+        if not employee:
+            raise serializers.ValidationError("Employee profile is required.")
+        attrs["employee"] = employee
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        validated_data["company"] = request.user.company
+        return super().create(validated_data)
+
+
+class CommissionDecisionSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
 class PolicyRuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = PolicyRule
@@ -693,7 +737,8 @@ class PayrollPeriodSerializer(serializers.ModelSerializer):
 class SalaryStructureSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalaryStructure
-        fields = ("id", "employee", "basic_salary", "currency")
+        
+        fields = ("id", "employee", "basic_salary", "salary_type", "currency")        
         read_only_fields = ("id",)
 
     def __init__(self, *args, **kwargs):
