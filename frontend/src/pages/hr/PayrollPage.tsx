@@ -115,6 +115,11 @@ export function PayrollPage() {
     return options;
   }, []);
 
+  const selectedEmployee = useMemo(() => {
+    if (!salaryEmployeeId) return null;
+    return (employeesQuery.data ?? []).find((employee) => employee.id === salaryEmployeeId) ?? null;
+  }, [employeesQuery.data, salaryEmployeeId]);
+
   if (
     isForbiddenError(periodsQuery.error) ||
     isForbiddenError(employeesQuery.error) ||
@@ -122,7 +127,6 @@ export function PayrollPage() {
   ) {
     return <AccessDenied />;
   }
-
   async function handleCreatePeriod() {
     if (!month || !year) {
       notifications.show({
@@ -176,11 +180,6 @@ export function PayrollPage() {
       });
     }
   }
-
-  const selectedEmployee = useMemo(() => {
-    if (!salaryEmployeeId) return null;
-    return (employeesQuery.data ?? []).find((employee) => employee.id === salaryEmployeeId) ?? null;
-  }, [employeesQuery.data, salaryEmployeeId]);
 
   function openSalaryModal(employeeId: number) {
     const existing = salaryStructuresByEmployee.get(employeeId);
@@ -404,11 +403,13 @@ export function PayrollPage() {
           <NumberInput
             label="Base salary"
             value={basicSalary}
-            onChange={(value) => setBasicSalary(value ?? 0)}
+            onChange={(value) =>
+              setBasicSalary(typeof value === "number" ? value : Number(value) || 0)
+            }
             min={0}
             hideControls
             thousandSeparator=","
-          />
+          />          
           <TextInput
             label="Currency"
             value={currency}

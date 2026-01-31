@@ -845,9 +845,10 @@ export function EmployeeProfilePage() {
                   >
                     {content.tabs.payroll}
                   </button>
+                </div>
 
                 {activeTab === "basic" && (
-                  <div className="employee-profile__grid">
+                  <div className="employee-profile__grid">                    
                     <label className="form-field">
                       <span>
                         {content.fields.employeeCode} <span className="required">*</span>
@@ -1260,11 +1261,13 @@ export function EmployeeProfilePage() {
                           control={salaryForm.control}
                           render={({ field }) => (
                             <NumberInput
-                              value={field.value ?? 0}
-                              onChange={(value) => field.onChange(value ?? 0)}
+                              value={typeof field.value === "number" ? field.value : Number(field.value) || 0}
+                              onChange={(value) =>
+                                field.onChange(typeof value === "number" ? value : Number(value) || 0)
+                              }
                               min={0}
                               hideControls
-                              thousandSeparator=","
+                              thousandSeparator=","                              
                               disabled={!employeeId}
                             />
                           )}
