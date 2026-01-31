@@ -452,6 +452,8 @@ def _user_can_approve(user, leave_request):
         return False
     if leave_request.employee.user_id == user.id:
         return False
+    if user_has_permission(user, "leaves.*"):
+        return True
 
     approver_roles = _user_role_names(user)
     requester_user = getattr(leave_request.employee, "user", None)
