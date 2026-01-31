@@ -709,9 +709,18 @@ export type LeaveRequestCreatePayload = {
   reason?: string;
 };
 
+export type LeaveBalance = {
+  id: number;
+  leave_type: LeaveType;
+  year: number;
+  allocated_days: string | number;
+  used_days: string | number;
+  remaining_days: string | number;
+};
+
 export type PolicyRule = {
   id: number;
-  name: string;
+  name: string;  
   rule_type:
     | "late_over_minutes"
     | "late_count_over_period"
