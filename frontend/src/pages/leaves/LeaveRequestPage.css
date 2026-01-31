@@ -42,6 +42,15 @@
   resize: vertical;
 }
 
+.leave-request-help {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.leave-request-help--warning {
+  color: #b45309;
+}
+
 .leave-request-field--full {
   grid-column: 1 / -1;
 }

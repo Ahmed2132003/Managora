@@ -52,10 +52,15 @@ type Content = {
     successMessage: string;
     failedTitle: string;
   };
+  messages: {
+    leaveTypesEmpty: string;
+    leaveTypesEmptyOption: string;
+    leaveTypesError: string;
+  };
   statusLabels: {
     pending: string;
     draft: string;
-  };
+  };  
   nav: {
     dashboard: string;
     users: string;
@@ -133,10 +138,15 @@ const contentMap: Record<Language, Content> = {
       successMessage: "Your leave request was submitted successfully.",
       failedTitle: "Submission failed",
     },
+    messages: {
+      leaveTypesEmpty: "No leave types are available yet. Contact HR to set one up.",
+      leaveTypesEmptyOption: "No leave types available",
+      leaveTypesError: "Unable to load leave types. Please try again later.",
+    },
     statusLabels: {
       pending: "Pending approval",
       draft: "Draft request",
-    },
+    },    
     nav: {
       dashboard: "Dashboard",
       users: "Users",
@@ -212,10 +222,15 @@ const contentMap: Record<Language, Content> = {
       successMessage: "تم إرسال طلب الإجازة بنجاح.",
       failedTitle: "فشل الإرسال",
     },
+    messages: {
+      leaveTypesEmpty: "لا توجد أنواع إجازات متاحة الآن. تواصل مع الموارد البشرية لإضافتها.",
+      leaveTypesEmptyOption: "لا توجد أنواع إجازات متاحة",
+      leaveTypesError: "تعذر تحميل أنواع الإجازات الآن. حاول لاحقًا.",
+    },
     statusLabels: {
       pending: "بانتظار الموافقة",
       draft: "مسودة طلب",
-    },
+    },    
     nav: {
       dashboard: "لوحة التحكم",
       users: "المستخدمون",
@@ -316,10 +331,21 @@ export function LeaveRequestPage() {
       label: `${type.name} (${type.code})`,
     }));    
   }, [leaveTypesQuery.data]);
+  const leaveTypesErrorMessage = useMemo(() => {
+    if (!leaveTypesQuery.isError) {
+      return null;
+    }
+    return content.messages.leaveTypesError;
+  }, [content.messages.leaveTypesError, leaveTypesQuery.isError]);
+  const leaveTypesEmpty =
+    !leaveTypesQuery.isLoading && !leaveTypesQuery.isError && leaveTypeOptions.length === 0;
+  const leaveTypeNotice =
+    leaveTypesErrorMessage ?? (leaveTypesEmpty ? content.messages.leaveTypesEmpty : null);
+  const leaveTypesUnavailable = leaveTypesQuery.isLoading || leaveTypesQuery.isError || leaveTypesEmpty;
 
   const calculatedDays = calculateLeaveDays(startDate, endDate);
 
-  async function handleSubmit() {
+  async function handleSubmit() {    
     if (!leaveTypeId || !startDate || !endDate) {
       notifications.show({
         title: content.notifications.missingTitle,
@@ -723,10 +749,12 @@ export function LeaveRequestPage() {
                       onChange={(event) =>
                         setLeaveTypeId(event.currentTarget.value || null)
                       }
-                      disabled={leaveTypesQuery.isLoading}
+                      disabled={leaveTypesUnavailable}
                     >
                       <option value="" disabled>
-                        {content.fields.leaveTypePlaceholder}
+                        {leaveTypeOptions.length === 0 && !leaveTypesQuery.isLoading
+                          ? content.messages.leaveTypesEmptyOption
+                          : content.fields.leaveTypePlaceholder}
                       </option>
                       {leaveTypeOptions.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -734,7 +762,12 @@ export function LeaveRequestPage() {
                         </option>
                       ))}
                     </select>
-                  </label>
+                    {leaveTypeNotice ? (
+                      <span className="leave-request-help leave-request-help--warning">
+                        {leaveTypeNotice}
+                      </span>
+                    ) : null}
+                  </label>                  
                   <label className="leave-request-field">
                     <span>{content.fields.startDate}</span>
                     <input
@@ -780,7 +813,7 @@ export function LeaveRequestPage() {
                     type="button"
                     className="primary-button"
                     onClick={handleSubmit}
-                    disabled={createMutation.isPending}
+                    disabled={createMutation.isPending || leaveTypesUnavailable}
                   >
                     {createMutation.isPending ? "..." : content.actions.submit}
                   </button>
