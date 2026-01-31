@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from rest_framework import serializers
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -555,8 +556,38 @@ class LeaveBalanceSerializer(serializers.ModelSerializer):
                 {"leave_type": "Leave type must belong to the same company."}
             )
 
+        year = attrs.get("year") or getattr(self.instance, "year", None)
+        if company and employee and leave_type and year:
+            balance_exists = LeaveBalance.objects.filter(
+                company=company,
+                employee=employee,
+                leave_type=leave_type,
+                year=year,
+            )
+            if self.instance:
+                balance_exists = balance_exists.exclude(id=self.instance.id)
+            if balance_exists.exists():
+                raise serializers.ValidationError(
+                    {
+                        "non_field_errors": [
+                            "A leave balance for this employee, leave type, and year already exists."
+                        ]
+                    }
+                )
+
         return attrs
 
+    def create(self, validated_data):
+        try:
+            return super().create(validated_data)
+        except IntegrityError as exc:
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": [
+                        "A leave balance for this employee, leave type, and year already exists."
+                    ]
+                }
+            ) from exc
 
 class LeaveEmployeeSerializer(serializers.ModelSerializer):
     class Meta:
