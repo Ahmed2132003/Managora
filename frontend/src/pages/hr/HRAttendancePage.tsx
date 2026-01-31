@@ -11,6 +11,7 @@ import {
   useAttendancePendingApprovalsQuery,
   useAttendanceApproveRejectMutation,
   type AttendancePendingItem,
+  useCreateLeaveTypeMutation,
 } from "../../shared/hr/hooks";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
@@ -141,9 +142,31 @@ type Content = {
     linkLabel: string;
   };
 
-  table: {
+  leaveTypes: {
     title: string;
     subtitle: string;
+    companyNote: string;
+    nameLabel: string;
+    namePlaceholder: string;
+    codeLabel: string;
+    codePlaceholder: string;
+    maxDaysLabel: string;
+    maxDaysPlaceholder: string;
+    requiresApprovalLabel: string;
+    paidLabel: string;
+    allowNegativeBalanceLabel: string;
+    activeLabel: string;
+    save: string;
+    missingMessage: string;
+    successTitle: string;
+    successMessage: string;
+    failedTitle: string;
+    failedMessage: string;
+  };
+
+  table: {
+    title: string;
+    subtitle: string;    
     employee: string;
     date: string;
     checkIn: string;
@@ -288,10 +311,31 @@ const contentMap: Record<Language, Content> = {
       worksite: "Worksite",
       linkLabel: "Link",
     },
+    leaveTypes: {
+      title: "Add leave type",
+      subtitle: "Create a leave type for your team. The company is selected automatically.",
+      companyNote: "Company is auto-selected based on your profile.",
+      nameLabel: "Leave name",
+      namePlaceholder: "Annual leave",
+      codeLabel: "Code",
+      codePlaceholder: "ANNUAL",
+      maxDaysLabel: "Max days per request",
+      maxDaysPlaceholder: "Optional",
+      requiresApprovalLabel: "Requires approval",
+      paidLabel: "Paid",
+      allowNegativeBalanceLabel: "Allow negative balance",
+      activeLabel: "Active",
+      save: "Save leave type",
+      missingMessage: "Please enter a name and code.",
+      successTitle: "Leave type created",
+      successMessage: "The leave type is ready to use.",
+      failedTitle: "Unable to create leave type",
+      failedMessage: "Please review the details and try again.",
+    },
 
     table: {
       title: "Attendance log",
-      subtitle: "Live check-in and check-out status",
+      subtitle: "Live check-in and check-out status",      
       employee: "Employee",
       date: "Date",
       checkIn: "Check-in",
@@ -445,9 +489,30 @@ const contentMap: Record<Language, Content> = {
       worksite: "الموقع",
       linkLabel: "الرابط",
     },
+    leaveTypes: {
+      title: "إنشاء نوع إجازة",
+      subtitle: "أضف نوع إجازة للفريق. يتم اختيار الشركة تلقائيًا.",
+      companyNote: "يتم تحديد الشركة تلقائيًا من ملفك الشخصي.",
+      nameLabel: "اسم الإجازة",
+      namePlaceholder: "إجازة سنوية",
+      codeLabel: "الكود",
+      codePlaceholder: "ANNUAL",
+      maxDaysLabel: "أقصى أيام لكل طلب",
+      maxDaysPlaceholder: "اختياري",
+      requiresApprovalLabel: "يتطلب موافقة",
+      paidLabel: "مدفوعة",
+      allowNegativeBalanceLabel: "السماح برصيد سالب",
+      activeLabel: "نشط",
+      save: "حفظ نوع الإجازة",
+      missingMessage: "يرجى إدخال الاسم والكود.",
+      successTitle: "تم إنشاء نوع الإجازة",
+      successMessage: "تمت إضافة نوع الإجازة بنجاح.",
+      failedTitle: "تعذر إنشاء نوع الإجازة",
+      failedMessage: "يرجى مراجعة البيانات والمحاولة مرة أخرى.",
+    },
 
     table: {
-      title: "سجل الحضور",
+      title: "سجل الحضور",      
       subtitle: "تفاصيل الدخول والخروج المباشرة",
       employee: "الموظف",
       date: "التاريخ",
@@ -658,8 +723,20 @@ export function HRAttendancePage() {
 
   // QR generate (local hook so this page doesn't depend on a missing export)
   const qrGenerateMutation = useAttendanceQrGenerateMutationLocal();
+  const createLeaveTypeMutation = useCreateLeaveTypeMutation();
+  const [leaveTypeName, setLeaveTypeName] = useState("");
+  const [leaveTypeCode, setLeaveTypeCode] = useState("");
+  const [maxPerRequestDays, setMaxPerRequestDays] = useState("");
+  const [requiresApproval, setRequiresApproval] = useState(true);
+  const [paid, setPaid] = useState(true);
+  const [allowNegativeBalance, setAllowNegativeBalance] = useState(false);
+  const [leaveTypeActive, setLeaveTypeActive] = useState(true);
+  const canManageLeaveTypes = useMemo(
+    () => hasPermission(userPermissions, "leaves.*"),
+    [userPermissions]
+  );
 
-  // Approvals
+  // Approvals  
   const pendingApprovals = useAttendancePendingApprovalsQuery();
   const approveReject = useAttendanceApproveRejectMutation();
   const [rejectReason, setRejectReason] = useState("");
@@ -803,6 +880,49 @@ export function HRAttendancePage() {
       notifications.show({
         title: content.notifications.qrFailedTitle,
         message: getErrorDetail(error, content.notifications.qrFailedMessage),
+        color: "red",
+      });
+    }
+  }
+
+  async function handleCreateLeaveType() {
+    if (!leaveTypeName.trim() || !leaveTypeCode.trim()) {
+      notifications.show({
+        title: content.leaveTypes.failedTitle,
+        message: content.leaveTypes.missingMessage,
+        color: "red",
+      });
+      return;
+    }
+
+    const maxDays =
+      maxPerRequestDays.trim() === ""
+        ? null
+        : Number.isNaN(Number(maxPerRequestDays))
+          ? null
+          : Number(maxPerRequestDays);
+
+    try {
+      await createLeaveTypeMutation.mutateAsync({
+        name: leaveTypeName.trim(),
+        code: leaveTypeCode.trim(),
+        requires_approval: requiresApproval,
+        paid,
+        max_per_request_days: maxDays,
+        allow_negative_balance: allowNegativeBalance,
+        is_active: leaveTypeActive,
+      });
+      notifications.show({
+        title: content.leaveTypes.successTitle,
+        message: content.leaveTypes.successMessage,
+      });
+      setLeaveTypeName("");
+      setLeaveTypeCode("");
+      setMaxPerRequestDays("");
+    } catch (error: unknown) {
+      notifications.show({
+        title: content.leaveTypes.failedTitle,
+        message: getErrorDetail(error, content.leaveTypes.failedMessage),
         color: "red",
       });
     }
@@ -1032,7 +1152,104 @@ export function HRAttendancePage() {
             )}
           </section>
 
-          {/* Filters */}
+          {canManageLeaveTypes && (
+            <section className="panel hr-attendance-panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.leaveTypes.title}</h2>
+                  <p>{content.leaveTypes.subtitle}</p>
+                </div>
+              </div>
+
+              <div className="leave-type-form">
+                <label className="form-field">
+                  <span>{content.leaveTypes.nameLabel}</span>
+                  <input
+                    type="text"
+                    value={leaveTypeName}
+                    onChange={(event) => setLeaveTypeName(event.target.value)}
+                    placeholder={content.leaveTypes.namePlaceholder}
+                  />
+                </label>
+
+                <label className="form-field">
+                  <span>{content.leaveTypes.codeLabel}</span>
+                  <input
+                    type="text"
+                    value={leaveTypeCode}
+                    onChange={(event) => setLeaveTypeCode(event.target.value)}
+                    placeholder={content.leaveTypes.codePlaceholder}
+                  />
+                </label>
+
+                <div className="form-grid">
+                  <label className="form-field">
+                    <span>{content.leaveTypes.maxDaysLabel}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={maxPerRequestDays}
+                      onChange={(event) => setMaxPerRequestDays(event.target.value)}
+                      placeholder={content.leaveTypes.maxDaysPlaceholder}
+                    />
+                  </label>
+                </div>
+
+                <div className="form-grid">
+                  <label className="form-toggle">
+                    <input
+                      type="checkbox"
+                      checked={requiresApproval}
+                      onChange={(event) => setRequiresApproval(event.target.checked)}
+                    />
+                    <span>{content.leaveTypes.requiresApprovalLabel}</span>
+                  </label>
+                  <label className="form-toggle">
+                    <input
+                      type="checkbox"
+                      checked={paid}
+                      onChange={(event) => setPaid(event.target.checked)}
+                    />
+                    <span>{content.leaveTypes.paidLabel}</span>
+                  </label>
+                  <label className="form-toggle">
+                    <input
+                      type="checkbox"
+                      checked={allowNegativeBalance}
+                      onChange={(event) => setAllowNegativeBalance(event.target.checked)}
+                    />
+                    <span>{content.leaveTypes.allowNegativeBalanceLabel}</span>
+                  </label>
+                  <label className="form-toggle">
+                    <input
+                      type="checkbox"
+                      checked={leaveTypeActive}
+                      onChange={(event) => setLeaveTypeActive(event.target.checked)}
+                    />
+                    <span>{content.leaveTypes.activeLabel}</span>
+                  </label>
+                </div>
+
+                <div className="leave-type-form__footer">
+                  <span className="leave-type-form__note">
+                    {content.leaveTypes.companyNote}
+                  </span>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={handleCreateLeaveType}
+                    disabled={createLeaveTypeMutation.isPending}
+                  >
+                    {createLeaveTypeMutation.isPending
+                      ? `${content.leaveTypes.save}...`
+                      : content.leaveTypes.save}
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Filters */}          
           <section className="panel hr-attendance-panel">
             <div className="panel__header">
               <div>

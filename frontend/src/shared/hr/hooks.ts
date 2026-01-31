@@ -678,14 +678,14 @@ export type LeaveType = {
   is_active: boolean;
 };
 
-export type LeaveBalance = {
-  id: number;
-  leave_type: LeaveType;
-  year: number;
-  allocated_days: string;
-  used_days: string;
-  carryover_days: string;
-  remaining_days: string;
+export type LeaveTypeCreatePayload = {
+  name: string;
+  code: string;
+  requires_approval: boolean;
+  paid: boolean;
+  max_per_request_days: number | null;
+  allow_negative_balance: boolean;
+  is_active: boolean;
 };
 
 export type LeaveRequest = {
@@ -754,8 +754,17 @@ export function useLeaveTypesQuery() {
   });
 }
 
+export function useCreateLeaveTypeMutation() {
+  return useMutation({
+    mutationFn: async (payload: LeaveTypeCreatePayload) => {
+      const response = await http.post<LeaveType>(endpoints.hr.leaveTypes, payload);
+      return response.data;
+    },
+  });
+}
+
 export function useMyLeaveBalancesQuery(params?: { year?: number }) {
-  return useQuery({
+  return useQuery({    
     queryKey: ["leaves", "balances", "my", params],
     queryFn: async () => {
       const response = await http.get<LeaveBalance[]>(endpoints.hr.leaveBalanceMy, {

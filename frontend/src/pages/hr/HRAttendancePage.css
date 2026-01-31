@@ -40,9 +40,64 @@
   font-size: 0.95rem;
 }
 
+.leave-type-form {
+  display: grid;
+  gap: 16px;
+}
+
+.leave-type-form__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.leave-type-form__note {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.form-field input,
+.form-field select {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.form-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.form-toggle input {
+  width: 18px;
+  height: 18px;
+}
+
 .primary-button {
   padding: 12px 18px;
-  border-radius: 14px;
+  border-radius: 14px;  
   border: none;
   background: linear-gradient(120deg, var(--secondary), var(--primary));
   color: #fff;
