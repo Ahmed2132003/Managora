@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useMyLeaveBalancesQuery } from "../../shared/hr/hooks";
+import {
+  useCreateLeaveBalanceMutation,
+  useEmployees,
+  useLeaveTypesQuery,
+  useMyLeaveBalancesQuery,
+} from "../../shared/hr/hooks";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { hasPermission } from "../../shared/auth/useCan";
@@ -20,11 +25,6 @@ type Content = {
   navigationLabel: string;
   logoutLabel: string;
   pageTitle: string;
-  pageSubtitle: string;
-  userFallback: string;
-  summaryTitle: string;
-  summarySubtitle: string;
-  tableTitle: string;
   tableSubtitle: string;
   tableHeaders: {
     type: string;
@@ -33,6 +33,27 @@ type Content = {
     used: string;
     remaining: string;
   };
+  managerSectionTitle: string;
+  managerSectionSubtitle: string;
+  managerFormTitle: string;
+  managerFormSubtitle: string;
+  managerEmployeeLabel: string;
+  managerLeaveTypeLabel: string;
+  managerYearLabel: string;
+  managerAllocatedLabel: string;
+  managerSubmitLabel: string;
+  managerEmployeesTitle: string;
+  managerEmployeesSubtitle: string;
+  managerEmployeeSearchPlaceholder: string;
+  managerSelectEmployeeLabel: string;
+  managerEmployeeEmptyState: string;
+  managerSuccessMessage: string;
+  managerErrorMessage: string;
+  totals: {
+    allocated: string;
+    used: string;
+    remaining: string;
+  };  
   totals: {
     allocated: string;
     used: string;
@@ -104,11 +125,28 @@ const contentMap: Record<Language, Content> = {
       used: "Used",
       remaining: "Remaining",
     },
+    managerSectionTitle: "Team leave balances",
+    managerSectionSubtitle:
+      "Manage leave balances for employees in your company to avoid request errors.",
+    managerFormTitle: "Add leave balance",
+    managerFormSubtitle: "Assign a balance for a specific employee and leave type.",
+    managerEmployeeLabel: "Employee",
+    managerLeaveTypeLabel: "Leave type",
+    managerYearLabel: "Year",
+    managerAllocatedLabel: "Allocated days",
+    managerSubmitLabel: "Add balance",
+    managerEmployeesTitle: "Company employees",
+    managerEmployeesSubtitle: "Select an employee to prefill the form.",
+    managerEmployeeSearchPlaceholder: "Search employees...",
+    managerSelectEmployeeLabel: "Select",
+    managerEmployeeEmptyState: "No employees found yet.",
+    managerSuccessMessage: "Leave balance added successfully.",
+    managerErrorMessage: "Unable to add leave balance. Please review the details.",
     totals: {
       allocated: "Allocated balance",
       used: "Used balance",
       remaining: "Remaining balance",
-    },
+    },    
     emptyState: "No leave balance recorded yet.",
     loadingLabel: "Loading...",
     nav: {
@@ -173,11 +211,28 @@ const contentMap: Record<Language, Content> = {
       used: "المستخدم",
       remaining: "المتبقي",
     },
+    managerSectionTitle: "أرصدة الإجازات للفريق",
+    managerSectionSubtitle:
+      "إدارة أرصدة الإجازات لموظفي الشركة لتجنب أخطاء طلب الإجازة.",
+    managerFormTitle: "إضافة رصيد إجازات",
+    managerFormSubtitle: "تعيين رصيد لموظف ونوع إجازة محدد.",
+    managerEmployeeLabel: "الموظف",
+    managerLeaveTypeLabel: "نوع الإجازة",
+    managerYearLabel: "السنة",
+    managerAllocatedLabel: "عدد الأيام المخصصة",
+    managerSubmitLabel: "إضافة الرصيد",
+    managerEmployeesTitle: "موظفو الشركة",
+    managerEmployeesSubtitle: "اختر موظفًا لتعبئة النموذج تلقائيًا.",
+    managerEmployeeSearchPlaceholder: "ابحث عن موظف...",
+    managerSelectEmployeeLabel: "اختيار",
+    managerEmployeeEmptyState: "لا يوجد موظفون حتى الآن.",
+    managerSuccessMessage: "تمت إضافة رصيد الإجازات بنجاح.",
+    managerErrorMessage: "تعذر إضافة رصيد الإجازات. تأكد من البيانات.",
     totals: {
       allocated: "الرصيد المخصص",
       used: "الرصيد المستخدم",
       remaining: "الرصيد المتبقي",
-    },
+    },    
     emptyState: "لا يوجد رصيد مسجل بعد.",
     loadingLabel: "جاري التحميل...",
     nav: {
@@ -254,21 +309,7 @@ export function LeaveBalancePage() {
   const balancesQuery = useMyLeaveBalancesQuery();
   const meQuery = useMe();
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem("managora-language", language);
-  }, [language]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.setItem("managora-theme", theme);
-  }, [theme]);
-
-  const totals = useMemo(() => {
+  const totals = useMemo(() => {    
     const balances = balancesQuery.data ?? [];
     return balances.reduce(
       (acc, balance) => {
@@ -483,6 +524,85 @@ export function LeaveBalancePage() {
     meQuery.data?.user.username ||
     content.userFallback;
 
+  const isManagerOrHr = useMemo(() => {
+    if (meQuery.data?.user.is_superuser) {
+      return true;
+    }
+    const roles = meQuery.data?.roles ?? [];
+    return roles.some((role) => {
+      const roleName = role.slug || role.name;
+      return ["manager", "hr"].includes(roleName.toLowerCase());
+    });
+  }, [meQuery.data?.roles, meQuery.data?.user.is_superuser]);
+
+  const [managerEmployeeSearch, setManagerEmployeeSearch] = useState("");
+  const employeesQuery = useEmployees({
+    filters: { status: "active" },
+    search: managerEmployeeSearch,
+    enabled: isManagerOrHr,
+  });
+  const leaveTypesQuery = useLeaveTypesQuery();
+  const createLeaveBalanceMutation = useCreateLeaveBalanceMutation();
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-language", language);
+  }, [language]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem("managora-theme", theme);
+  }, [theme]);
+
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
+  const [selectedLeaveTypeId, setSelectedLeaveTypeId] = useState<number | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number>(
+    new Date().getFullYear()
+  );
+  const [allocatedDays, setAllocatedDays] = useState("");
+  const [managerStatus, setManagerStatus] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  const filteredEmployees = useMemo(() => {
+    const employees = employeesQuery.data ?? [];
+    if (!managerEmployeeSearch) {
+      return employees;
+    }
+    const search = managerEmployeeSearch.toLowerCase();
+    return employees.filter((employee) =>
+      `${employee.full_name} ${employee.employee_code}`.toLowerCase().includes(search)
+    );
+  }, [employeesQuery.data, managerEmployeeSearch]);
+
+  async function handleAddLeaveBalance(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setManagerStatus(null);
+
+    if (!selectedEmployeeId || !selectedLeaveTypeId || !allocatedDays) {
+      setManagerStatus({ type: "error", message: content.managerErrorMessage });
+      return;
+    }
+
+    try {
+      await createLeaveBalanceMutation.mutateAsync({
+        employee: selectedEmployeeId,
+        leave_type: selectedLeaveTypeId,
+        year: selectedYear,
+        allocated_days: Number(allocatedDays),
+      });
+      setManagerStatus({ type: "success", message: content.managerSuccessMessage });
+      setAllocatedDays("");
+    } catch (error) {
+      setManagerStatus({ type: "error", message: content.managerErrorMessage });
+    }
+  }
+
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });
@@ -687,7 +807,167 @@ export function LeaveBalancePage() {
                 <div className="leave-empty">{content.emptyState}</div>
               )}
             </div>
-          </section>
+            {isManagerOrHr && (
+              <div className="panel leave-balance-manager">
+                <div className="panel__header">
+                  <div>
+                    <h2>{content.managerSectionTitle}</h2>
+                    <p>{content.managerSectionSubtitle}</p>
+                  </div>
+                  <span className="pill">
+                    {employeesQuery.data?.length ?? 0}
+                  </span>
+                </div>
+                <div className="leave-balance-manager__grid">
+                  <div className="leave-balance-manager__form">
+                    <div className="panel__header">
+                      <div>
+                        <h3>{content.managerFormTitle}</h3>
+                        <p>{content.managerFormSubtitle}</p>
+                      </div>
+                    </div>
+                    <form onSubmit={handleAddLeaveBalance}>
+                      <div className="leave-balance-manager__fields">
+                        <label className="leave-balance-manager__field">
+                          <span>{content.managerEmployeeLabel}</span>
+                          <select
+                            value={selectedEmployeeId ?? ""}
+                            onChange={(event) =>
+                              setSelectedEmployeeId(
+                                event.target.value ? Number(event.target.value) : null
+                              )
+                            }
+                          >
+                            <option value="">
+                              {content.managerEmployeeLabel}
+                            </option>
+                            {(employeesQuery.data ?? []).map((employee) => (
+                              <option key={employee.id} value={employee.id}>
+                                {employee.full_name} • {employee.employee_code}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="leave-balance-manager__field">
+                          <span>{content.managerLeaveTypeLabel}</span>
+                          <select
+                            value={selectedLeaveTypeId ?? ""}
+                            onChange={(event) =>
+                              setSelectedLeaveTypeId(
+                                event.target.value ? Number(event.target.value) : null
+                              )
+                            }
+                          >
+                            <option value="">
+                              {content.managerLeaveTypeLabel}
+                            </option>
+                            {(leaveTypesQuery.data ?? []).map((type) => (
+                              <option key={type.id} value={type.id}>
+                                {type.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div className="leave-balance-manager__row">
+                          <label className="leave-balance-manager__field">
+                            <span>{content.managerYearLabel}</span>
+                            <input
+                              type="number"
+                              value={selectedYear}
+                              onChange={(event) =>
+                                setSelectedYear(Number(event.target.value))
+                              }
+                            />
+                          </label>
+                          <label className="leave-balance-manager__field">
+                            <span>{content.managerAllocatedLabel}</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.25"
+                              value={allocatedDays}
+                              onChange={(event) => setAllocatedDays(event.target.value)}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <div className="leave-balance-manager__actions">
+                        <button
+                          type="submit"
+                          className="pill-button"
+                          disabled={createLeaveBalanceMutation.isPending}
+                        >
+                          {createLeaveBalanceMutation.isPending
+                            ? content.loadingLabel
+                            : content.managerSubmitLabel}
+                        </button>
+                        {managerStatus && (
+                          <span
+                            className={`leave-balance-manager__status leave-balance-manager__status--${managerStatus.type}`}
+                          >
+                            {managerStatus.message}
+                          </span>
+                        )}
+                      </div>
+                    </form>
+                  </div>
+                  <div className="leave-balance-manager__list">
+                    <div className="panel__header">
+                      <div>
+                        <h3>{content.managerEmployeesTitle}</h3>
+                        <p>{content.managerEmployeesSubtitle}</p>
+                      </div>
+                      <input
+                        className="leave-balance-manager__search"
+                        type="text"
+                        placeholder={content.managerEmployeeSearchPlaceholder}
+                        value={managerEmployeeSearch}
+                        onChange={(event) => setManagerEmployeeSearch(event.target.value)}
+                      />
+                    </div>
+                    <div className="leave-table-wrapper">
+                      <table className="leave-table leave-balance-manager__table">
+                        <thead>
+                          <tr>
+                            <th>{content.managerEmployeeLabel}</th>
+                            <th>{content.nav.departments}</th>
+                            <th>{content.managerSelectEmployeeLabel}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredEmployees.map((employee) => (
+                            <tr key={employee.id}>
+                              <td>
+                                {employee.full_name}
+                                <div className="leave-balance-manager__meta">
+                                  {employee.employee_code}
+                                </div>
+                              </td>
+                              <td>{employee.department?.name ?? "-"}</td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="pill-button pill-button--ghost"
+                                  onClick={() => setSelectedEmployeeId(employee.id)}
+                                >
+                                  {content.managerSelectEmployeeLabel}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {!employeesQuery.isLoading && filteredEmployees.length === 0 && (
+                      <div className="leave-empty">
+                        {content.managerEmployeeEmptyState}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>          
         </main>
       </div>
     </div>

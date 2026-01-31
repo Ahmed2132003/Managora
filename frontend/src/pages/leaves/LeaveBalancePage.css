@@ -70,8 +70,122 @@
   text-align: center;
 }
 
+.leave-balance-manager {
+  grid-column: span 2;
+}
+
+.leave-balance-manager__grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(280px, 1.2fr);
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.leave-balance-manager__form,
+.leave-balance-manager__list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.leave-balance-manager__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.leave-balance-manager__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.leave-balance-manager__field span {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.leave-balance-manager__field input,
+.leave-balance-manager__field select {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: inherit;
+}
+
+.leave-balance-manager__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.leave-balance-manager__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.leave-balance-manager__status {
+  font-size: 0.9rem;
+}
+
+.leave-balance-manager__status--success {
+  color: #2f9e44;
+}
+
+.leave-balance-manager__status--error {
+  color: #f03e3e;
+}
+
+.leave-balance-manager__search {
+  margin-left: auto;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  min-width: 200px;
+  color: inherit;
+}
+
+.leave-balance-manager__table th:last-child,
+.leave-balance-manager__table td:last-child {
+  text-align: center;
+  width: 140px;
+}
+
+.leave-balance-manager__meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.leave-balance-page .pill-button--ghost {
+  width: auto;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--border);
+}
+
 @media (max-width: 720px) {
   .leave-table {
     min-width: 540px;
+  }
+
+  .leave-balance-manager {
+    grid-column: span 1;
+  }
+
+  .leave-balance-manager__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .leave-balance-manager__search {
+    width: 100%;
+    margin-left: 0;
   }
 }

@@ -296,6 +296,7 @@ export type UseEmployeesParams = {
   filters?: EmployeeFilters;
   search?: string;
   page?: number;
+  enabled?: boolean;
 };
 
 export type EmployeePayload = {
@@ -396,10 +397,11 @@ export function useAttendanceRecordsQuery(filters: AttendanceFilters) {
 }
 
 
-export function useEmployees({ filters, search, page }: UseEmployeesParams) {
+export function useEmployees({ filters, search, page, enabled = true }: UseEmployeesParams) {
   return useQuery({
     queryKey: ["hr", "employees", { filters, search, page }],
-    queryFn: async () => {
+    enabled,
+    queryFn: async () => {      
       const params: Record<string, string | number> = {};
       if (search) params.search = search;
       if (filters?.status) params.status = filters.status;
@@ -711,11 +713,21 @@ export type LeaveRequestCreatePayload = {
 
 export type LeaveBalance = {
   id: number;
+  employee?: AttendanceEmployee;
   leave_type: LeaveType;
   year: number;
   allocated_days: string | number;
   used_days: string | number;
   remaining_days: string | number;
+};
+
+export type LeaveBalanceCreatePayload = {
+  employee: number;
+  leave_type: number;
+  year: number;
+  allocated_days: string | number;
+  used_days?: string | number;
+  carryover_days?: string | number | null;
 };
 
 export type PolicyRule = {
@@ -781,6 +793,15 @@ export function useMyLeaveBalancesQuery(params?: { year?: number }) {
           year: params?.year,
         },
       });
+      return response.data;
+    },
+  });
+}
+
+export function useCreateLeaveBalanceMutation() {
+  return useMutation({
+    mutationFn: async (payload: LeaveBalanceCreatePayload) => {
+      const response = await http.post<LeaveBalance>(endpoints.hr.leaveBalances, payload);
       return response.data;
     },
   });
