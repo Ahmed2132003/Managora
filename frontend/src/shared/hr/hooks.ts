@@ -740,8 +740,16 @@ export function useLeaveTypesQuery() {
   return useQuery({
     queryKey: ["leaves", "types"],
     queryFn: async () => {
-      const response = await http.get<LeaveType[]>(endpoints.hr.leaveTypes);
-      return response.data;
+      const response = await http.get<LeaveType[] | { results: LeaveType[] }>(
+        endpoints.hr.leaveTypes
+      );
+      if (Array.isArray(response.data)) {
+        return response.data;
+      }
+      if ("results" in response.data && Array.isArray(response.data.results)) {
+        return response.data.results;
+      }
+      return [];
     },
   });
 }
