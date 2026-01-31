@@ -504,7 +504,6 @@ export function SelfAttendancePage() {
         path: "/attendance/self",
         label: content.nav.attendanceSelf,
         icon: "🕒",
-        permissions: ["attendance.*", "attendance.view_team"],
       },
       { path: "/leaves/balance", label: content.nav.leaveBalance, icon: "📅", permissions: ["leaves.*"] },
       { path: "/leaves/request", label: content.nav.leaveRequest, icon: "📝", permissions: ["leaves.*"] },

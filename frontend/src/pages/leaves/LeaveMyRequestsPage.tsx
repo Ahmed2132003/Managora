@@ -266,7 +266,6 @@ export function LeaveMyRequestsPage() {
         path: "/attendance/self",
         label: content.nav.attendanceSelf,
         icon: "🕒",
-        permissions: ["attendance.*", "attendance.view_team"],
       },
       {
         path: "/leaves/balance",

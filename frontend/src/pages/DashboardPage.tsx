@@ -481,7 +481,6 @@ export function DashboardPage() {
         path: "/attendance/self",
         label: content.nav.attendanceSelf,
         icon: "🕒",
-        permissions: ["attendance.*", "attendance.view_team"],
       },
       {
         path: "/leaves/balance",
@@ -524,6 +523,7 @@ export function DashboardPage() {
         label: content.nav.hrAttendance,
         icon: "📍",
         permissions: ["attendance.*", "attendance.view_team"],
+        
       },
       {
         path: "/hr/leaves/inbox",

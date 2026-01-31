@@ -449,8 +449,7 @@ export function CopilotPage() {
       {
         path: "/attendance/self",
         label: content.nav.attendanceSelf,
-        icon: "🕒",
-        permissions: ["attendance.*", "attendance.view_team"],
+        icon: "🕒",        
       },
       {
         path: "/leaves/balance",
