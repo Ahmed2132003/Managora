@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Modal } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -397,12 +397,6 @@ export function PayrollPage() {
     return today.toISOString().slice(0, 10);
   });
 
-  useEffect(() => {
-    if (periodType === "daily") {
-      setPeriodEndDate(periodStartDate);
-    }
-  }, [periodStartDate, periodType]);
-
   const periodsQuery = usePayrollPeriods();
   const createPeriodMutation = useCreatePeriod();
   const employeesQuery = useEmployees({});
@@ -421,11 +415,13 @@ export function PayrollPage() {
       ])
     );
   }, [salaryStructuresQuery.data]);
+  const effectivePeriodEndDate =
+    periodType === "daily" ? periodStartDate : periodEndDate;
   const selectedPeriod = useMemo(() => {
     if (selectedPeriodId) {
       return periods.find((period) => period.id === selectedPeriodId) ?? null;
     }
-    if (periodType === "monthly" && month && year) {
+    if (periodType === "monthly" && month && year) {      
       const monthValue = Number(month);
       const yearValue = Number(year);
       return (
@@ -437,18 +433,26 @@ export function PayrollPage() {
         ) ?? null
       );
     }
-    if (periodType !== "monthly" && periodStartDate && periodEndDate) {
+    if (periodType !== "monthly" && periodStartDate && effectivePeriodEndDate) {
       return (
         periods.find(
           (period) =>
             period.period_type === periodType &&
             period.start_date === periodStartDate &&
-            period.end_date === periodEndDate
+            period.end_date === effectivePeriodEndDate
         ) ?? null
       );
     }
     return null;
-  }, [month, periodEndDate, periodStartDate, periodType, periods, selectedPeriodId, year]);
+  }, [
+    effectivePeriodEndDate,
+    month,
+    periodStartDate,
+    periodType,
+    periods,
+    selectedPeriodId,
+    year,
+  ]);  
   const generatePeriodMutation = useGeneratePeriod(selectedPeriod?.id ?? null);
 
   const yearOptions = useMemo(() => {
@@ -485,7 +489,7 @@ export function PayrollPage() {
       (periodType === "monthly" ? fallbackStart : periodStartDate);
     const dateTo =
       selectedPeriod?.end_date ??
-      (periodType === "monthly" ? fallbackEnd : periodEndDate);
+      (periodType === "monthly" ? fallbackEnd : effectivePeriodEndDate);      
     const start = new Date(dateFrom);
     const end = new Date(dateTo);
     const days = Math.max(
@@ -496,7 +500,7 @@ export function PayrollPage() {
   }, [
     fallbackEnd,
     fallbackStart,
-    periodEndDate,
+    effectivePeriodEndDate,    
     periodStartDate,
     periodType,
     selectedPeriod,
@@ -541,7 +545,7 @@ export function PayrollPage() {
           });
           return;
         }
-      } else if (!periodStartDate || !periodEndDate) {
+      } else if (!periodStartDate || !effectivePeriodEndDate) {        
         notifications.show({
           title: "Missing info",
           message: "من فضلك حدد بداية ونهاية الفترة.",
@@ -560,7 +564,7 @@ export function PayrollPage() {
             ? periodStartDate
             : periodType === "monthly"
               ? undefined
-              : periodEndDate,
+              : effectivePeriodEndDate,              
       });
       notifications.show({
         title: "Period created",
