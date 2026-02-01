@@ -7,11 +7,12 @@ import {
   Drawer,
   Group,
   Skeleton,
+  SimpleGrid,
   Stack,
   Table,
   Text,
   TextInput,
-  Title,
+  Title,  
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
@@ -23,6 +24,7 @@ import {
   usePayrollRun,
   usePayrollPeriods,
   usePeriodRuns,
+  useAttendanceRecordsQuery,
 } from "../../shared/hr/hooks";
 import type { PayrollRun } from "../../shared/hr/hooks";
 
@@ -40,6 +42,14 @@ function formatMoney(value: string | number) {
   return Number.isNaN(amount) ? "-" : amount.toFixed(2);
 }
 
+function parseAmount(value: unknown) {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
 function getBasicFromLines(lines: { name: string; code: string; amount: string }[]) {
   const basicLine = lines.find((line) => {
     const name = line.name.toLowerCase();
@@ -47,6 +57,31 @@ function getBasicFromLines(lines: { name: string; code: string; amount: string }
     return name.includes("basic") || code.includes("basic");
   });
   return basicLine?.amount ?? null;
+}
+
+function resolveDailyRateByPeriod(
+  periodType: "monthly" | "weekly" | "daily" | undefined,
+  basicSalary: number
+) {
+  if (!basicSalary) return null;
+  if (periodType === "daily") return basicSalary;
+  if (periodType === "weekly") return basicSalary / 7;
+  return basicSalary / 30;
+}
+
+function getPeriodRange(period?: { start_date?: string | null; end_date?: string | null }) {
+  const dateFrom = period?.start_date ?? null;
+  const dateTo = period?.end_date ?? null;
+  if (!dateFrom || !dateTo) {
+    return null;
+  }
+  const start = new Date(dateFrom);
+  const end = new Date(dateTo);
+  const days = Math.max(
+    Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+    1
+  );
+  return { dateFrom, dateTo, days };
 }
 
 export function PayrollPeriodDetailsPage() {
@@ -82,6 +117,80 @@ export function PayrollPeriodDetailsPage() {
     periodsQuery.data?.find((period) => period.id === periodId) ??
     runDetailsQuery.data?.period ??
     null;
+
+  const runPeriodRange = useMemo(() => {
+    return runDetailsQuery.data?.period
+      ? getPeriodRange(runDetailsQuery.data.period)
+      : null;
+  }, [runDetailsQuery.data?.period]);
+
+  const attendanceQuery = useAttendanceRecordsQuery(
+    {
+      dateFrom: runPeriodRange?.dateFrom ?? undefined,
+      dateTo: runPeriodRange?.dateTo ?? undefined,
+      employeeId: runDetailsQuery.data?.employee.id
+        ? String(runDetailsQuery.data.employee.id)
+        : undefined,
+    },
+    Boolean(runDetailsQuery.data?.employee.id && runPeriodRange)
+  );
+
+  const runSummary = useMemo(() => {
+    if (!runDetailsQuery.data || !runPeriodRange) {
+      return null;
+    }
+
+    const records = attendanceQuery.data ?? [];
+    const presentDays = records.filter((record) => record.status !== "absent").length;
+    const absentDays = Math.max(runPeriodRange.days - presentDays, 0);
+    const lateMinutes = records.reduce((sum, record) => sum + (record.late_minutes ?? 0), 0);
+    const lines = runDetailsQuery.data.lines ?? [];
+    const basicLine = lines.find((line) => line.code.toUpperCase() === "BASIC");
+    const basicAmount = basicLine ? parseAmount(basicLine.amount) : 0;
+    const metaRate = basicLine?.meta?.rate;
+    const dailyRate = metaRate
+      ? parseAmount(metaRate)
+      : resolveDailyRateByPeriod(runDetailsQuery.data.period.period_type, basicAmount);
+    const attendanceEarnings = dailyRate ? dailyRate * presentDays : 0;
+    const bonuses = lines
+      .filter(
+        (line) =>
+          line.type === "earning" &&
+          line.code.toUpperCase() !== "BASIC" &&
+          !line.code.toUpperCase().startsWith("COMM-")
+      )
+      .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+    const commissions = lines
+      .filter(
+        (line) => line.type === "earning" && line.code.toUpperCase().startsWith("COMM-")
+      )
+      .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+    const deductions = lines
+      .filter(
+        (line) =>
+          line.type === "deduction" && line.code.toUpperCase().startsWith("COMP-")
+      )
+      .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+    const advances = lines
+      .filter(
+        (line) =>
+          line.type === "deduction" && line.code.toUpperCase().startsWith("LOAN-")
+      )
+      .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+    const netPay = attendanceEarnings + bonuses + commissions - (deductions + advances);
+
+    return {
+      presentDays,
+      absentDays,
+      lateMinutes,
+      bonuses,
+      commissions,
+      deductions,
+      advances,
+      netPay,
+      dailyRate,
+    };
+  }, [attendanceQuery.data, runDetailsQuery.data, runPeriodRange]);
 
   useEffect(() => {
     autoGeneratedRef.current = false;
@@ -289,12 +398,55 @@ export function PayrollPeriodDetailsPage() {
                     runDetailsQuery.data.earnings_total
                 )}
               </Text>
-              <Text c="dimmed" size="sm">
-                Net: {formatMoney(runDetailsQuery.data.net_total)}
-              </Text>
+              {runSummary && (
+                <Text c="dimmed" size="sm">
+                  Payable: {formatMoney(runSummary.netPay)}
+                </Text>
+              )}
             </Group>
 
-            <Table withTableBorder>
+            {runSummary && (
+              <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="md">
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Attendance days
+                  </Text>
+                  <Text fw={600}>{runSummary.presentDays}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Absence days
+                  </Text>
+                  <Text fw={600}>{runSummary.absentDays}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Late minutes
+                  </Text>
+                  <Text fw={600}>{runSummary.lateMinutes}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Bonuses
+                  </Text>
+                  <Text fw={600}>{formatMoney(runSummary.bonuses)}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Deductions
+                  </Text>
+                  <Text fw={600}>{formatMoney(runSummary.deductions)}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Advances
+                  </Text>
+                  <Text fw={600}>{formatMoney(runSummary.advances)}</Text>
+                </div>
+              </SimpleGrid>
+            )}
+
+            <Table withTableBorder>              
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Line</Table.Th>
