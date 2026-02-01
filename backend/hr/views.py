@@ -444,42 +444,52 @@ def _build_pending_attendance_items(record: AttendanceRecord) -> list[dict]:
             }
         )
     return items
+import logging
+logger = logging.getLogger(__name__)
 
 def _user_can_approve(user, leave_request):
-    # لازم يبقى معاه صلاحية عامة (leaves.* أو approvals.*)
-    if not (
-        user_has_permission(user, "leaves.*")
-        or user_has_permission(user, "approvals.*")
-    ):
+    # Permissions
+    has_leaves = user_has_permission(user, "leaves.*")
+    has_approvals = user_has_permission(user, "approvals.*")
+
+    if not (has_leaves or has_approvals):
+        logger.info("LEAVE_APPROVE_CHECK denied=no_permission user_id=%s", getattr(user, "id", None))
         return False
 
-    # مينفعش يوافق على طلبه هو
+    # Can't approve own request
     if leave_request.employee.user_id == user.id:
+        logger.info("LEAVE_APPROVE_CHECK denied=own_request user_id=%s leave_id=%s", user.id, leave_request.id)
         return False
 
     approver_roles = _user_role_names(user)
     requester_user = getattr(leave_request.employee, "user", None)
     requester_roles = _user_role_names(requester_user)
 
-    # ✅ لو Admin موجود عندك: اعتبره Super Approver
+    logger.info(
+        "LEAVE_APPROVE_CHECK user_id=%s has_leaves=%s has_approvals=%s approver_roles=%s requester_user_id=%s requester_roles=%s leave_id=%s",
+        getattr(user, "id", None),
+        has_leaves,
+        has_approvals,
+        sorted(list(approver_roles)),
+        getattr(requester_user, "id", None),
+        sorted(list(requester_roles)),
+        getattr(leave_request, "id", None),
+    )
+
+    # Admin as super-approver (if role exists)
     if "admin" in approver_roles:
         return True
 
-    # ✅ leaves.* = HR Controller كامل (بس لازم نطبق نفس قواعد HR/Manager)
-    # لو عايز leaves.* يخلي HR يوافق على الكل فعلاً سيبها True،
-    # لكن بما إن عندك قواعد واضحة، هنطبّق القواعد بدل السماح المطلق.
-    # (لو انت عايز leaves.* = super, ارجعها True هنا وخلاص)
-    if user_has_permission(user, "leaves.*"):
-        # لو HR بس (مش Manager) ممنوع يوافق على HR/Manager/Admin
+    # leaves.*: full controller, but apply HR restriction if HR-only (not manager)
+    if has_leaves:
         if "hr" in approver_roles and "manager" not in approver_roles:
-            if "hr" in requester_roles or "manager" in requester_roles or "admin" in requester_roles:
+            if {"hr", "manager", "admin"} & set(requester_roles):
                 return False
         return True
 
-    # ✅ approvals.* (موافقات على حسب الدور)
+    # approvals.*: role-based approvals
     if "manager" in approver_roles:
-        # المدير يقدر يوافق على الكل
-        # (ولو طالب الإجازة Manager كمان: خليها manager->manager مقيدة بالمدير المباشر لو موجود)
+        # manager can approve; if requester is manager too, optionally restrict by direct manager
         if "manager" in requester_roles:
             if leave_request.employee.manager_id:
                 manager_employee = getattr(user, "employee_profile", None)
@@ -490,8 +500,8 @@ def _user_can_approve(user, leave_request):
         return True
 
     if "hr" in approver_roles:
-        # ✅ HR يوافق فقط على Employee/Accountant
-        if "hr" in requester_roles or "manager" in requester_roles or "admin" in requester_roles:
+        # HR approves only Employee/Accountant
+        if {"hr", "manager", "admin"} & set(requester_roles):
             return False
         return True
 
