@@ -238,8 +238,11 @@ export type PayrollPeriodStatus = "draft" | "locked";
 
 export type PayrollPeriod = {
   id: number;
+  period_type: "monthly" | "weekly" | "daily";
   year: number;
   month: number;
+  start_date: string;
+  end_date: string;
   status: PayrollPeriodStatus;
   locked_at: string | null;
   created_by: number | null;
@@ -1093,12 +1096,18 @@ export function usePayrollPeriods() {
 
 export function useCreatePeriod() {
   return useMutation({
-    mutationFn: async (payload: { year: number; month: number }) => {
+    mutationFn: async (payload: {
+      period_type: PayrollPeriod["period_type"];
+      year?: number;
+      month?: number;
+      start_date?: string;
+      end_date?: string;
+    }) => {
       const response = await http.post<PayrollPeriod>(
         endpoints.hr.payrollPeriods,
         payload
       );
-      return response.data;
+      return response.data;      
     },
   });
 }

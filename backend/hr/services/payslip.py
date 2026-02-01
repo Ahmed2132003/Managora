@@ -22,11 +22,13 @@ def render_payslip_pdf(payroll_run):
     y -= 5 * mm
     pdf.drawString(20 * mm, y, f"Employee Code: {payroll_run.employee.employee_code}")
     y -= 5 * mm
+    period = payroll_run.period
+    period_label = f"{period.start_date} to {period.end_date}"
     pdf.drawString(
         20 * mm,
         y,
-        f"Period: {payroll_run.period.year}-{payroll_run.period.month:02d}",
-    )
+        f"Period: {period_label}",
+    )    
     y -= 10 * mm
 
     earnings = payroll_run.lines.filter(type=PayrollLine.LineType.EARNING)

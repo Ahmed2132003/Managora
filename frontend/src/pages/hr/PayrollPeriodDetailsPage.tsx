@@ -70,6 +70,10 @@ export function PayrollPeriodDetailsPage() {
   const periodStatus =
     periodsQuery.data?.find((period) => period.id === periodId)?.status ??
     runDetailsQuery.data?.period?.status;
+  const periodInfo =
+    periodsQuery.data?.find((period) => period.id === periodId) ??
+    runDetailsQuery.data?.period ??
+    null;
 
   if (
     isForbiddenError(runsQuery.error) ||
@@ -152,7 +156,11 @@ export function PayrollPeriodDetailsPage() {
           </Badge>
         )}
       </Group>
-
+      {periodInfo && (
+        <Text c="dimmed" size="sm">
+          {periodInfo.period_type} · {periodInfo.start_date} → {periodInfo.end_date}
+        </Text>
+      )}
       <Card withBorder radius="md" p="md">
         <Group align="flex-end" gap="md">
           <TextInput

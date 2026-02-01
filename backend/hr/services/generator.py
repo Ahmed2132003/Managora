@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -61,18 +61,29 @@ def generate_period(company, year, month, actor):
     if period.status == PayrollPeriod.Status.LOCKED:
         raise ValidationError("Payroll period is locked.")
 
-    start_date, end_date = _month_date_range(year, month)
+    start_date = period.start_date
+    end_date = period.end_date
+    if not start_date or not end_date:
+        start_date, end_date = _month_date_range(year, month)
     employees = Employee.objects.filter(
         company=company, status=Employee.Status.ACTIVE
     ).select_related("salary_structure")
 
+    if actor:
+        actor_roles = set(actor.roles.values_list("name", flat=True))
+        if "HR" in actor_roles and "Manager" not in actor_roles:
+            employees = employees.filter(
+                Q(user__isnull=True) | Q(user__roles__name__in=["Accountant", "Employee"])
+            ).distinct()
+
     summary = {"generated": 0, "skipped": []}
 
+    period_type = period.period_type
     with transaction.atomic():
         for employee in employees:
             salary_structure = getattr(employee, "salary_structure", None)
             if not salary_structure:
-                summary["skipped"].append(
+                summary["skipped"].append(                    
                     {
                         "employee_id": employee.id,
                         "reason": "Salary structure is missing.",
@@ -80,7 +91,19 @@ def generate_period(company, year, month, actor):
                 )
                 continue
 
-            basic_salary = salary_structure.basic_salary
+            if (
+                salary_structure.salary_type != SalaryStructure.SalaryType.COMMISSION
+                and salary_structure.salary_type != period_type
+            ):
+                summary["skipped"].append(
+                    {
+                        "employee_id": employee.id,
+                        "reason": "Salary type does not match payroll period.",
+                    }
+                )
+                continue
+
+            basic_salary = salary_structure.basic_salary            
             daily_rate = _resolve_daily_rate(salary_structure)
             minute_rate = (daily_rate / MINUTES_PER_DAY) if daily_rate else None
 

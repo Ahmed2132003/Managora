@@ -743,7 +743,17 @@ class HRActionSerializer(serializers.ModelSerializer):
 class PayrollPeriodSerializer(serializers.ModelSerializer):
     class Meta:
         model = PayrollPeriod
-        fields = ("id", "year", "month", "status", "locked_at", "created_by")
+        fields = (
+            "id",
+            "period_type",
+            "year",
+            "month",
+            "start_date",
+            "end_date",
+            "status",
+            "locked_at",
+            "created_by",
+        )
         read_only_fields = ("id",)
 
     def validate(self, attrs):
@@ -754,13 +764,39 @@ class PayrollPeriodSerializer(serializers.ModelSerializer):
         created_by = attrs.get("created_by")
         if created_by and company and created_by.company_id != company.id:
             raise serializers.ValidationError({"created_by": "User must belong to the same company."})
+        period_type = attrs.get("period_type", getattr(self.instance, "period_type", None))
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        year = attrs.get("year", getattr(self.instance, "year", None))
+        month = attrs.get("month", getattr(self.instance, "month", None))
+
+        if period_type == PayrollPeriod.PeriodType.MONTHLY:
+            if not year or not month:
+                raise serializers.ValidationError(
+                    {"month": "Month and year are required for monthly periods."}
+                )
+        else:
+            if not start_date or not end_date:
+                raise serializers.ValidationError(
+                    {"start_date": "Start date and end date are required."}
+                )
+            if start_date > end_date:
+                raise serializers.ValidationError({"end_date": "End date must be after start date."})
+            if period_type == PayrollPeriod.PeriodType.DAILY and start_date != end_date:
+                raise serializers.ValidationError(
+                    {"end_date": "Daily payroll periods must be a single day."}
+                )
         return attrs
 
     def create(self, validated_data):
         request = self.context.get("request")
         validated_data["company"] = request.user.company
+        if not validated_data.get("year") and validated_data.get("start_date"):
+            validated_data["year"] = validated_data["start_date"].year
+        if not validated_data.get("month") and validated_data.get("start_date"):
+            validated_data["month"] = validated_data["start_date"].month
         return super().create(validated_data)
-
+    
     def update(self, instance, validated_data):
         validated_data.pop("company", None)
         return super().update(instance, validated_data)

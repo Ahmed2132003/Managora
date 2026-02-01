@@ -1,3 +1,5 @@
+from calendar import monthrange
+from datetime import date
 from decimal import Decimal
 
 from django.conf import settings
@@ -550,12 +552,24 @@ class LeaveRequest(BaseModel):
 
 
 class PayrollPeriod(BaseModel):
+    class PeriodType(models.TextChoices):
+        MONTHLY = "monthly", "Monthly"
+        WEEKLY = "weekly", "Weekly"
+        DAILY = "daily", "Daily"
+
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
         LOCKED = "locked", "Locked"
 
+    period_type = models.CharField(
+        max_length=20,
+        choices=PeriodType.choices,
+        default=PeriodType.MONTHLY,
+    )
     year = models.PositiveIntegerField()
     month = models.PositiveSmallIntegerField()
+    start_date = models.DateField()
+    end_date = models.DateField()
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
     locked_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
@@ -569,14 +583,28 @@ class PayrollPeriod(BaseModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["company", "year", "month"],
-                name="unique_payroll_period_per_company",
+                fields=["company", "period_type", "start_date", "end_date"],
+                name="unique_payroll_period_per_company_range",                
             ),
         ]
 
-    def __str__(self):
-        return f"{self.company.name} - {self.year}/{self.month:02d}"
+    def save(self, *args, **kwargs):
+        if self.period_type == self.PeriodType.MONTHLY and self.year and self.month:
+            start_date = date(self.year, self.month, 1)
+            last_day = monthrange(self.year, self.month)[1]
+            end_date = date(self.year, self.month, last_day)
+            self.start_date = self.start_date or start_date
+            self.end_date = self.end_date or end_date
+        if self.start_date and not self.year:
+            self.year = self.start_date.year
+        if self.start_date and not self.month:
+            self.month = self.start_date.month
+        super().save(*args, **kwargs)
 
+    def __str__(self):
+        range_label = f"{self.start_date} to {self.end_date}"
+        return f"{self.company.name} - {self.period_type} - {range_label}"
+    
 
 class SalaryStructure(BaseModel):
     class SalaryType(models.TextChoices):

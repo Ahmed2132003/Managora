@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Modal } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -32,24 +32,30 @@ type PageContent = {
   periodSection: {
     title: string;
     subtitle: string;
+    periodType: string;
     month: string;
     year: string;
+    startDate: string;
+    endDate: string;
     create: string;
     generate: string;
     status: string;
   };
-  periods: {
+  periods: {    
     title: string;
     subtitle: string;
     empty: string;
     columns: {
       period: string;
+      type: string;
+      range: string;
       status: string;
       actions: string;
     };
     viewRuns: string;
+    select: string;
     refresh: string;
-  };
+  };  
   employees: {
     title: string;
     subtitle: string;
@@ -114,8 +120,11 @@ const contentMap: Record<Language, PageContent> = {
     periodSection: {
       title: "Payroll period",
       subtitle: "Create and generate payroll periods.",
+      periodType: "Period type",
       month: "Month",
       year: "Year",
+      startDate: "Start date",
+      endDate: "End date",
       create: "Create period",
       generate: "Generate",
       status: "Status",
@@ -126,12 +135,15 @@ const contentMap: Record<Language, PageContent> = {
       empty: "No payroll periods yet.",
       columns: {
         period: "Period",
+        type: "Type",
+        range: "Range",
         status: "Status",
         actions: "Actions",
       },
       viewRuns: "View runs",
+      select: "Select",
       refresh: "Refresh",
-    },
+    },    
     employees: {
       title: "Employee salaries",
       subtitle: "Review salary types, rates, and manage pay settings.",
@@ -194,8 +206,11 @@ const contentMap: Record<Language, PageContent> = {
     periodSection: {
       title: "فترة الرواتب",
       subtitle: "إنشاء وتوليد فترات الرواتب.",
+      periodType: "نوع الفترة",
       month: "الشهر",
       year: "السنة",
+      startDate: "تاريخ البداية",
+      endDate: "تاريخ النهاية",
       create: "إنشاء فترة",
       generate: "توليد",
       status: "الحالة",
@@ -206,12 +221,15 @@ const contentMap: Record<Language, PageContent> = {
       empty: "لا توجد فترات رواتب بعد.",
       columns: {
         period: "الفترة",
+        type: "النوع",
+        range: "المدى",
         status: "الحالة",
         actions: "الإجراءات",
       },
       viewRuns: "عرض التشغيل",
+      select: "تحديد",
       refresh: "تحديث",
-    },
+    },    
     employees: {
       title: "رواتب الموظفين",
       subtitle: "مراجعة أنواع الرواتب والأجور وإدارة بيانات الدفع.",
@@ -316,8 +334,27 @@ const salaryTypeOptionsByLanguage: Record<Language, { value: SalaryType; label: 
   ],
 };
 
+const periodTypeOptionsByLanguage: Record<
+  Language,
+  { value: PayrollPeriod["period_type"]; label: string }[]
+> = {
+  en: [
+    { value: "monthly", label: "Monthly" },
+    { value: "weekly", label: "Weekly" },
+    { value: "daily", label: "Daily" },
+  ],
+  ar: [
+    { value: "monthly", label: "شهري" },
+    { value: "weekly", label: "أسبوعي" },
+    { value: "daily", label: "يومي" },
+  ],
+};
+
 function formatPeriodLabel(period: PayrollPeriod) {
-  return `${period.year}-${String(period.month).padStart(2, "0")}`;
+  if (period.period_type === "monthly") {
+    return `${period.year}-${String(period.month).padStart(2, "0")}`;
+  }
+  return `${period.start_date} → ${period.end_date}`;
 }
 
 function resolveDailyRate(type: SalaryType, basicSalary: number): number | null {
@@ -331,9 +368,19 @@ export function PayrollPage() {
   const navigate = useNavigate();
   const [month, setMonth] = useState<string | null>(null);
   const [year, setYear] = useState<string | null>(null);
+  const [periodType, setPeriodType] = useState<PayrollPeriod["period_type"]>("monthly");
+  const [periodStartDate, setPeriodStartDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().slice(0, 10);
+  });
+  const [periodEndDate, setPeriodEndDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().slice(0, 10);
+  });
+  const [selectedPeriodId, setSelectedPeriodId] = useState<number | null>(null);
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const [salaryEmployeeId, setSalaryEmployeeId] = useState<number | null>(null);
-  const [salaryType, setSalaryType] = useState<SalaryType>("monthly");
+  const [salaryType, setSalaryType] = useState<SalaryType>("monthly");  
   const [basicSalary, setBasicSalary] = useState<number>(0);
   const [currency, setCurrency] = useState<string>("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
@@ -349,6 +396,12 @@ export function PayrollPage() {
     const today = new Date();
     return today.toISOString().slice(0, 10);
   });
+
+  useEffect(() => {
+    if (periodType === "daily") {
+      setPeriodEndDate(periodStartDate);
+    }
+  }, [periodStartDate, periodType]);
 
   const periodsQuery = usePayrollPeriods();
   const createPeriodMutation = useCreatePeriod();
@@ -369,15 +422,33 @@ export function PayrollPage() {
     );
   }, [salaryStructuresQuery.data]);
   const selectedPeriod = useMemo(() => {
-    if (!month || !year) return null;
-    const monthValue = Number(month);
-    const yearValue = Number(year);
-    return (
-      periods.find(
-        (period) => period.month === monthValue && period.year === yearValue
-      ) ?? null
-    );
-  }, [month, year, periods]);
+    if (selectedPeriodId) {
+      return periods.find((period) => period.id === selectedPeriodId) ?? null;
+    }
+    if (periodType === "monthly" && month && year) {
+      const monthValue = Number(month);
+      const yearValue = Number(year);
+      return (
+        periods.find(
+          (period) =>
+            period.period_type === "monthly" &&
+            period.month === monthValue &&
+            period.year === yearValue
+        ) ?? null
+      );
+    }
+    if (periodType !== "monthly" && periodStartDate && periodEndDate) {
+      return (
+        periods.find(
+          (period) =>
+            period.period_type === periodType &&
+            period.start_date === periodStartDate &&
+            period.end_date === periodEndDate
+        ) ?? null
+      );
+    }
+    return null;
+  }, [month, periodEndDate, periodStartDate, periodType, periods, selectedPeriodId, year]);
   const generatePeriodMutation = useGeneratePeriod(selectedPeriod?.id ?? null);
 
   const yearOptions = useMemo(() => {
@@ -406,11 +477,30 @@ export function PayrollPage() {
   const activeMonth = selectedPeriod?.month ?? fallbackMonth;
   const daysInMonth = new Date(activeYear, activeMonth, 0).getDate();
   const periodMonthLabel = String(activeMonth).padStart(2, "0");
-  const periodRange = {
-    dateFrom: `${activeYear}-${periodMonthLabel}-01`,
-    dateTo: `${activeYear}-${periodMonthLabel}-${String(daysInMonth).padStart(2, "0")}`,
-    daysInMonth,
-  };
+  const fallbackStart = `${activeYear}-${periodMonthLabel}-01`;
+  const fallbackEnd = `${activeYear}-${periodMonthLabel}-${String(daysInMonth).padStart(2, "0")}`;
+  const periodRange = useMemo(() => {
+    const dateFrom =
+      selectedPeriod?.start_date ??
+      (periodType === "monthly" ? fallbackStart : periodStartDate);
+    const dateTo =
+      selectedPeriod?.end_date ??
+      (periodType === "monthly" ? fallbackEnd : periodEndDate);
+    const start = new Date(dateFrom);
+    const end = new Date(dateTo);
+    const days = Math.max(
+      Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+      1
+    );
+    return { dateFrom, dateTo, days };
+  }, [
+    fallbackEnd,
+    fallbackStart,
+    periodEndDate,
+    periodStartDate,
+    periodType,
+    selectedPeriod,
+  ]);
 
   const attendanceQuery = useAttendanceRecordsQuery(
     {
@@ -441,29 +531,47 @@ export function PayrollPage() {
   });
 
   async function handleCreatePeriod() {    
-    if (!month || !year) {
-      notifications.show({
-        title: "Missing info",
-        message: "من فضلك اختر الشهر والسنة.",
-        color: "red",
-      });
-      return;
-    }
-
     try {
+      if (periodType === "monthly") {
+        if (!month || !year) {
+          notifications.show({
+            title: "Missing info",
+            message: "من فضلك اختر الشهر والسنة.",
+            color: "red",
+          });
+          return;
+        }
+      } else if (!periodStartDate || !periodEndDate) {
+        notifications.show({
+          title: "Missing info",
+          message: "من فضلك حدد بداية ونهاية الفترة.",
+          color: "red",
+        });
+        return;
+      }
+
       const created = await createPeriodMutation.mutateAsync({
-        month: Number(month),
-        year: Number(year),
+        period_type: periodType,
+        year: periodType === "monthly" ? Number(year) : undefined,
+        month: periodType === "monthly" ? Number(month) : undefined,
+        start_date: periodType === "monthly" ? undefined : periodStartDate,
+        end_date:
+          periodType === "daily"
+            ? periodStartDate
+            : periodType === "monthly"
+              ? undefined
+              : periodEndDate,
       });
       notifications.show({
         title: "Period created",
         message: `تم إنشاء فترة ${formatPeriodLabel(created)}.`,
       });
+      setSelectedPeriodId(created.id);
       periodsQuery.refetch();
     } catch {
       notifications.show({
         title: "Failed to create period",
-        message: "حدث خطأ أثناء إنشاء الفترة.",
+        message: "حدث خطأ أثناء إنشاء الفترة.",        
         color: "red",
       });
     }
@@ -492,6 +600,15 @@ export function PayrollPage() {
         color: "red",
       });
     }
+  }
+
+  function handleSelectPeriod(period: PayrollPeriod) {
+    setSelectedPeriodId(period.id);
+    setPeriodType(period.period_type);
+    setMonth(String(period.month));
+    setYear(String(period.year));
+    setPeriodStartDate(period.start_date);
+    setPeriodEndDate(period.end_date);
   }
 
   function openSalaryModal(employeeId: number) {
@@ -624,7 +741,7 @@ export function PayrollPage() {
   const summaryStats = useMemo(() => {
     const records = attendanceQuery.data ?? [];
     const presentDays = records.filter((record) => record.status !== "absent").length;
-    const absentDays = Math.max(periodRange.daysInMonth - presentDays, 0);
+    const absentDays = Math.max(periodRange.days - presentDays, 0);    
     const lateMinutes = records.reduce((sum, record) => sum + (record.late_minutes ?? 0), 0);
     const components = salaryComponentsQuery.data ?? [];
     const bonuses = components
@@ -665,7 +782,7 @@ export function PayrollPage() {
     attendanceQuery.data,
     commissionQuery.data,
     loanAdvancesQuery.data,
-    periodRange.daysInMonth,
+    periodRange.days,    
     salaryComponentsQuery.data,
     selectedSalaryStructure,
   ]);
@@ -685,21 +802,23 @@ export function PayrollPage() {
   ) {
     return <AccessDenied />;
   }
-  
+
   return (
     <DashboardShell copy={shellCopy} className="payroll-page">
       {({ language, isArabic }) => {
         const content = contentMap[language];
         const months = monthOptions[language];
         const salaryTypeOptions = salaryTypeOptionsByLanguage[language];
+        const periodTypeOptions = periodTypeOptionsByLanguage[language];
         const selectedMonthValue = month ?? "";
         const selectedYearValue = year ?? "";
+        const selectedPeriodType = periodType ?? "monthly";
         const employeeOptions = (employeesQuery.data ?? []).map((employee) => (
           <option key={employee.id} value={employee.id}>
             {employee.full_name}
           </option>
         ));
-        const employeeRows = (employeesQuery.data ?? []).map((employee) => {
+        const employeeRows = (employeesQuery.data ?? []).map((employee) => {          
           const structure = salaryStructuresByEmployee.get(employee.id);
           const dailyRate = structure
             ? resolveDailyRate(structure.salary_type, Number(structure.basic_salary))
@@ -750,32 +869,78 @@ export function PayrollPage() {
               </div>
               <div className="payroll-filters">
                 <label className="form-field">
-                  <span>{content.periodSection.month}</span>
-                  <select value={selectedMonthValue} onChange={(event) => setMonth(event.target.value || null)}>
-                    <option value="">{content.periodSection.month}</option>
-                    {months.map((option) => (
+                  <span>{content.periodSection.periodType}</span>
+                  <select
+                    value={selectedPeriodType}
+                    onChange={(event) =>
+                      setPeriodType(event.target.value as PayrollPeriod["period_type"])
+                    }
+                  >
+                    {periodTypeOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
                     ))}
                   </select>
                 </label>
-                <label className="form-field">
-                  <span>{content.periodSection.year}</span>
-                  <select value={selectedYearValue} onChange={(event) => setYear(event.target.value || null)}>
-                    <option value="">{content.periodSection.year}</option>
-                    {yearOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {periodType === "monthly" ? (
+                  <>
+                    <label className="form-field">
+                      <span>{content.periodSection.month}</span>
+                      <select
+                        value={selectedMonthValue}
+                        onChange={(event) => setMonth(event.target.value || null)}
+                      >
+                        <option value="">{content.periodSection.month}</option>
+                        {months.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="form-field">
+                      <span>{content.periodSection.year}</span>
+                      <select
+                        value={selectedYearValue}
+                        onChange={(event) => setYear(event.target.value || null)}
+                      >
+                        <option value="">{content.periodSection.year}</option>
+                        {yearOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label className="form-field">
+                      <span>{content.periodSection.startDate}</span>
+                      <input
+                        type="date"
+                        value={periodStartDate}
+                        onChange={(event) => setPeriodStartDate(event.target.value)}
+                      />
+                    </label>
+                    {periodType !== "daily" && (
+                      <label className="form-field">
+                        <span>{content.periodSection.endDate}</span>
+                        <input
+                          type="date"
+                          value={periodEndDate}
+                          onChange={(event) => setPeriodEndDate(event.target.value)}
+                        />
+                      </label>
+                    )}
+                  </>
+                )}
                 <button
                   type="button"
                   className="primary-button"
                   onClick={handleCreatePeriod}
-                  disabled={createPeriodMutation.isPending}
+                  disabled={createPeriodMutation.isPending}                  
                 >
                   {content.periodSection.create}
                 </button>
@@ -819,6 +984,8 @@ export function PayrollPage() {
                     <thead>
                       <tr>
                         <th>{content.periods.columns.period}</th>
+                        <th>{content.periods.columns.type}</th>
+                        <th>{content.periods.columns.range}</th>
                         <th>{content.periods.columns.status}</th>
                         <th>{content.periods.columns.actions}</th>
                       </tr>
@@ -827,6 +994,13 @@ export function PayrollPage() {
                       {periods.map((period) => (
                         <tr key={period.id}>
                           <td>{formatPeriodLabel(period)}</td>
+                          <td>
+                            {periodTypeOptions.find((option) => option.value === period.period_type)?.label ??
+                              period.period_type}
+                          </td>
+                          <td>
+                            {period.start_date} → {period.end_date}
+                          </td>
                           <td>
                             <span className="status-pill" data-status={period.status}>
                               {period.status}
@@ -840,11 +1014,18 @@ export function PayrollPage() {
                             >
                               {content.periods.viewRuns}
                             </button>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() => handleSelectPeriod(period)}
+                            >
+                              {content.periods.select}
+                            </button>
                           </td>
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </table>                  
                 </div>
               )}
             </section>
