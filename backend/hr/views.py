@@ -15,6 +15,7 @@ from rest_framework.generics import (
     DestroyAPIView,
     ListAPIView,
     ListCreateAPIView,
+    ListCreateAPIView,
 )
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -1536,16 +1537,24 @@ class CommissionRejectView(APIView):
     request=PayrollPeriodSerializer,
     responses={201: PayrollPeriodSerializer},
 )
-class PayrollPeriodCreateView(CreateAPIView):
+class PayrollPeriodCreateView(ListCreateAPIView):    
     permission_classes = [IsAuthenticated]
     serializer_class = PayrollPeriodSerializer
 
     def get_permissions(self):
         permissions = [permission() for permission in self.permission_classes]
-        permissions.append(
-            HasAnyPermission(["hr.payroll.create", "hr.payroll.*"])
-        )
+        if self.request.method == "GET":
+            permissions.append(HasAnyPermission(["hr.payroll.view", "hr.payroll.*"]))
+        else:
+            permissions.append(HasAnyPermission(["hr.payroll.create", "hr.payroll.*"]))        
         return permissions
+
+    def get_queryset(self):
+        return (
+            PayrollPeriod.objects.filter(company=self.request.user.company)
+            .order_by("-start_date", "-id")
+        )
+
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
