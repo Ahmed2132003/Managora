@@ -175,7 +175,6 @@ export function PayrollPeriodDetailsPage() {
     const dailyRate = metaRate
       ? parseAmount(metaRate)
       : resolveDailyRateByPeriod(runDetailsQuery.data.period.period_type, basicAmount);
-    const attendanceEarnings = dailyRate ? dailyRate * presentDays : 0;
     const bonuses = lines
       .filter(
         (line) =>
@@ -222,11 +221,11 @@ export function PayrollPeriodDetailsPage() {
     return fullName || user.username || "-";
   }, [meQuery.data?.user]);
 
-  const currentRoles = meQuery.data?.roles ?? [];
-  const roleNames = useMemo(
-    () => currentRoles.map((role) => (role.slug || role.name).toLowerCase()),
-    [currentRoles]
-  );
+  const roleNames = useMemo(() => {
+    const currentRoles = meQuery.data?.roles ?? [];
+    return currentRoles.map((role) => (role.slug || role.name).toLowerCase());
+  }, [meQuery.data?.roles]);
+    
   const isSuperUser = meQuery.data?.user.is_superuser ?? false;
   const managerName = roleNames.includes("manager") || isSuperUser ? currentUserName : "-";
   const payableTotal = runDetailsQuery.data?.net_total;
