@@ -53,9 +53,27 @@ function parseAmount(value: unknown) {
   }
   return 0;
 }
+
+type PayrollUser = {
+  id: number;
+  username: string;
+  email?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  roles?: { id: number; name?: string | null; slug?: string | null }[];
+};
+
+function formatUserName(user?: PayrollUser | null) {
+  if (!user) return "-";
+  const first = user.first_name?.trim() ?? "";
+  const last = user.last_name?.trim() ?? "";
+  const fullName = `${first} ${last}`.trim();
+  return fullName || user.username || "-";
+}
+
 function getBasicFromLines(lines: { name: string; code: string; amount: string }[]) {
   const basicLine = lines.find((line) => {
-    const name = line.name.toLowerCase();
+    const name = line.name.toLowerCase();    
     const code = line.code.toLowerCase();
     return name.includes("basic") || code.includes("basic");
   });
@@ -92,10 +110,11 @@ export function PayrollPeriodDetailsPage() {
   const periodId = params.id ? Number(params.id) : null;
   const [search, setSearch] = useState("");
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
+  const [hrName, setHrName] = useState("-");
 
   const runsQuery = usePeriodRuns(periodId);
   const periodsQuery = usePayrollPeriods();
-  const runDetailsQuery = usePayrollRun(selectedRun?.id ?? null);
+  const runDetailsQuery = usePayrollRun(selectedRun?.id ?? null);  
   const lockMutation = useLockPayrollPeriod(periodId);
   const generateMutation = useGeneratePeriod(periodId);
   const markPaidMutation = useMarkPayrollRunPaid();
@@ -182,8 +201,6 @@ export function PayrollPeriodDetailsPage() {
           line.type === "deduction" && line.code.toUpperCase().startsWith("LOAN-")
       )
       .reduce((sum, line) => sum + parseAmount(line.amount), 0);
-    const netPay = attendanceEarnings + bonuses + commissions - (deductions + advances);
-
     return {
       presentDays,
       absentDays,
@@ -192,7 +209,6 @@ export function PayrollPeriodDetailsPage() {
       commissions,
       deductions,
       advances,
-      netPay,
       dailyRate,
     };
   }, [attendanceQuery.data, runDetailsQuery.data, runPeriodRange]);
@@ -213,11 +229,39 @@ export function PayrollPeriodDetailsPage() {
   );
   const isSuperUser = meQuery.data?.user.is_superuser ?? false;
   const managerName = roleNames.includes("manager") || isSuperUser ? currentUserName : "-";
-  const hrName = roleNames.includes("hr") || isSuperUser ? currentUserName : "-";
+  const payableTotal = runDetailsQuery.data?.net_total;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHrUser() {
+      try {
+        const response = await http.get<PayrollUser[]>(endpoints.users);
+        const users = response.data ?? [];
+        const hrUser = users.find((user) =>
+          (user.roles ?? []).some(
+            (role) => (role.slug || role.name || "").toLowerCase() === "hr"
+          )
+        );
+        if (!cancelled) {
+          setHrName(formatUserName(hrUser));
+        }
+      } catch {
+        if (!cancelled) {
+          setHrName("-");
+        }
+      }
+    }
+
+    loadHrUser();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleMarkPaid() {
     if (!selectedRun?.id) {
-      return;
+      return;      
     }
     try {
       await markPaidMutation.mutateAsync(selectedRun.id);
@@ -292,13 +336,16 @@ export function PayrollPeriodDetailsPage() {
 
   async function handleDownload(runId: number) {
     try {
-      const response = await http.get(endpoints.hr.payrollRunPayslip(runId), {
-        responseType: "blob",
+      const response = await http.get<ArrayBuffer>(endpoints.hr.payrollRunPayslip(runId), {
+        responseType: "arraybuffer",
       });
-      const blobUrl = URL.createObjectURL(response.data);
+      const contentType =
+        response.headers["content-type"] || response.headers["Content-Type"] || "application/pdf";
+      const blob = new Blob([response.data], { type: contentType });
+      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
-      link.download = `payslip-${runId}.pdf`;
+      link.download = `payslip-${runId}.pdf`;      
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -444,9 +491,9 @@ export function PayrollPeriodDetailsPage() {
                     runDetailsQuery.data.earnings_total
                 )}
               </Text>
-              {runSummary && (
+              {payableTotal != null && (                
                 <Text c="dimmed" size="sm">
-                  الإجمالي المستحق: {formatMoney(runSummary.netPay)}
+                  الإجمالي المستحق: {formatMoney(payableTotal)}                  
                 </Text>
               )}
             </Group>
@@ -493,7 +540,7 @@ export function PayrollPeriodDetailsPage() {
                   <Text size="sm" c="dimmed">
                     الإجمالي المستحق (Payable)
                   </Text>
-                  <Text fw={600}>{formatMoney(runSummary.netPay)}</Text>
+                  <Text fw={600}>{formatMoney(payableTotal ?? 0)}</Text>                  
                 </div>
               </SimpleGrid>
             )}
@@ -520,7 +567,7 @@ export function PayrollPeriodDetailsPage() {
                       <Text fw={600}>الإجمالي المستحق (Payable)</Text>
                     </Table.Td>
                     <Table.Td>
-                      <Text fw={600}>{formatMoney(runSummary.netPay)}</Text>
+                      <Text fw={600}>{formatMoney(payableTotal ?? 0)}</Text>                      
                     </Table.Td>
                   </Table.Tr>
                 )}
