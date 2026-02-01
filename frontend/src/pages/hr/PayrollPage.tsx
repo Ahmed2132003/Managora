@@ -440,15 +440,7 @@ export function PayrollPage() {
     enabled: Boolean(selectedEmployeeId),
   });
 
-  if (
-    isForbiddenError(periodsQuery.error) ||
-    isForbiddenError(employeesQuery.error) ||
-    isForbiddenError(salaryStructuresQuery.error)
-  ) {
-    return <AccessDenied />;
-  }
-
-  async function handleCreatePeriod() {
+  async function handleCreatePeriod() {    
     if (!month || !year) {
       notifications.show({
         title: "Missing info",
@@ -686,6 +678,14 @@ export function PayrollPage() {
     []
   );
 
+  if (
+    isForbiddenError(periodsQuery.error) ||
+    isForbiddenError(employeesQuery.error) ||
+    isForbiddenError(salaryStructuresQuery.error)
+  ) {
+    return <AccessDenied />;
+  }
+  
   return (
     <DashboardShell copy={shellCopy} className="payroll-page">
       {({ language, isArabic }) => {

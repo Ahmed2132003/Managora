@@ -93,17 +93,7 @@ type PageContent = {
     amountPlaceholder: string;
     missingSalaryStructure: string;
   };
-  section: {
-    basicTitle: string;
-    basicSubtitle: string;
-    jobTitle: string;
-    jobSubtitle: string;
-    documentsTitle: string;
-    documentsSubtitle: string;
-    payrollTitle: string;
-    payrollSubtitle: string;
-  };
-  fields: {
+  fields: {    
     employeeCode: string;
     fullName: string;
     nationalId: string;    
@@ -768,11 +758,7 @@ export function EmployeeProfilePage() {
     [isNew]
   );
 
-  if (showAccessDenied) {
-    return <AccessDenied />;
-  }
-
-  async function handleSubmit(values: EmployeeFormValues) {
+  async function handleSubmit(values: EmployeeFormValues) {    
     const payload = {
       employee_code: values.employee_code,
       full_name: values.full_name,
@@ -972,6 +958,10 @@ export function EmployeeProfilePage() {
     };
   }, [commissionQuery.data, loanAdvancesQuery.data, salaryComponentsQuery.data]);
 
+  if (showAccessDenied) {
+    return <AccessDenied />;
+  }
+  
   async function handleAddAdjustment() {
     if (!employeeId) {
       return;
