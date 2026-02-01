@@ -122,8 +122,8 @@ export function PayrollPeriodDetailsPage() {
     return runDetailsQuery.data?.period
       ? getPeriodRange(runDetailsQuery.data.period)
       : null;
-  }, [runDetailsQuery.data?.period]);
-
+  }, [runDetailsQuery.data]);
+  
   const attendanceQuery = useAttendanceRecordsQuery(
     {
       dateFrom: runPeriodRange?.dateFrom ?? undefined,
