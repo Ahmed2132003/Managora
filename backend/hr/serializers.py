@@ -755,7 +755,13 @@ class PayrollPeriodSerializer(serializers.ModelSerializer):
             "created_by",
         )
         read_only_fields = ("id",)
-
+        extra_kwargs = {
+            "year": {"required": False},
+            "month": {"required": False},
+            "start_date": {"required": False},
+            "end_date": {"required": False},
+        }
+        
     def validate(self, attrs):
         if "company" in self.initial_data:
             raise serializers.ValidationError({"company": "This field is not allowed."})
