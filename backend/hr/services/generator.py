@@ -103,18 +103,42 @@ def generate_period(company, year, month, actor):
                 )
                 continue
 
-            basic_salary = salary_structure.basic_salary            
+            basic_salary = salary_structure.basic_salary
             daily_rate = _resolve_daily_rate(salary_structure)
             minute_rate = (daily_rate / MINUTES_PER_DAY) if daily_rate else None
+
+            attendance_qs = AttendanceRecord.objects.filter(
+                company=company,
+                employee=employee,
+                date__range=(start_date, end_date),
+            )
+            period_days = Decimal((end_date - start_date).days + 1)
+            present_days = Decimal(
+                attendance_qs.exclude(status=AttendanceRecord.Status.ABSENT).count()
+            )
+            absent_days = max(period_days - present_days, Decimal("0"))
 
             earnings_total = Decimal("0")
             deductions_total = Decimal("0")
             lines = []
 
-            if salary_structure.salary_type != SalaryStructure.SalaryType.COMMISSION and basic_salary > 0:
+            attendance_based_salary = (
+                salary_structure.salary_type != SalaryStructure.SalaryType.COMMISSION
+                and daily_rate is not None
+            )
+            basic_salary_amount = basic_salary
+            if attendance_based_salary and daily_rate is not None:
+                basic_salary_amount = _quantize_amount(daily_rate * present_days)
+
+            if (
+                salary_structure.salary_type != SalaryStructure.SalaryType.COMMISSION
+                and basic_salary_amount > 0
+            ):
                 meta = {}
                 if daily_rate is not None:
                     meta["rate"] = str(_quantize_amount(daily_rate))
+                if attendance_based_salary:
+                    meta["attendance_days"] = str(present_days)
                 lines.append(
                     PayrollLine(
                         company=company,
@@ -122,12 +146,12 @@ def generate_period(company, year, month, actor):
                         code="BASIC",
                         name="Basic Salary",
                         type=PayrollLine.LineType.EARNING,
-                        amount=_quantize_amount(basic_salary),
+                        amount=_quantize_amount(basic_salary_amount),
                         meta=meta,
                     )
                 )
-                earnings_total += basic_salary
-                
+                earnings_total += basic_salary_amount
+                                
             components = salary_structure.components.filter(is_recurring=True)
             for component in components:
                 line_type = (
@@ -152,22 +176,14 @@ def generate_period(company, year, month, actor):
                 else:
                     deductions_total += amount
 
-            attendance_qs = AttendanceRecord.objects.filter(
-                company=company,
-                employee=employee,
-                date__range=(start_date, end_date),
-            )
             late_minutes_total = (
                 attendance_qs.aggregate(total=Sum("late_minutes"))["total"] or 0
             )
-            absent_days = attendance_qs.filter(
-                status=AttendanceRecord.Status.ABSENT
-            ).count()
 
             if late_minutes_total and minute_rate is not None:                
                 late_amount = _quantize_amount(
                     minute_rate * Decimal(late_minutes_total)
-                )
+                )                
                 if late_amount > 0:
                     lines.append(
                         PayrollLine(
@@ -185,10 +201,12 @@ def generate_period(company, year, month, actor):
                     )
                     deductions_total += late_amount
 
-            if absent_days and daily_rate is not None:                
-                absent_amount = _quantize_amount(
-                    daily_rate * Decimal(absent_days)
-                )
+            if (
+                not attendance_based_salary
+                and absent_days
+                and daily_rate is not None
+            ):
+                absent_amount = _quantize_amount(daily_rate * Decimal(absent_days))
                 if absent_amount > 0:
                     lines.append(
                         PayrollLine(
@@ -199,13 +217,13 @@ def generate_period(company, year, month, actor):
                             type=PayrollLine.LineType.DEDUCTION,
                             amount=absent_amount,
                             meta={
-                                "days": absent_days,
+                                "days": str(absent_days),
                                 "rate": str(_quantize_amount(daily_rate)),
                             },
                         )
                     )
                     deductions_total += absent_amount
-
+                    
             unpaid_requests = LeaveRequest.objects.filter(
                 company=company,
                 employee=employee,
@@ -220,11 +238,15 @@ def generate_period(company, year, month, actor):
                     request.start_date, request.end_date, start_date, end_date
                 )
 
-            if unpaid_leave_days and daily_rate is not None:
+            if (
+                unpaid_leave_days
+                and daily_rate is not None
+                and not attendance_based_salary
+            ):
                 unpaid_amount = _quantize_amount(daily_rate * unpaid_leave_days)
                 if unpaid_amount > 0:
                     lines.append(
-                        PayrollLine(
+                        PayrollLine(                            
                             company=company,
                             payroll_run=None,
                             code="UNPAID_LEAVE",
