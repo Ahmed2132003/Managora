@@ -54,6 +54,7 @@ PERMISSION_DEFINITIONS = {
     "hr.payroll.create": "Create payroll period",
     "hr.payroll.generate": "Generate payroll runs",
     "hr.payroll.lock": "Lock payroll period",
+    "hr.payroll.pay": "Mark payroll run as paid",
     "hr.payroll.payslip": "Download payslips",
     "analytics.view_ceo": "View CEO analytics dashboards",
     "analytics.view_finance": "View finance analytics dashboards",

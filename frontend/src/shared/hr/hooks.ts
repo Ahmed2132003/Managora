@@ -1158,9 +1158,20 @@ export function usePayrollRun(runId: number | null) {
   });
 }
 
+export function useMarkPayrollRunPaid() {
+  return useMutation({
+    mutationFn: async (runId: number) => {
+      const response = await http.post<PayrollRunDetail>(
+        endpoints.hr.payrollRunMarkPaid(runId)
+      );
+      return response.data;
+    },
+  });
+}
+
 export function useLockPayrollPeriod(periodId: number | null) {
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async () => {      
       if (!periodId) {
         throw new Error("Period ID is required");
       }

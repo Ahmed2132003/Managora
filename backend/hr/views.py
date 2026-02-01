@@ -1635,6 +1635,28 @@ class PayrollRunDetailView(APIView):
 
 @extend_schema(
     tags=["Payroll"],
+    summary="Mark payroll run as paid",
+    responses={200: PayrollRunDetailSerializer},
+)
+class PayrollRunMarkPaidView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        permissions = [permission() for permission in self.permission_classes]
+        permissions.append(HasAnyPermission(["hr.payroll.pay", "hr.payroll.*"]))
+        return permissions
+
+    def post(self, request, id=None):
+        payroll_run = get_object_or_404(PayrollRun, id=id, company=request.user.company)
+        if payroll_run.status != PayrollRun.Status.PAID:
+            payroll_run.status = PayrollRun.Status.PAID
+            payroll_run.save(update_fields=["status", "updated_at"])
+        serializer = PayrollRunDetailSerializer(payroll_run)
+        return Response(serializer.data)
+
+
+@extend_schema(
+    tags=["Payroll"],
     summary="Lock payroll period",
     responses={200: PayrollPeriodSerializer},
 )

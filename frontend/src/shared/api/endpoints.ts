@@ -56,6 +56,7 @@ export const endpoints = {
     payrollPeriodRuns: (id: number) => `/api/payroll/periods/${id}/runs/`,
     payrollPeriodLock: (id: number) => `/api/payroll/periods/${id}/lock/`,
     payrollRun: (id: number) => `/api/payroll/runs/${id}/`,
+    payrollRunMarkPaid: (id: number) => `/api/payroll/runs/${id}/mark-paid/`,
     payrollRunPayslip: (id: number) => `/api/payroll/runs/${id}/payslip.pdf`,
   },
   accounting: {

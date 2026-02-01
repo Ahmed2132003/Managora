@@ -403,7 +403,7 @@ class HRAction(BaseModel):
         related_name="hr_actions",
     )
     action_type = models.CharField(max_length=20, choices=ActionType.choices)
-    value = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"))
+    value = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     reason = models.TextField()
     period_start = models.DateField(null=True, blank=True)
     period_end = models.DateField(null=True, blank=True)
@@ -734,6 +734,7 @@ class PayrollRun(BaseModel):
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
         APPROVED = "approved", "Approved"
+        PAID = "paid", "Paid"
 
     period = models.ForeignKey(
         "hr.PayrollPeriod",
