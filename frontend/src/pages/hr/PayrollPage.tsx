@@ -1,20 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Badge,
-  Button,
-  Card,
-  Group,
-  Modal,
-  NumberInput,
-  Select,
-  Skeleton,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Modal } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { isForbiddenError } from "../../shared/api/errors";
@@ -26,35 +12,309 @@ import {
   usePayrollPeriods,
   useSalaryStructures,
   useUpdateSalaryStructure,
+  useSalaryComponentsQuery,
+  useCreateSalaryComponent,
+  useLoanAdvancesQuery,
+  useCreateLoanAdvance,
+  useAttendanceRecordsQuery,
+  useCommissionApprovalsInboxQuery,
 } from "../../shared/hr/hooks";
 import type { PayrollPeriod, SalaryStructure, SalaryType } from "../../shared/hr/hooks";
+import { DashboardShell } from "../DashboardShell";
+import "../DashboardPage.css";
+import "./PayrollPage.css";
 
-const monthOptions = [
-  { value: "1", label: "January" },
-  { value: "2", label: "February" },
-  { value: "3", label: "March" },
-  { value: "4", label: "April" },
-  { value: "5", label: "May" },
-  { value: "6", label: "June" },
-  { value: "7", label: "July" },
-  { value: "8", label: "August" },
-  { value: "9", label: "September" },
-  { value: "10", label: "October" },
-  { value: "11", label: "November" },
-  { value: "12", label: "December" },
-];
+type Language = "en" | "ar";
 
-const statusColors: Record<string, string> = {
-  draft: "yellow",
-  locked: "green",
+type PageContent = {
+  title: string;
+  subtitle: string;
+  periodSection: {
+    title: string;
+    subtitle: string;
+    month: string;
+    year: string;
+    create: string;
+    generate: string;
+    status: string;
+  };
+  periods: {
+    title: string;
+    subtitle: string;
+    empty: string;
+    columns: {
+      period: string;
+      status: string;
+      actions: string;
+    };
+    viewRuns: string;
+    refresh: string;
+  };
+  employees: {
+    title: string;
+    subtitle: string;
+    empty: string;
+    columns: {
+      code: string;
+      name: string;
+      salaryType: string;
+      baseSalary: string;
+      currency: string;
+      dailyRate: string;
+      actions: string;
+    };
+    setSalary: string;
+    editSalary: string;
+  };
+  summary: {
+    title: string;
+    subtitle: string;
+    employeeLabel: string;
+    attendanceDays: string;
+    absenceDays: string;
+    lateMinutes: string;
+    bonuses: string;
+    deductions: string;
+    advances: string;
+    commissionTotal: string;
+    payable: string;
+    noEmployee: string;
+  };
+  adjustments: {
+    title: string;
+    subtitle: string;
+    typeLabel: string;
+    nameLabel: string;
+    amountLabel: string;
+    recurringLabel: string;
+    startDateLabel: string;
+    installmentLabel: string;
+    addAction: string;
+    bonusType: string;
+    deductionType: string;
+    advanceType: string;
+    namePlaceholder: string;
+    amountPlaceholder: string;
+    missingSalaryStructure: string;
+  };
+  modal: {
+    title: string;
+    salaryType: string;
+    baseSalary: string;
+    currency: string;
+    cancel: string;
+    save: string;
+  };
 };
 
-const salaryTypeOptions: { value: SalaryType; label: string }[] = [
-  { value: "monthly", label: "Monthly" },
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "commission", label: "Commission" },
-];
+const contentMap: Record<Language, PageContent> = {
+  en: {
+    title: "Payroll",
+    subtitle: "Manage payroll periods, salaries, and employee adjustments.",
+    periodSection: {
+      title: "Payroll period",
+      subtitle: "Create and generate payroll periods.",
+      month: "Month",
+      year: "Year",
+      create: "Create period",
+      generate: "Generate",
+      status: "Status",
+    },
+    periods: {
+      title: "Payroll periods",
+      subtitle: "Latest payroll periods for your company.",
+      empty: "No payroll periods yet.",
+      columns: {
+        period: "Period",
+        status: "Status",
+        actions: "Actions",
+      },
+      viewRuns: "View runs",
+      refresh: "Refresh",
+    },
+    employees: {
+      title: "Employee salaries",
+      subtitle: "Review salary types, rates, and manage pay settings.",
+      empty: "No employees yet.",
+      columns: {
+        code: "Code",
+        name: "Employee",
+        salaryType: "Salary type",
+        baseSalary: "Base salary",
+        currency: "Currency",
+        dailyRate: "Daily rate",
+        actions: "Actions",
+      },
+      setSalary: "Set salary",
+      editSalary: "Edit salary",
+    },
+    summary: {
+      title: "Attendance & payroll summary",
+      subtitle: "Attendance days, delays, and payable salary for the selected employee.",
+      employeeLabel: "Employee",
+      attendanceDays: "Attendance days",
+      absenceDays: "Absence days",
+      lateMinutes: "Late minutes",
+      bonuses: "Bonuses",
+      deductions: "Deductions",
+      advances: "Advances",
+      commissionTotal: "Approved commissions",
+      payable: "Payable salary",
+      noEmployee: "Select an employee to view their summary.",
+    },
+    adjustments: {
+      title: "Add payroll adjustment",
+      subtitle: "Add a bonus, deduction, or advance for the selected employee.",
+      typeLabel: "Adjustment type",
+      nameLabel: "Label",
+      amountLabel: "Amount",
+      recurringLabel: "Recurring",
+      startDateLabel: "Start date",
+      installmentLabel: "Installment amount",
+      addAction: "Add adjustment",
+      bonusType: "Bonus",
+      deductionType: "Deduction",
+      advanceType: "Advance",
+      namePlaceholder: "e.g. Sales bonus",
+      amountPlaceholder: "Enter amount",
+      missingSalaryStructure: "Save payroll data first to add bonuses or deductions.",
+    },
+    modal: {
+      title: "Payroll details",
+      salaryType: "Salary type",
+      baseSalary: "Base salary",
+      currency: "Currency",
+      cancel: "Cancel",
+      save: "Save",
+    },
+  },
+  ar: {
+    title: "الرواتب",
+    subtitle: "إدارة فترات الرواتب ورواتب الموظفين والتعديلات.",
+    periodSection: {
+      title: "فترة الرواتب",
+      subtitle: "إنشاء وتوليد فترات الرواتب.",
+      month: "الشهر",
+      year: "السنة",
+      create: "إنشاء فترة",
+      generate: "توليد",
+      status: "الحالة",
+    },
+    periods: {
+      title: "فترات الرواتب",
+      subtitle: "أحدث فترات الرواتب للشركة.",
+      empty: "لا توجد فترات رواتب بعد.",
+      columns: {
+        period: "الفترة",
+        status: "الحالة",
+        actions: "الإجراءات",
+      },
+      viewRuns: "عرض التشغيل",
+      refresh: "تحديث",
+    },
+    employees: {
+      title: "رواتب الموظفين",
+      subtitle: "مراجعة أنواع الرواتب والأجور وإدارة بيانات الدفع.",
+      empty: "لا يوجد موظفون حتى الآن.",
+      columns: {
+        code: "الكود",
+        name: "الموظف",
+        salaryType: "نوع الراتب",
+        baseSalary: "الراتب الأساسي",
+        currency: "العملة",
+        dailyRate: "الأجر اليومي",
+        actions: "الإجراءات",
+      },
+      setSalary: "تحديد الراتب",
+      editSalary: "تعديل الراتب",
+    },
+    summary: {
+      title: "ملخص الحضور والراتب",
+      subtitle: "أيام الحضور والتأخير والراتب المستحق للموظف المختار.",
+      employeeLabel: "الموظف",
+      attendanceDays: "أيام الحضور",
+      absenceDays: "أيام الغياب",
+      lateMinutes: "دقائق التأخير",
+      bonuses: "المكافآت",
+      deductions: "الخصومات",
+      advances: "السلف",
+      commissionTotal: "العمولات المعتمدة",
+      payable: "الراتب المستحق",
+      noEmployee: "اختر موظفاً لعرض الملخص.",
+    },
+    adjustments: {
+      title: "إضافة تعديل على الراتب",
+      subtitle: "إضافة مكافأة أو خصم أو سلفة للموظف المختار.",
+      typeLabel: "نوع التعديل",
+      nameLabel: "الوصف",
+      amountLabel: "القيمة",
+      recurringLabel: "متكرر",
+      startDateLabel: "تاريخ البداية",
+      installmentLabel: "قيمة القسط",
+      addAction: "إضافة التعديل",
+      bonusType: "مكافأة",
+      deductionType: "خصم",
+      advanceType: "سلفة",
+      namePlaceholder: "مثال: مكافأة مبيعات",
+      amountPlaceholder: "أدخل المبلغ",
+      missingSalaryStructure: "احفظ بيانات الرواتب أولاً لإضافة المكافآت أو الخصومات.",
+    },
+    modal: {
+      title: "تفاصيل الراتب",
+      salaryType: "نوع الراتب",
+      baseSalary: "الراتب الأساسي",
+      currency: "العملة",
+      cancel: "إلغاء",
+      save: "حفظ",
+    },
+  },
+};
+
+const monthOptions: Record<Language, { value: string; label: string }[]> = {
+  en: [
+    { value: "1", label: "January" },
+    { value: "2", label: "February" },
+    { value: "3", label: "March" },
+    { value: "4", label: "April" },
+    { value: "5", label: "May" },
+    { value: "6", label: "June" },
+    { value: "7", label: "July" },
+    { value: "8", label: "August" },
+    { value: "9", label: "September" },
+    { value: "10", label: "October" },
+    { value: "11", label: "November" },
+    { value: "12", label: "December" },
+  ],
+  ar: [
+    { value: "1", label: "يناير" },
+    { value: "2", label: "فبراير" },
+    { value: "3", label: "مارس" },
+    { value: "4", label: "أبريل" },
+    { value: "5", label: "مايو" },
+    { value: "6", label: "يونيو" },
+    { value: "7", label: "يوليو" },
+    { value: "8", label: "أغسطس" },
+    { value: "9", label: "سبتمبر" },
+    { value: "10", label: "أكتوبر" },
+    { value: "11", label: "نوفمبر" },
+    { value: "12", label: "ديسمبر" },
+  ],
+};
+
+const salaryTypeOptionsByLanguage: Record<Language, { value: SalaryType; label: string }[]> = {
+  en: [
+    { value: "monthly", label: "Monthly" },
+    { value: "daily", label: "Daily" },
+    { value: "weekly", label: "Weekly" },
+    { value: "commission", label: "Commission" },
+  ],
+  ar: [
+    { value: "monthly", label: "شهري" },
+    { value: "daily", label: "يومي" },
+    { value: "weekly", label: "أسبوعي" },
+    { value: "commission", label: "عمولة" },
+  ],
+};
 
 function formatPeriodLabel(period: PayrollPeriod) {
   return `${period.year}-${String(period.month).padStart(2, "0")}`;
@@ -76,6 +336,19 @@ export function PayrollPage() {
   const [salaryType, setSalaryType] = useState<SalaryType>("monthly");
   const [basicSalary, setBasicSalary] = useState<number>(0);
   const [currency, setCurrency] = useState<string>("");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
+  const [adjustmentType, setAdjustmentType] = useState<"bonus" | "deduction" | "advance">(
+    "bonus"
+  );
+  const [adjustmentName, setAdjustmentName] = useState("");
+  const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
+  const [adjustmentRecurring, setAdjustmentRecurring] = useState(true);
+  const [advanceAmount, setAdvanceAmount] = useState<number>(0);
+  const [advanceInstallment, setAdvanceInstallment] = useState<number>(0);
+  const [advanceStartDate, setAdvanceStartDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().slice(0, 10);
+  });
 
   const periodsQuery = usePayrollPeriods();
   const createPeriodMutation = useCreatePeriod();
@@ -83,6 +356,8 @@ export function PayrollPage() {
   const salaryStructuresQuery = useSalaryStructures();
   const createSalaryStructureMutation = useCreateSalaryStructure();
   const updateSalaryStructureMutation = useUpdateSalaryStructure();
+  const createSalaryComponentMutation = useCreateSalaryComponent();
+  const createLoanAdvanceMutation = useCreateLoanAdvance();
 
   const periods = useMemo(() => periodsQuery.data ?? [], [periodsQuery.data]);
   const salaryStructuresByEmployee = useMemo(() => {
@@ -92,7 +367,7 @@ export function PayrollPage() {
         structure,
       ])
     );
-  }, [salaryStructuresQuery.data]);  
+  }, [salaryStructuresQuery.data]);
   const selectedPeriod = useMemo(() => {
     if (!month || !year) return null;
     const monthValue = Number(month);
@@ -116,9 +391,54 @@ export function PayrollPage() {
   }, []);
 
   const selectedEmployee = useMemo(() => {
-    if (!salaryEmployeeId) return null;
-    return (employeesQuery.data ?? []).find((employee) => employee.id === salaryEmployeeId) ?? null;
-  }, [employeesQuery.data, salaryEmployeeId]);
+    if (!selectedEmployeeId) return null;
+    return (employeesQuery.data ?? []).find((employee) => employee.id === selectedEmployeeId) ?? null;
+  }, [employeesQuery.data, selectedEmployeeId]);
+
+  const selectedSalaryStructure = selectedEmployeeId
+    ? salaryStructuresByEmployee.get(selectedEmployeeId) ?? null
+    : null;
+
+  const now = new Date();
+  const fallbackMonth = month ? Number(month) : now.getMonth() + 1;
+  const fallbackYear = year ? Number(year) : now.getFullYear();
+  const activeYear = selectedPeriod?.year ?? fallbackYear;
+  const activeMonth = selectedPeriod?.month ?? fallbackMonth;
+  const daysInMonth = new Date(activeYear, activeMonth, 0).getDate();
+  const periodMonthLabel = String(activeMonth).padStart(2, "0");
+  const periodRange = {
+    dateFrom: `${activeYear}-${periodMonthLabel}-01`,
+    dateTo: `${activeYear}-${periodMonthLabel}-${String(daysInMonth).padStart(2, "0")}`,
+    daysInMonth,
+  };
+
+  const attendanceQuery = useAttendanceRecordsQuery(
+    {
+      dateFrom: periodRange.dateFrom,
+      dateTo: periodRange.dateTo,
+      employeeId: selectedEmployeeId ? String(selectedEmployeeId) : undefined,
+    },
+    Boolean(selectedEmployeeId)
+  );
+
+  const salaryComponentsQuery = useSalaryComponentsQuery({
+    salaryStructureId: selectedSalaryStructure?.id ?? null,
+    enabled: Boolean(selectedSalaryStructure?.id),
+  });
+
+  const loanAdvancesQuery = useLoanAdvancesQuery({
+    employeeId: selectedEmployeeId,
+    status: "active",
+    enabled: Boolean(selectedEmployeeId),
+  });
+
+  const commissionQuery = useCommissionApprovalsInboxQuery({
+    status: "approved",
+    employeeId: selectedEmployeeId ?? undefined,
+    dateFrom: periodRange.dateFrom,
+    dateTo: periodRange.dateTo,
+    enabled: Boolean(selectedEmployeeId),
+  });
 
   if (
     isForbiddenError(periodsQuery.error) ||
@@ -127,6 +447,7 @@ export function PayrollPage() {
   ) {
     return <AccessDenied />;
   }
+
   async function handleCreatePeriod() {
     if (!month || !year) {
       notifications.show({
@@ -226,211 +547,598 @@ export function PayrollPage() {
     }
   }
 
-  const rows = periods.map((period) => (
-    <Table.Tr key={period.id}>
-      <Table.Td>{formatPeriodLabel(period)}</Table.Td>
-      <Table.Td>
-        <Badge color={statusColors[period.status] ?? "gray"} variant="light">
-          {period.status}
-        </Badge>
-      </Table.Td>
-      <Table.Td>
-        <Button
-          size="xs"
-          variant="light"
-          onClick={() => navigate(`/payroll/periods/${period.id}`)}
-        >
-          View runs
-        </Button>
-      </Table.Td>
-    </Table.Tr>
-  ));
+  async function handleAddAdjustment() {
+    if (!selectedEmployeeId) {
+      return;
+    }
 
-  const employeeRows = (employeesQuery.data ?? []).map((employee) => {
-    const structure = salaryStructuresByEmployee.get(employee.id);
-    const dailyRate = structure
-      ? resolveDailyRate(structure.salary_type, Number(structure.basic_salary))
-      : null;
-    const salaryTypeLabel = structure
-      ? salaryTypeOptions.find((option) => option.value === structure.salary_type)?.label ?? structure.salary_type
-      : "—";
+    if (adjustmentType === "advance") {
+      if (advanceAmount <= 0 || advanceInstallment <= 0 || !advanceStartDate) {
+        notifications.show({
+          title: "Missing info",
+          message: "Please enter advance details.",
+          color: "red",
+        });
+        return;
+      }
+      try {
+        await createLoanAdvanceMutation.mutateAsync({
+          employee: selectedEmployeeId,
+          type: "advance",
+          principal_amount: advanceAmount,
+          installment_amount: advanceInstallment,
+          start_date: advanceStartDate,
+        });
+        notifications.show({
+          title: "Advance added",
+          message: "تمت إضافة السلفة بنجاح.",
+        });
+        loanAdvancesQuery.refetch();
+        setAdvanceAmount(0);
+        setAdvanceInstallment(0);
+      } catch {
+        notifications.show({
+          title: "Failed",
+          message: "تعذر إضافة السلفة.",
+          color: "red",
+        });
+      }
+      return;
+    }
 
-    return (
-      <Table.Tr key={employee.id}>
-        <Table.Td>{employee.employee_code}</Table.Td>
-        <Table.Td>{employee.full_name}</Table.Td>
-        <Table.Td>{salaryTypeLabel}</Table.Td>
-        <Table.Td>{structure ? Number(structure.basic_salary).toFixed(2) : "—"}</Table.Td>
-        <Table.Td>{structure?.currency ?? "—"}</Table.Td>
-        <Table.Td>{dailyRate === null ? "—" : dailyRate.toFixed(2)}</Table.Td>
-        <Table.Td>
-          <Button size="xs" variant="light" onClick={() => openSalaryModal(employee.id)}>
-            {structure ? "Edit" : "Set salary"}
-          </Button>
-        </Table.Td>
-      </Table.Tr>
+    if (!selectedSalaryStructure?.id) {
+      notifications.show({
+        title: "Missing payroll",
+        message: "Please save payroll data first.",
+        color: "red",
+      });
+      return;
+    }
+
+    if (adjustmentAmount <= 0) {
+      notifications.show({
+        title: "Missing info",
+        message: "Please enter a valid amount.",
+        color: "red",
+      });
+      return;
+    }
+
+    const adjustmentLabel = adjustmentName.trim() || (adjustmentType === "bonus" ? "Bonus" : "Deduction");
+    try {
+      await createSalaryComponentMutation.mutateAsync({
+        salary_structure: selectedSalaryStructure.id,
+        name: adjustmentLabel,
+        type: adjustmentType === "bonus" ? "earning" : "deduction",
+        amount: adjustmentAmount,
+        is_recurring: adjustmentRecurring,
+      });
+      notifications.show({
+        title: "Adjustment added",
+        message: "تمت إضافة التعديل بنجاح.",
+      });
+      salaryComponentsQuery.refetch();
+      setAdjustmentName("");
+      setAdjustmentAmount(0);
+    } catch {
+      notifications.show({
+        title: "Failed",
+        message: "تعذر إضافة التعديل.",
+        color: "red",
+      });
+    }
+  }
+
+  const summaryStats = useMemo(() => {
+    const records = attendanceQuery.data ?? [];
+    const presentDays = records.filter((record) => record.status !== "absent").length;
+    const absentDays = Math.max(periodRange.daysInMonth - presentDays, 0);
+    const lateMinutes = records.reduce((sum, record) => sum + (record.late_minutes ?? 0), 0);
+    const components = salaryComponentsQuery.data ?? [];
+    const bonuses = components
+      .filter((component) => component.type === "earning")
+      .reduce((sum, component) => sum + Number(component.amount || 0), 0);
+    const deductions = components
+      .filter((component) => component.type === "deduction")
+      .reduce((sum, component) => sum + Number(component.amount || 0), 0);
+    const advances = (loanAdvancesQuery.data ?? []).reduce(
+      (sum, loan) => sum + Number(loan.installment_amount || 0),
+      0
     );
-  });
+    const commissions = (commissionQuery.data ?? []).reduce(
+      (sum, commission) => sum + Number(commission.amount || 0),
+      0
+    );
+    const dailyRateValue = selectedSalaryStructure
+      ? resolveDailyRate(selectedSalaryStructure.salary_type, Number(selectedSalaryStructure.basic_salary))
+      : null;
+    const attendanceEarnings = dailyRateValue === null ? 0 : dailyRateValue * presentDays;
+    const baseEarnings =
+      selectedSalaryStructure?.salary_type === "commission"
+        ? commissions + bonuses
+        : attendanceEarnings + bonuses;
+    const netPay = baseEarnings - (deductions + advances);
+
+    return {
+      presentDays,
+      absentDays,
+      lateMinutes,
+      bonuses,
+      deductions,
+      advances,
+      commissions,
+      netPay,
+    };
+  }, [
+    attendanceQuery.data,
+    commissionQuery.data,
+    loanAdvancesQuery.data,
+    periodRange.daysInMonth,
+    salaryComponentsQuery.data,
+    selectedSalaryStructure,
+  ]);
+
+  const shellCopy = useMemo(
+    () => ({
+      en: { title: contentMap.en.title, subtitle: contentMap.en.subtitle },
+      ar: { title: contentMap.ar.title, subtitle: contentMap.ar.subtitle },
+    }),
+    []
+  );
 
   return (
-    <Stack gap="lg">
-      <Title order={3}>Payroll</Title>
-      <Card withBorder radius="md" p="md">
-        <Group align="flex-end" gap="md">
-          <Select
-            label="Month"
-            placeholder="Select month"
-            data={monthOptions}
-            value={month}
-            onChange={setMonth}
-            searchable
-            clearable
-          />
-          <Select
-            label="Year"
-            placeholder="Select year"
-            data={yearOptions}
-            value={year}
-            onChange={setYear}
-            clearable
-          />
-          <Button
-            onClick={handleCreatePeriod}
-            loading={createPeriodMutation.isPending}
-          >
-            Create Period
-          </Button>
-          <Button
-            variant="light"
-            onClick={handleGeneratePeriod}
-            loading={generatePeriodMutation.isPending}
-            disabled={!selectedPeriod}
-          >
-            Generate
-          </Button>
-          {selectedPeriod && (
-            <Badge color={statusColors[selectedPeriod.status] ?? "gray"}>
-              {selectedPeriod.status}
-            </Badge>
-          )}
-        </Group>
-      </Card>
+    <DashboardShell copy={shellCopy} className="payroll-page">
+      {({ language, isArabic }) => {
+        const content = contentMap[language];
+        const months = monthOptions[language];
+        const salaryTypeOptions = salaryTypeOptionsByLanguage[language];
+        const selectedMonthValue = month ?? "";
+        const selectedYearValue = year ?? "";
+        const employeeOptions = (employeesQuery.data ?? []).map((employee) => (
+          <option key={employee.id} value={employee.id}>
+            {employee.full_name}
+          </option>
+        ));
+        const employeeRows = (employeesQuery.data ?? []).map((employee) => {
+          const structure = salaryStructuresByEmployee.get(employee.id);
+          const dailyRate = structure
+            ? resolveDailyRate(structure.salary_type, Number(structure.basic_salary))
+            : null;
+          const salaryTypeLabel = structure
+            ? salaryTypeOptions.find((option) => option.value === structure.salary_type)?.label ?? structure.salary_type
+            : "—";
+          const isSelected = employee.id === selectedEmployeeId;
 
-      <Card withBorder radius="md" p="md">
-        <Stack gap="sm">
-          <Group justify="space-between">
-            <Text fw={600}>Payroll periods</Text>
-            <Button
-              variant="subtle"
-              size="xs"
-              onClick={() => periodsQuery.refetch()}
-            >
-              Refresh
-            </Button>
-          </Group>
-          {periodsQuery.isLoading ? (
-            <Skeleton height={120} />
-          ) : periods.length === 0 ? (
-            <Text c="dimmed">لا توجد فترات رواتب بعد.</Text>
-          ) : (
-            <Table withTableBorder>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Period</Table.Th>
-                  <Table.Th>Status</Table.Th>
-                  <Table.Th>Actions</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>{rows}</Table.Tbody>
-            </Table>
-          )}
-        </Stack>
-      </Card>
+          return (
+            <tr key={employee.id}>
+              <td>{employee.employee_code}</td>
+              <td>{employee.full_name}</td>
+              <td>{salaryTypeLabel}</td>
+              <td>{structure ? Number(structure.basic_salary).toFixed(2) : "—"}</td>
+              <td>{structure?.currency ?? "—"}</td>
+              <td>{dailyRate === null ? "—" : dailyRate.toFixed(2)}</td>
+              <td>
+                <div className="payroll-actions">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => openSalaryModal(employee.id)}
+                  >
+                    {structure ? content.employees.editSalary : content.employees.setSalary}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => setSelectedEmployeeId(employee.id)}
+                  >
+                    {isSelected ? (isArabic ? "محدد" : "Selected") : (isArabic ? "عرض" : "View")}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          );
+        });
 
-      <Card withBorder radius="md" p="md">
-        <Stack gap="sm">
-          <Group justify="space-between">
-            <Text fw={600}>Employee salaries</Text>
-            <Button
-              variant="subtle"
-              size="xs"
-              onClick={() => {
-                employeesQuery.refetch();
-                salaryStructuresQuery.refetch();
-              }}
-            >
-              Refresh
-            </Button>
-          </Group>
-          {employeesQuery.isLoading || salaryStructuresQuery.isLoading ? (
-            <Skeleton height={160} />
-          ) : (employeesQuery.data ?? []).length === 0 ? (
-            <Text c="dimmed">لا يوجد موظفون حتى الآن.</Text>
-          ) : (
-            <Table withTableBorder>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Code</Table.Th>
-                  <Table.Th>Employee</Table.Th>
-                  <Table.Th>Salary type</Table.Th>
-                  <Table.Th>Base salary</Table.Th>
-                  <Table.Th>Currency</Table.Th>
-                  <Table.Th>Daily rate</Table.Th>
-                  <Table.Th>Actions</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>{employeeRows}</Table.Tbody>
-            </Table>
-          )}
-        </Stack>
-      </Card>
+        return (
+          <div className="payroll-page__content">
+            <section className="panel payroll-panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.periodSection.title}</h2>
+                  <p>{content.periodSection.subtitle}</p>
+                </div>
+              </div>
+              <div className="payroll-filters">
+                <label className="form-field">
+                  <span>{content.periodSection.month}</span>
+                  <select value={selectedMonthValue} onChange={(event) => setMonth(event.target.value || null)}>
+                    <option value="">{content.periodSection.month}</option>
+                    {months.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="form-field">
+                  <span>{content.periodSection.year}</span>
+                  <select value={selectedYearValue} onChange={(event) => setYear(event.target.value || null)}>
+                    <option value="">{content.periodSection.year}</option>
+                    {yearOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={handleCreatePeriod}
+                  disabled={createPeriodMutation.isPending}
+                >
+                  {content.periodSection.create}
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={handleGeneratePeriod}
+                  disabled={!selectedPeriod || generatePeriodMutation.isPending}
+                >
+                  {content.periodSection.generate}
+                </button>
+                {selectedPeriod && (
+                  <span className="status-pill" data-status={selectedPeriod.status}>
+                    {content.periodSection.status}: {selectedPeriod.status}
+                  </span>
+                )}
+              </div>
+            </section>
 
-      <Modal
-        opened={salaryModalOpen}
-        onClose={() => setSalaryModalOpen(false)}
-        title={selectedEmployee ? `Payroll for ${selectedEmployee.full_name}` : "Payroll details"}
-        centered
-      >
-        <Stack>
-          <Select
-            label="Salary type"
-            placeholder="Select salary type"
-            data={salaryTypeOptions}
-            value={salaryType}
-            onChange={(value) => setSalaryType((value as SalaryType) ?? "monthly")}
-            searchable
-          />
-          <NumberInput
-            label="Base salary"
-            value={basicSalary}
-            onChange={(value) =>
-              setBasicSalary(typeof value === "number" ? value : Number(value) || 0)
-            }
-            min={0}
-            hideControls
-            thousandSeparator=","
-          />          
-          <TextInput
-            label="Currency"
-            value={currency}
-            onChange={(event) => setCurrency(event.currentTarget.value)}
-          />
-          <Group justify="flex-end">
-            <Button variant="subtle" onClick={() => setSalaryModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveSalary}
-              loading={
-                createSalaryStructureMutation.isPending ||
-                updateSalaryStructureMutation.isPending
-              }
+            <section className="panel payroll-panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.periods.title}</h2>
+                  <p>{content.periods.subtitle}</p>
+                </div>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => periodsQuery.refetch()}
+                >
+                  {content.periods.refresh}
+                </button>
+              </div>
+              {periodsQuery.isLoading ? (
+                <div className="payroll-state">Loading...</div>
+              ) : periods.length === 0 ? (
+                <div className="payroll-state">{content.periods.empty}</div>
+              ) : (
+                <div className="payroll-table-wrapper">
+                  <table className="payroll-table">
+                    <thead>
+                      <tr>
+                        <th>{content.periods.columns.period}</th>
+                        <th>{content.periods.columns.status}</th>
+                        <th>{content.periods.columns.actions}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {periods.map((period) => (
+                        <tr key={period.id}>
+                          <td>{formatPeriodLabel(period)}</td>
+                          <td>
+                            <span className="status-pill" data-status={period.status}>
+                              {period.status}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() => navigate(`/payroll/periods/${period.id}`)}
+                            >
+                              {content.periods.viewRuns}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section className="panel payroll-panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.employees.title}</h2>
+                  <p>{content.employees.subtitle}</p>
+                </div>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => {
+                    employeesQuery.refetch();
+                    salaryStructuresQuery.refetch();
+                  }}
+                >
+                  {content.periods.refresh}
+                </button>
+              </div>
+              {employeesQuery.isLoading || salaryStructuresQuery.isLoading ? (
+                <div className="payroll-state">Loading...</div>
+              ) : (employeesQuery.data ?? []).length === 0 ? (
+                <div className="payroll-state">{content.employees.empty}</div>
+              ) : (
+                <div className="payroll-table-wrapper">
+                  <table className="payroll-table">
+                    <thead>
+                      <tr>
+                        <th>{content.employees.columns.code}</th>
+                        <th>{content.employees.columns.name}</th>
+                        <th>{content.employees.columns.salaryType}</th>
+                        <th>{content.employees.columns.baseSalary}</th>
+                        <th>{content.employees.columns.currency}</th>
+                        <th>{content.employees.columns.dailyRate}</th>
+                        <th>{content.employees.columns.actions}</th>
+                      </tr>
+                    </thead>
+                    <tbody>{employeeRows}</tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section className="panel payroll-panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.summary.title}</h2>
+                  <p>{content.summary.subtitle}</p>
+                </div>
+              </div>
+              <div className="payroll-summary">
+                <label className="form-field">
+                  <span>{content.summary.employeeLabel}</span>
+                  <select
+                    value={selectedEmployeeId ?? ""}
+                    onChange={(event) =>
+                      setSelectedEmployeeId(event.target.value ? Number(event.target.value) : null)
+                    }
+                  >
+                    <option value="">{content.summary.employeeLabel}</option>
+                    {employeeOptions}
+                  </select>
+                </label>
+                {!selectedEmployee && (
+                  <p className="helper-text">{content.summary.noEmployee}</p>
+                )}
+              </div>
+              {selectedEmployee && (
+                <div className="payroll-summary__grid">
+                  <div className="stat-card">
+                    <div className="stat-card__top">
+                      <span>{content.summary.attendanceDays}</span>
+                    </div>
+                    <strong>{summaryStats.presentDays}</strong>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-card__top">
+                      <span>{content.summary.absenceDays}</span>
+                    </div>
+                    <strong>{summaryStats.absentDays}</strong>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-card__top">
+                      <span>{content.summary.lateMinutes}</span>
+                    </div>
+                    <strong>{summaryStats.lateMinutes}</strong>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-card__top">
+                      <span>{content.summary.bonuses}</span>
+                    </div>
+                    <strong>{summaryStats.bonuses.toFixed(2)}</strong>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-card__top">
+                      <span>{content.summary.deductions}</span>
+                    </div>
+                    <strong>{summaryStats.deductions.toFixed(2)}</strong>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-card__top">
+                      <span>{content.summary.advances}</span>
+                    </div>
+                    <strong>{summaryStats.advances.toFixed(2)}</strong>
+                  </div>
+                  {selectedSalaryStructure?.salary_type === "commission" && (
+                    <div className="stat-card">
+                      <div className="stat-card__top">
+                        <span>{content.summary.commissionTotal}</span>
+                      </div>
+                      <strong>{summaryStats.commissions.toFixed(2)}</strong>
+                    </div>
+                  )}
+                  <div className="stat-card">
+                    <div className="stat-card__top">
+                      <span>{content.summary.payable}</span>
+                    </div>
+                    <strong>{summaryStats.netPay.toFixed(2)}</strong>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section className="panel payroll-panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.adjustments.title}</h2>
+                  <p>{content.adjustments.subtitle}</p>
+                </div>
+              </div>
+              <div className="payroll-adjustments">
+                <div className="payroll-grid">
+                  <label className="form-field">
+                    <span>{content.adjustments.typeLabel}</span>
+                    <select
+                      value={adjustmentType}
+                      onChange={(event) =>
+                        setAdjustmentType(event.target.value as "bonus" | "deduction" | "advance")
+                      }
+                    >
+                      <option value="bonus">{content.adjustments.bonusType}</option>
+                      <option value="deduction">{content.adjustments.deductionType}</option>
+                      <option value="advance">{content.adjustments.advanceType}</option>
+                    </select>
+                  </label>
+
+                  {adjustmentType !== "advance" ? (
+                    <>
+                      <label className="form-field">
+                        <span>{content.adjustments.nameLabel}</span>
+                        <input
+                          type="text"
+                          placeholder={content.adjustments.namePlaceholder}
+                          value={adjustmentName}
+                          onChange={(event) => setAdjustmentName(event.target.value)}
+                        />
+                      </label>
+                      <label className="form-field">
+                        <span>{content.adjustments.amountLabel}</span>
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder={content.adjustments.amountPlaceholder}
+                          value={adjustmentAmount}
+                          onChange={(event) => setAdjustmentAmount(Number(event.target.value))}
+                        />
+                      </label>
+                      <label className="form-field">
+                        <span>{content.adjustments.recurringLabel}</span>
+                        <select
+                          value={adjustmentRecurring ? "yes" : "no"}
+                          onChange={(event) => setAdjustmentRecurring(event.target.value === "yes")}
+                        >
+                          <option value="yes">{isArabic ? "نعم" : "Yes"}</option>
+                          <option value="no">{isArabic ? "لا" : "No"}</option>
+                        </select>
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <label className="form-field">
+                        <span>{content.adjustments.amountLabel}</span>
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder={content.adjustments.amountPlaceholder}
+                          value={advanceAmount}
+                          onChange={(event) => setAdvanceAmount(Number(event.target.value))}
+                        />
+                      </label>
+                      <label className="form-field">
+                        <span>{content.adjustments.installmentLabel}</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={advanceInstallment}
+                          onChange={(event) => setAdvanceInstallment(Number(event.target.value))}
+                        />
+                      </label>
+                      <label className="form-field">
+                        <span>{content.adjustments.startDateLabel}</span>
+                        <input
+                          type="date"
+                          value={advanceStartDate}
+                          onChange={(event) => setAdvanceStartDate(event.target.value)}
+                        />
+                      </label>
+                    </>
+                  )}
+                </div>
+                {!selectedSalaryStructure?.id && adjustmentType !== "advance" && (
+                  <p className="helper-text">{content.adjustments.missingSalaryStructure}</p>
+                )}
+                <div className="payroll-actions">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={handleAddAdjustment}
+                    disabled={
+                      createSalaryComponentMutation.isPending ||
+                      createLoanAdvanceMutation.isPending ||
+                      !selectedEmployeeId
+                    }
+                  >
+                    {content.adjustments.addAction}
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <Modal
+              opened={salaryModalOpen}
+              onClose={() => setSalaryModalOpen(false)}
+              title={content.modal.title}
+              centered
             >
-              Save
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-    </Stack>
+              <div className="payroll-modal">
+                <label className="form-field">
+                  <span>{content.modal.salaryType}</span>
+                  <select
+                    value={salaryType}
+                    onChange={(event) => setSalaryType(event.target.value as SalaryType)}
+                  >
+                    {salaryTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="form-field">
+                  <span>{content.modal.baseSalary}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={basicSalary}
+                    onChange={(event) => setBasicSalary(Number(event.target.value))}
+                  />
+                </label>
+                <label className="form-field">
+                  <span>{content.modal.currency}</span>
+                  <input
+                    type="text"
+                    value={currency}
+                    onChange={(event) => setCurrency(event.target.value)}
+                  />
+                </label>
+                <div className="payroll-actions">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => setSalaryModalOpen(false)}
+                  >
+                    {content.modal.cancel}
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={handleSaveSalary}
+                    disabled={
+                      createSalaryStructureMutation.isPending ||
+                      updateSalaryStructureMutation.isPending
+                    }
+                  >
+                    {content.modal.save}
+                  </button>
+                </div>
+              </div>
+            </Modal>
+          </div>
+        );
+      }}
+    </DashboardShell>
   );
 }

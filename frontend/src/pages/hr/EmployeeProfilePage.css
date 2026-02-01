@@ -50,6 +50,12 @@
   gap: 18px;
 }
 
+.employee-profile__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
 .form-field {
   display: flex;
   flex-direction: column;

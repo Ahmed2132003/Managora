@@ -1,0 +1,123 @@
+.payroll-page .hero-panel__intro h1 {
+  margin-bottom: 6px;
+}
+
+.payroll-panel {
+  gap: 16px;
+}
+
+.payroll-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.payroll-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.form-field > span {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.form-field input,
+.form-field select {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: var(--bg-alt);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.payroll-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.payroll-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.payroll-table th,
+.payroll-table td {
+  text-align: start;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.payroll-table thead th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.payroll-table tbody tr:hover {
+  background: var(--bg-alt);
+}
+
+.payroll-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.payroll-state {
+  border-radius: 16px;
+  border: 1px dashed var(--border);
+  padding: 16px;
+  color: var(--muted);
+  background: var(--bg-alt);
+}
+
+.payroll-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.payroll-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 16px;
+}
+
+.payroll-adjustments {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.payroll-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .payroll-filters {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .payroll-table {
+    min-width: 680px;
+  }
+}

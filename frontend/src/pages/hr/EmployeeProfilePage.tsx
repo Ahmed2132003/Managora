@@ -19,11 +19,17 @@ import {
   useEmployeeSelectableUsers,
   useJobTitles,
   useSalaryStructures,
+  useSalaryComponentsQuery,
+  useCreateSalaryComponent,
+  useLoanAdvancesQuery,
+  useCreateLoanAdvance,
+  useCommissionApprovalsInboxQuery,
+  useAttendanceRecordsQuery,
   useCreateSalaryStructure,
   useUpdateSalaryStructure,
   useShifts,
   useUpdateEmployee,
-  useUploadEmployeeDocument,
+  useUploadEmployeeDocument,  
   useDeleteEmployeeDocument,
   type EmployeeStatus,
   type SalaryType,
@@ -45,6 +51,47 @@ type PageContent = {
     job: string;
     documents: string;
     payroll: string;
+  };
+  section: {
+    basicTitle: string;
+    basicSubtitle: string;
+    jobTitle: string;
+    jobSubtitle: string;
+    documentsTitle: string;
+    documentsSubtitle: string;
+    payrollTitle: string;
+    payrollSubtitle: string;
+  };
+  payrollSummary: {
+    title: string;
+    subtitle: string;
+    presentDays: string;
+    absentDays: string;
+    lateMinutes: string;
+    deductions: string;
+    bonuses: string;
+    advances: string;
+    netPay: string;
+    commissionTotal: string;
+    payableSalary: string;
+    dailyRate: string;
+  };
+  adjustments: {
+    title: string;
+    subtitle: string;
+    typeLabel: string;
+    nameLabel: string;
+    amountLabel: string;
+    recurringLabel: string;
+    startDateLabel: string;
+    installmentLabel: string;
+    addAction: string;
+    bonusType: string;
+    deductionType: string;
+    advanceType: string;
+    namePlaceholder: string;
+    amountPlaceholder: string;
+    missingSalaryStructure: string;
   };
   section: {
     basicTitle: string;
@@ -139,10 +186,41 @@ const pageCopy: Record<Language, PageContent> = {
       payrollTitle: "Payroll details",
       payrollSubtitle: "Set salary type, base salary, and currency.",
     },
+    payrollSummary: {
+      title: "Attendance & payroll summary",
+      subtitle: "Track attendance, delays, and the estimated payable salary.",
+      presentDays: "Attendance days",
+      absentDays: "Absence days",
+      lateMinutes: "Late minutes",
+      deductions: "Deductions",
+      bonuses: "Bonuses",
+      advances: "Advances",
+      netPay: "Net payable",
+      commissionTotal: "Approved commissions",
+      payableSalary: "Payable salary",
+      dailyRate: "Daily rate",
+    },
+    adjustments: {
+      title: "Add payroll adjustment",
+      subtitle: "Add a bonus, deduction, or advance for this employee.",
+      typeLabel: "Adjustment type",
+      nameLabel: "Label",
+      amountLabel: "Amount",
+      recurringLabel: "Recurring",
+      startDateLabel: "Start date",
+      installmentLabel: "Installment amount",
+      addAction: "Add adjustment",
+      bonusType: "Bonus",
+      deductionType: "Deduction",
+      advanceType: "Advance",
+      namePlaceholder: "e.g. Performance bonus",
+      amountPlaceholder: "Enter amount",
+      missingSalaryStructure: "Save payroll data first to add bonuses or deductions.",
+    },
     fields: {
       employeeCode: "Employee code",
       fullName: "Full name",
-      nationalId: "National ID",      
+      nationalId: "National ID",                  
       jobTitle: "Job title",
       hireDate: "Hire date",
       status: "Status",
@@ -220,10 +298,41 @@ const pageCopy: Record<Language, PageContent> = {
       payrollTitle: "بيانات الرواتب",
       payrollSubtitle: "تحديد نوع الراتب والأساسي والعملة.",
     },
+    payrollSummary: {
+      title: "ملخص الحضور والراتب",
+      subtitle: "متابعة الحضور والتأخير وصافي الراتب المستحق.",
+      presentDays: "أيام الحضور",
+      absentDays: "أيام الغياب",
+      lateMinutes: "دقائق التأخير",
+      deductions: "الخصومات",
+      bonuses: "المكافآت",
+      advances: "السلف",
+      netPay: "صافي المستحق",
+      commissionTotal: "العمولات المعتمدة",
+      payableSalary: "الراتب المستحق",
+      dailyRate: "الأجر اليومي",
+    },
+    adjustments: {
+      title: "إضافة تعديل على الراتب",
+      subtitle: "إضافة مكافأة أو خصم أو سلفة لهذا الموظف.",
+      typeLabel: "نوع التعديل",
+      nameLabel: "الوصف",
+      amountLabel: "القيمة",
+      recurringLabel: "متكرر",
+      startDateLabel: "تاريخ البداية",
+      installmentLabel: "قيمة القسط",
+      addAction: "إضافة التعديل",
+      bonusType: "مكافأة",
+      deductionType: "خصم",
+      advanceType: "سلفة",
+      namePlaceholder: "مثال: مكافأة أداء",
+      amountPlaceholder: "أدخل المبلغ",
+      missingSalaryStructure: "احفظ بيانات الرواتب أولاً لإضافة المكافآت أو الخصومات.",
+    },
     fields: {
       employeeCode: "كود الموظف",
       fullName: "الاسم بالكامل",
-      nationalId: "الرقم القومي",      
+      nationalId: "الرقم القومي",                  
       jobTitle: "المسمى الوظيفي",
       hireDate: "تاريخ التعيين",
       status: "الحالة",
@@ -443,6 +552,18 @@ export function EmployeeProfilePage() {
   const [activeTab, setActiveTab] = useState<"basic" | "job" | "documents" | "payroll">(
     "basic"
   );
+  const [adjustmentType, setAdjustmentType] = useState<"bonus" | "deduction" | "advance">(
+    "bonus"
+  );
+  const [adjustmentName, setAdjustmentName] = useState("");
+  const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
+  const [adjustmentRecurring, setAdjustmentRecurring] = useState(true);
+  const [advanceAmount, setAdvanceAmount] = useState<number>(0);
+  const [advanceInstallment, setAdvanceInstallment] = useState<number>(0);
+  const [advanceStartDate, setAdvanceStartDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().slice(0, 10);
+  });
 
   const employeeQuery = useEmployee(employeeId);
   const departmentsQuery = useDepartments();
@@ -452,6 +573,48 @@ export function EmployeeProfilePage() {
   const selectableUsersQuery = useEmployeeSelectableUsers();
   const documentsQuery = useEmployeeDocuments(employeeId);
   const salaryStructuresQuery = useSalaryStructures({ employeeId });
+  const salaryStructure = useMemo(
+    () => salaryStructuresQuery.data?.[0] ?? null,
+    [salaryStructuresQuery.data]
+  );
+  const salaryComponentsQuery = useSalaryComponentsQuery({
+    salaryStructureId: salaryStructure?.id ?? null,
+    enabled: Boolean(salaryStructure?.id),
+  });
+  const loanAdvancesQuery = useLoanAdvancesQuery({
+    employeeId,
+    status: "active",
+    enabled: Boolean(employeeId),
+  });
+  const [attendanceRange] = useState(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const formattedMonth = String(month).padStart(2, "0");
+    return {
+      year,
+      month,
+      daysInMonth,
+      dateFrom: `${year}-${formattedMonth}-01`,
+      dateTo: `${year}-${formattedMonth}-${String(daysInMonth).padStart(2, "0")}`,
+    };
+  });
+  const attendanceQuery = useAttendanceRecordsQuery(
+    {
+      dateFrom: attendanceRange.dateFrom,
+      dateTo: attendanceRange.dateTo,
+      employeeId: employeeId ? String(employeeId) : undefined,
+    },
+    Boolean(employeeId)
+  );
+  const commissionQuery = useCommissionApprovalsInboxQuery({
+    status: "approved",
+    employeeId: employeeId ?? undefined,
+    dateFrom: attendanceRange.dateFrom,
+    dateTo: attendanceRange.dateTo,
+    enabled: Boolean(employeeId),
+  });
 
   const createEmployeeMutation = useCreateEmployee();
   const createJobTitleMutation = useCreateJobTitle();
@@ -461,6 +624,8 @@ export function EmployeeProfilePage() {
   const deleteDocumentMutation = useDeleteEmployeeDocument();
   const createSalaryStructureMutation = useCreateSalaryStructure();
   const updateSalaryStructureMutation = useUpdateSalaryStructure();
+  const createSalaryComponentMutation = useCreateSalaryComponent();
+  const createLoanAdvanceMutation = useCreateLoanAdvance();
 
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
@@ -775,7 +940,123 @@ export function EmployeeProfilePage() {
     }
   }
 
-  return (
+  const attendanceStats = useMemo(() => {
+    const records = attendanceQuery.data ?? [];
+    const presentDays = records.filter((record) => record.status !== "absent").length;
+    const lateMinutes = records.reduce((sum, record) => sum + (record.late_minutes ?? 0), 0);
+    const absentDays = Math.max(attendanceRange.daysInMonth - presentDays, 0);
+    return { presentDays, lateMinutes, absentDays };
+  }, [attendanceQuery.data, attendanceRange.daysInMonth]);
+
+  const adjustmentTotals = useMemo(() => {
+    const components = salaryComponentsQuery.data ?? [];
+    const bonuses = components
+      .filter((component) => component.type === "earning")
+      .reduce((sum, component) => sum + Number(component.amount || 0), 0);
+    const deductions = components
+      .filter((component) => component.type === "deduction")
+      .reduce((sum, component) => sum + Number(component.amount || 0), 0);
+    const advances = (loanAdvancesQuery.data ?? []).reduce(
+      (sum, loan) => sum + Number(loan.installment_amount || 0),
+      0
+    );
+    const commissions = (commissionQuery.data ?? []).reduce(
+      (sum, commission) => sum + Number(commission.amount || 0),
+      0
+    );
+    return {
+      bonuses,
+      deductions,
+      advances,
+      commissions,
+    };
+  }, [commissionQuery.data, loanAdvancesQuery.data, salaryComponentsQuery.data]);
+
+  async function handleAddAdjustment() {
+    if (!employeeId) {
+      return;
+    }
+
+    if (adjustmentType === "advance") {
+      if (advanceAmount <= 0 || advanceInstallment <= 0 || !advanceStartDate) {
+        notifications.show({
+          title: "Missing info",
+          message: "Please enter advance details.",
+          color: "red",
+        });
+        return;
+      }
+      try {
+        await createLoanAdvanceMutation.mutateAsync({
+          employee: employeeId,
+          type: "advance",
+          principal_amount: advanceAmount,
+          installment_amount: advanceInstallment,
+          start_date: advanceStartDate,
+        });
+        notifications.show({
+          title: "Advance added",
+          message: "تمت إضافة السلفة بنجاح.",
+        });
+        loanAdvancesQuery.refetch();
+        setAdvanceAmount(0);
+        setAdvanceInstallment(0);
+      } catch (error) {
+        notifications.show({
+          title: "Failed",
+          message: extractApiErrorMessage(error),
+          color: "red",
+        });
+      }
+      return;
+    }
+
+    if (!salaryStructure?.id) {
+      notifications.show({
+        title: "Missing payroll",
+        message: "Please save payroll data first.",
+        color: "red",
+      });
+      return;
+    }
+
+    if (adjustmentAmount <= 0) {
+      notifications.show({
+        title: "Missing info",
+        message: "Please enter a valid amount.",
+        color: "red",
+      });
+      return;
+    }
+
+    const adjustmentLabel =
+      adjustmentName.trim() ||
+      (adjustmentType === "bonus" ? "Bonus" : "Deduction");
+    try {
+      await createSalaryComponentMutation.mutateAsync({
+        salary_structure: salaryStructure.id,
+        name: adjustmentLabel,
+        type: adjustmentType === "bonus" ? "earning" : "deduction",
+        amount: adjustmentAmount,
+        is_recurring: adjustmentRecurring,
+      });
+      notifications.show({
+        title: "Adjustment added",
+        message: "تمت إضافة التعديل بنجاح.",
+      });
+      salaryComponentsQuery.refetch();
+      setAdjustmentName("");
+      setAdjustmentAmount(0);
+    } catch (error) {
+      notifications.show({
+        title: "Failed",
+        message: extractApiErrorMessage(error),
+        color: "red",
+      });
+    }
+  }
+
+  return (    
     <DashboardShell copy={shellCopy} className="employee-profile-page">
       {({ language, isArabic }) => {
         const content = pageCopy[language];
@@ -789,12 +1070,24 @@ export function EmployeeProfilePage() {
         const basicSalaryValue = Number(salaryForm.watch("basic_salary") || 0);
         const dailyRateValue = resolveDailyRate(salaryTypeValue, basicSalaryValue);
         const dailyRateLabel = dailyRateValue === null ? "—" : dailyRateValue.toFixed(2);
+        const bonusTotal = adjustmentTotals.bonuses;
+        const deductionTotal = adjustmentTotals.deductions;
+        const advanceTotal = adjustmentTotals.advances;
+        const commissionTotal = adjustmentTotals.commissions;
+        const attendanceEarnings =
+          dailyRateValue === null ? 0 : dailyRateValue * attendanceStats.presentDays;
+        const baseEarnings =
+          salaryTypeValue === "commission"
+            ? commissionTotal + bonusTotal
+            : attendanceEarnings + bonusTotal;
+        const netPay = baseEarnings - (deductionTotal + advanceTotal);
+        const netPayLabel = Number.isFinite(netPay) ? netPay.toFixed(2) : "0.00";
 
         return (
           <div className="employee-profile">
             <section className="panel employee-profile__panel">
               <div className="panel__header">
-                <div>
+                <div>                  
                   <h2>{content.section.basicTitle}</h2>
                   <p>{content.section.basicSubtitle}</p>
                 </div>
@@ -1219,103 +1512,269 @@ export function EmployeeProfilePage() {
                 )}
 
                 {activeTab === "payroll" && (
-                  <section className="panel employee-profile__subpanel">
-                    <div className="panel__header">
-                      <div>
-                        <h2>{content.section.payrollTitle}</h2>
-                        <p>{content.section.payrollSubtitle}</p>
+                  <>
+                    <section className="panel employee-profile__subpanel">
+                      <div className="panel__header">
+                        <div>
+                          <h2>{content.section.payrollTitle}</h2>
+                          <p>{content.section.payrollSubtitle}</p>
+                        </div>
                       </div>
-                    </div>
 
-                    {!employeeId && <p className="helper-text">{content.payroll.missingEmployee}</p>}
+                      {!employeeId && <p className="helper-text">{content.payroll.missingEmployee}</p>}
 
-                    <div className="employee-profile__grid">
-                      <label className="form-field">
-                        <span>{content.fields.salaryType}</span>
-                        <Controller
-                          name="salary_type"
-                          control={salaryForm.control}
-                          render={({ field }) => (
-                            <select
-                              value={field.value ?? ""}
-                              onChange={(event) => field.onChange(event.target.value)}
-                              disabled={!employeeId}
-                            >
-                              <option value="" disabled>
-                                {content.payroll.salaryTypePlaceholder}
-                              </option>
-                              {salaryTypeOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
+                      <div className="employee-profile__grid">
+                        <label className="form-field">
+                          <span>{content.fields.salaryType}</span>
+                          <Controller
+                            name="salary_type"
+                            control={salaryForm.control}
+                            render={({ field }) => (
+                              <select
+                                value={field.value ?? ""}
+                                onChange={(event) => field.onChange(event.target.value)}
+                                disabled={!employeeId}
+                              >
+                                <option value="" disabled>
+                                  {content.payroll.salaryTypePlaceholder}
                                 </option>
-                              ))}
-                            </select>
-                          )}
-                        />
-                      </label>
+                                {salaryTypeOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          />
+                        </label>
 
-                      <label className="form-field">
-                        <span>{content.fields.basicSalary}</span>
-                        <Controller
-                          name="basic_salary"
-                          control={salaryForm.control}
-                          render={({ field }) => (
-                            <NumberInput
-                              value={typeof field.value === "number" ? field.value : Number(field.value) || 0}
-                              onChange={(value) =>
-                                field.onChange(typeof value === "number" ? value : Number(value) || 0)
-                              }
-                              min={0}
-                              hideControls
-                              thousandSeparator=","                              
-                              disabled={!employeeId}
-                            />
-                          )}
-                        />
-                      </label>
+                        <label className="form-field">
+                          <span>{content.fields.basicSalary}</span>
+                          <Controller
+                            name="basic_salary"
+                            control={salaryForm.control}
+                            render={({ field }) => (
+                              <NumberInput
+                                value={typeof field.value === "number" ? field.value : Number(field.value) || 0}
+                                onChange={(value) =>
+                                  field.onChange(typeof value === "number" ? value : Number(value) || 0)
+                                }
+                                min={0}
+                                hideControls
+                                thousandSeparator=","                              
+                                disabled={!employeeId}
+                              />
+                            )}
+                          />
+                        </label>
 
-                      <label className="form-field">
-                        <span>{content.fields.currency}</span>
-                        <Controller
-                          name="currency"
-                          control={salaryForm.control}
-                          render={({ field }) => (
-                            <TextInput
-                              value={field.value ?? ""}
-                              onChange={field.onChange}
-                              disabled={!employeeId}
-                            />
-                          )}
-                        />
-                      </label>
+                        <label className="form-field">
+                          <span>{content.fields.currency}</span>
+                          <Controller
+                            name="currency"
+                            control={salaryForm.control}
+                            render={({ field }) => (
+                              <TextInput
+                                value={field.value ?? ""}
+                                onChange={field.onChange}
+                                disabled={!employeeId}
+                              />
+                            )}
+                          />
+                        </label>
 
-                      <label className="form-field">
-                        <span>{content.fields.dailyRate}</span>
-                        <input
-                          type="text"
-                          value={dailyRateLabel}
-                          readOnly
-                        />
-                        <span className="helper-text">{content.payroll.dailyRateHint}</span>
-                      </label>
-                    </div>
+                        <label className="form-field">
+                          <span>{content.fields.dailyRate}</span>
+                          <input
+                            type="text"
+                            value={dailyRateLabel}
+                            readOnly
+                          />
+                          <span className="helper-text">{content.payroll.dailyRateHint}</span>
+                        </label>
+                      </div>
 
-                    <Group>
-                      <Button
-                        type="button"
-                        onClick={salaryForm.handleSubmit(handleSalarySubmit)}
-                        disabled={!employeeId}
-                        loading={
-                          createSalaryStructureMutation.isPending ||
-                          updateSalaryStructureMutation.isPending
-                        }
-                      >
-                        {content.buttons.savePayroll}
-                      </Button>
-                    </Group>
-                  </section>
+                      <Group>
+                        <Button
+                          type="button"
+                          onClick={salaryForm.handleSubmit(handleSalarySubmit)}
+                          disabled={!employeeId}
+                          loading={
+                            createSalaryStructureMutation.isPending ||
+                            updateSalaryStructureMutation.isPending
+                          }
+                        >
+                          {content.buttons.savePayroll}
+                        </Button>
+                      </Group>
+                    </section>
+
+                    <section className="panel employee-profile__subpanel">
+                      <div className="panel__header">
+                        <div>
+                          <h2>{content.payrollSummary.title}</h2>
+                          <p>{content.payrollSummary.subtitle}</p>
+                        </div>
+                      </div>
+                      <div className="employee-profile__summary-grid">
+                        <div className="stat-card">
+                          <div className="stat-card__top">
+                            <span>{content.payrollSummary.presentDays}</span>
+                          </div>
+                          <strong>{attendanceStats.presentDays}</strong>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-card__top">
+                            <span>{content.payrollSummary.absentDays}</span>
+                          </div>
+                          <strong>{attendanceStats.absentDays}</strong>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-card__top">
+                            <span>{content.payrollSummary.lateMinutes}</span>
+                          </div>
+                          <strong>{attendanceStats.lateMinutes}</strong>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-card__top">
+                            <span>{content.payrollSummary.bonuses}</span>
+                          </div>
+                          <strong>{bonusTotal.toFixed(2)}</strong>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-card__top">
+                            <span>{content.payrollSummary.deductions}</span>
+                          </div>
+                          <strong>{deductionTotal.toFixed(2)}</strong>
+                        </div>
+                        <div className="stat-card">
+                          <div className="stat-card__top">
+                            <span>{content.payrollSummary.advances}</span>
+                          </div>
+                          <strong>{advanceTotal.toFixed(2)}</strong>
+                        </div>
+                        {salaryTypeValue === "commission" && (
+                          <div className="stat-card">
+                            <div className="stat-card__top">
+                              <span>{content.payrollSummary.commissionTotal}</span>
+                            </div>
+                            <strong>{commissionTotal.toFixed(2)}</strong>
+                          </div>
+                        )}
+                        <div className="stat-card">
+                          <div className="stat-card__top">
+                            <span>{content.payrollSummary.payableSalary}</span>
+                          </div>
+                          <strong>{netPayLabel}</strong>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="panel employee-profile__subpanel">
+                      <div className="panel__header">
+                        <div>
+                          <h2>{content.adjustments.title}</h2>
+                          <p>{content.adjustments.subtitle}</p>
+                        </div>
+                      </div>
+                      <div className="employee-profile__grid">
+                        <label className="form-field">
+                          <span>{content.adjustments.typeLabel}</span>
+                          <select
+                            value={adjustmentType}
+                            onChange={(event) =>
+                              setAdjustmentType(event.target.value as "bonus" | "deduction" | "advance")
+                            }
+                          >
+                            <option value="bonus">{content.adjustments.bonusType}</option>
+                            <option value="deduction">{content.adjustments.deductionType}</option>
+                            <option value="advance">{content.adjustments.advanceType}</option>
+                          </select>
+                        </label>
+
+                        {adjustmentType !== "advance" ? (
+                          <>
+                            <label className="form-field">
+                              <span>{content.adjustments.nameLabel}</span>
+                              <input
+                                type="text"
+                                placeholder={content.adjustments.namePlaceholder}
+                                value={adjustmentName}
+                                onChange={(event) => setAdjustmentName(event.target.value)}
+                              />
+                            </label>
+                            <label className="form-field">
+                              <span>{content.adjustments.amountLabel}</span>
+                              <input
+                                type="number"
+                                min={0}
+                                placeholder={content.adjustments.amountPlaceholder}
+                                value={adjustmentAmount}
+                                onChange={(event) => setAdjustmentAmount(Number(event.target.value))}
+                              />
+                            </label>
+                            <label className="form-field">
+                              <span>{content.adjustments.recurringLabel}</span>
+                              <select
+                                value={adjustmentRecurring ? "yes" : "no"}
+                                onChange={(event) => setAdjustmentRecurring(event.target.value === "yes")}
+                              >
+                                <option value="yes">{isArabic ? "نعم" : "Yes"}</option>
+                                <option value="no">{isArabic ? "لا" : "No"}</option>
+                              </select>
+                            </label>
+                          </>
+                        ) : (
+                          <>
+                            <label className="form-field">
+                              <span>{content.adjustments.amountLabel}</span>
+                              <input
+                                type="number"
+                                min={0}
+                                placeholder={content.adjustments.amountPlaceholder}
+                                value={advanceAmount}
+                                onChange={(event) => setAdvanceAmount(Number(event.target.value))}
+                              />
+                            </label>
+                            <label className="form-field">
+                              <span>{content.adjustments.installmentLabel}</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={advanceInstallment}
+                                onChange={(event) => setAdvanceInstallment(Number(event.target.value))}
+                              />
+                            </label>
+                            <label className="form-field">
+                              <span>{content.adjustments.startDateLabel}</span>
+                              <input
+                                type="date"
+                                value={advanceStartDate}
+                                onChange={(event) => setAdvanceStartDate(event.target.value)}
+                              />
+                            </label>
+                          </>
+                        )}
+                      </div>
+                      {!salaryStructure?.id && adjustmentType !== "advance" && (
+                        <p className="helper-text">{content.adjustments.missingSalaryStructure}</p>
+                      )}
+                      <div className="employee-profile__actions">
+                        <button
+                          type="button"
+                          className="primary-button"
+                          onClick={handleAddAdjustment}
+                          disabled={
+                            createSalaryComponentMutation.isPending ||
+                            createLoanAdvanceMutation.isPending
+                          }
+                        >
+                          {content.adjustments.addAction}
+                        </button>
+                      </div>
+                    </section>
+                  </>
                 )}
-
                 <div className="employee-profile__actions">                  
                   <button
                     type="submit"

@@ -33,12 +33,14 @@ from hr.models import (
     EmployeeDocument,
     HRAction,
     JobTitle,
+    LoanAdvance,
     LeaveBalance,
     LeaveRequest,
     LeaveType,
     CommissionRequest,
     PayrollPeriod,
     PayrollRun,
+    SalaryComponent,
     PolicyRule,
     SalaryStructure,
     Shift,
@@ -83,9 +85,11 @@ from hr.serializers import (
     PayrollPeriodSerializer,
     PayrollRunDetailSerializer,
     PayrollRunListSerializer,
+    SalaryComponentSerializer,
     SalaryStructureSerializer,
     ShiftSerializer,
     UserMiniSerializer,
+    LoanAdvanceSerializer,
 )
 from hr.services.generator import generate_period
 from hr.services.leaves import approve_leave, reject_leave
@@ -244,6 +248,100 @@ class SalaryStructureViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         return queryset.order_by("id")
 
 
+@extend_schema_view(
+    list=extend_schema(tags=["Payroll"], summary="List salary components"),
+    retrieve=extend_schema(tags=["Payroll"], summary="Retrieve salary component"),
+    create=extend_schema(tags=["Payroll"], summary="Create salary component"),
+    partial_update=extend_schema(tags=["Payroll"], summary="Update salary component"),
+    destroy=extend_schema(tags=["Payroll"], summary="Delete salary component"),
+)
+class SalaryComponentViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
+    serializer_class = SalaryComponentSerializer
+    permission_classes = [IsAuthenticated]
+    permission_map = {
+        "list": "hr.payroll.view",
+        "retrieve": "hr.payroll.view",
+        "create": "hr.payroll.create",
+        "partial_update": "hr.payroll.create",
+        "destroy": "hr.payroll.create",
+    }
+
+    def get_queryset(self):
+        queryset = SalaryComponent.objects.select_related(
+            "salary_structure", "salary_structure__employee"
+        ).filter(company=self.request.user.company)
+        salary_structure_id = self.request.query_params.get("salary_structure")
+        employee_id = self.request.query_params.get("employee")
+        if salary_structure_id:
+            queryset = queryset.filter(salary_structure_id=salary_structure_id)
+        if employee_id:
+            queryset = queryset.filter(salary_structure__employee_id=employee_id)
+        queryset = _restrict_adjustment_queryset(
+            self.request.user, queryset, "salary_structure__employee"
+        )
+        return queryset.order_by("id")
+
+    def perform_create(self, serializer):
+        salary_structure = serializer.validated_data.get("salary_structure")
+        if salary_structure:
+            _ensure_adjustment_access(self.request.user, salary_structure.employee)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        if instance and instance.salary_structure_id:
+            _ensure_adjustment_access(
+                self.request.user, instance.salary_structure.employee
+            )
+        serializer.save()
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Payroll"], summary="List loan advances"),
+    retrieve=extend_schema(tags=["Payroll"], summary="Retrieve loan advance"),
+    create=extend_schema(tags=["Payroll"], summary="Create loan advance"),
+    partial_update=extend_schema(tags=["Payroll"], summary="Update loan advance"),
+    destroy=extend_schema(tags=["Payroll"], summary="Delete loan advance"),
+)
+class LoanAdvanceViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
+    serializer_class = LoanAdvanceSerializer
+    permission_classes = [IsAuthenticated]
+    permission_map = {
+        "list": "hr.payroll.view",
+        "retrieve": "hr.payroll.view",
+        "create": "hr.payroll.create",
+        "partial_update": "hr.payroll.create",
+        "destroy": "hr.payroll.create",
+    }
+
+    def get_queryset(self):
+        queryset = LoanAdvance.objects.select_related("employee").filter(
+            company=self.request.user.company
+        )
+        employee_id = self.request.query_params.get("employee")
+        status_filter = self.request.query_params.get("status")
+        if employee_id:
+            queryset = queryset.filter(employee_id=employee_id)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        queryset = _restrict_adjustment_queryset(
+            self.request.user, queryset, "employee"
+        )
+        return queryset.order_by("id")
+
+    def perform_create(self, serializer):
+        employee = serializer.validated_data.get("employee")
+        if employee:
+            _ensure_adjustment_access(self.request.user, employee)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        if instance:
+            _ensure_adjustment_access(self.request.user, instance.employee)
+        serializer.save()
+
+
 @extend_schema(tags=["Employees"], summary="Selectable users for employee linking")
 class EmployeeSelectableUsersView(ListAPIView):
     serializer_class = UserMiniSerializer
@@ -385,6 +483,30 @@ def _user_role_names(user) -> set[str]:
         return set()
     return {name.strip().lower() for name in user.roles.values_list("name", flat=True)}
 
+
+def _ensure_adjustment_access(user, employee: Employee):
+    roles = _user_role_names(user)
+    if "admin" in roles or "manager" in roles:
+        return
+    if "hr" in roles:
+        requester_user = getattr(employee, "user", None)
+        requester_roles = _user_role_names(requester_user)
+        if {"hr", "manager"} & set(requester_roles):
+            raise PermissionDenied("HR can only manage employee or accountant adjustments.")
+        return
+    raise PermissionDenied("You do not have permission to manage payroll adjustments.")
+
+
+def _restrict_adjustment_queryset(user, queryset, employee_field: str):
+    roles = _user_role_names(user)
+    if "admin" in roles or "manager" in roles:
+        return queryset
+    if "hr" in roles:
+        return (
+            queryset.exclude(**{f"{employee_field}__user__roles__name__iexact": "HR"})
+            .exclude(**{f"{employee_field}__user__roles__name__iexact": "Manager"})
+        )
+    raise PermissionDenied("You do not have permission to view payroll adjustments.")
 
 
 def _get_user_employee(user):
@@ -1157,7 +1279,9 @@ class LeaveApprovalsInboxView(ListAPIView):
         queryset = LeaveRequest.objects.select_related("employee", "leave_type").filter(
             company=user.company
         )
-
+        queryset = queryset.exclude(employee__user=user)
+        
+        
         if user_has_permission(user, "leaves.*"):
             if "hr" in roles and "manager" not in roles:
                 queryset = queryset.exclude(
@@ -1324,6 +1448,21 @@ class CommissionApprovalsInboxView(ListAPIView):
             if status_value not in CommissionRequest.Status.values:
                 raise ValidationError({"status": "Invalid status value."})
             queryset = queryset.filter(status=status_value)
+
+        employee_id = self.request.query_params.get("employee_id")
+        if employee_id:
+            queryset = queryset.filter(employee_id=employee_id)
+
+        date_from = _parse_date_param(
+            self.request.query_params.get("date_from"), "date_from"
+        )
+        date_to = _parse_date_param(
+            self.request.query_params.get("date_to"), "date_to"
+        )
+        if date_from:
+            queryset = queryset.filter(earned_date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(earned_date__lte=date_to)
 
         employee_search = self.request.query_params.get("employee")
         if employee_search:

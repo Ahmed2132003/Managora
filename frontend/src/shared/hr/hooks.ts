@@ -255,6 +255,26 @@ export type SalaryStructure = {
   currency: string | null;
 };
 
+export type SalaryComponent = {
+  id: number;
+  salary_structure: number;
+  name: string;
+  type: "earning" | "deduction";
+  amount: string;
+  is_recurring: boolean;
+};
+
+export type LoanAdvance = {
+  id: number;
+  employee: number;
+  type: "loan" | "advance";
+  principal_amount: string;
+  installment_amount: string;
+  remaining_amount: string;
+  start_date: string;
+  status: "active" | "closed";
+};
+
 export type PayrollEmployee = {
   id: number;
   employee_code: string;
@@ -374,9 +394,13 @@ export function useMyAttendanceQuery(params?: { dateFrom?: string; dateTo?: stri
   });
 }
 
-export function useAttendanceRecordsQuery(filters: AttendanceFilters) {
+export function useAttendanceRecordsQuery(
+  filters: AttendanceFilters,
+  enabled = true
+) {
   return useQuery({
     queryKey: ["attendance", "records", filters],
+    enabled,
     queryFn: async () => {
       const response = await http.get<AttendanceRecord[]>(
         endpoints.hr.attendanceRecords,
@@ -567,11 +591,111 @@ export function useUpdateSalaryStructure() {
   });
 }
 
+export function useSalaryComponentsQuery(params?: {
+  employeeId?: number | null;
+  salaryStructureId?: number | null;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["hr", "salary-components", params],
+    enabled: params?.enabled ?? true,
+    queryFn: async () => {
+      const response = await http.get<SalaryComponent[] | { results: SalaryComponent[] }>(
+        endpoints.hr.salaryComponents,
+        {
+          params: {
+            employee: params?.employeeId ?? undefined,
+            salary_structure: params?.salaryStructureId ?? undefined,
+          },
+        }
+      );
+      if (Array.isArray(response.data)) {
+        return response.data;
+      }
+      if ("results" in response.data && Array.isArray(response.data.results)) {
+        return response.data.results;
+      }
+      return [];
+    },
+  });
+}
+
+export function useCreateSalaryComponent() {
+  return useMutation({
+    mutationFn: async (payload: {
+      salary_structure: number;
+      name: string;
+      type: "earning" | "deduction";
+      amount: number;
+      is_recurring?: boolean;
+    }) => {
+      const response = await http.post<SalaryComponent>(
+        endpoints.hr.salaryComponents,
+        {
+          ...payload,
+          is_recurring: payload.is_recurring ?? true,
+        }
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useLoanAdvancesQuery(params?: {
+  employeeId?: number | null;
+  status?: "active" | "closed";
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["hr", "loan-advances", params],
+    enabled: params?.enabled ?? true,
+    queryFn: async () => {
+      const response = await http.get<LoanAdvance[] | { results: LoanAdvance[] }>(
+        endpoints.hr.loanAdvances,
+        {
+          params: {
+            employee: params?.employeeId ?? undefined,
+            status: params?.status ?? undefined,
+          },
+        }
+      );
+      if (Array.isArray(response.data)) {
+        return response.data;
+      }
+      if ("results" in response.data && Array.isArray(response.data.results)) {
+        return response.data.results;
+      }
+      return [];
+    },
+  });
+}
+
+export function useCreateLoanAdvance() {
+  return useMutation({
+    mutationFn: async (payload: {
+      employee: number;
+      type: "loan" | "advance";
+      principal_amount: number;
+      installment_amount: number;
+      start_date: string;
+      remaining_amount?: number;
+      status?: "active" | "closed";
+    }) => {
+      const response = await http.post<LoanAdvance>(endpoints.hr.loanAdvances, {
+        ...payload,
+        remaining_amount: payload.remaining_amount ?? payload.principal_amount,
+        status: payload.status ?? "active",
+      });
+      return response.data;
+    },
+  });
+}
+
 export function useCreateEmployee() {
   return useMutation({
     mutationFn: async (payload: EmployeePayload) => {      
       const response = await http.post<EmployeeDetail>(endpoints.hr.employees, payload);
-      return response.data;
+      return response.data;      
     },
   });
 }
@@ -702,6 +826,18 @@ export type LeaveRequest = {
   decided_at: string | null;
   reject_reason: string | null;
   employee?: AttendanceEmployee;
+};
+
+export type CommissionRequest = {
+  id: number;
+  employee: AttendanceEmployee;
+  amount: string;
+  earned_date: string;
+  note: string | null;
+  status: "pending" | "approved" | "rejected";
+  requested_at: string;
+  decided_at: string | null;
+  reject_reason: string | null;
 };
 
 export type LeaveRequestCreatePayload = {
@@ -862,11 +998,38 @@ export function useLeaveApprovalsInboxQuery(params?: {
   });
 }
 
+export function useCommissionApprovalsInboxQuery(params?: {
+  status?: string;
+  employeeId?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  enabled?: boolean;
+}) {
+  return useQuery({
+    queryKey: ["commissions", "approvals", "inbox", params],
+    enabled: params?.enabled ?? true,
+    queryFn: async () => {
+      const response = await http.get<CommissionRequest[]>(
+        endpoints.hr.commissionApprovalsInbox,
+        {
+          params: {
+            status: params?.status,
+            employee_id: params?.employeeId,
+            date_from: params?.dateFrom,
+            date_to: params?.dateTo,
+          },
+        }
+      );
+      return response.data;
+    },
+  });
+}
+
 export function useApproveLeaveRequestMutation() {
   return useMutation({
     mutationFn: async (id: number) => {
       const response = await http.post<LeaveRequest>(
-        endpoints.hr.leaveRequestApprove(id)
+        endpoints.hr.leaveRequestApprove(id)        
       );
       return response.data;
     },
