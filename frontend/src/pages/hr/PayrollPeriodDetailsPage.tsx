@@ -272,7 +272,8 @@ export function PayrollPeriodDetailsPage() {
   }, [runDetailsQuery.data?.net_total, runSummary]);
 
   useEffect(() => {
-    if (!periodRange) {
+    const currentPeriodRange = periodRange;
+    if (!currentPeriodRange) {
       return;
     }
     const missingRuns = runs.filter((run) => runPayables[run.id] == null);
@@ -289,8 +290,8 @@ export function PayrollPeriodDetailsPage() {
               http.get<PayrollRunDetail>(endpoints.hr.payrollRun(run.id)),
               http.get<AttendanceRecord[]>(endpoints.hr.attendanceRecords, {
                 params: {
-                  date_from: periodRange.dateFrom,
-                  date_to: periodRange.dateTo,
+                  date_from: currentPeriodRange.dateFrom,
+                  date_to: currentPeriodRange.dateTo,                  
                   employee_id: run.employee.id,
                 },
               }),
@@ -298,7 +299,7 @@ export function PayrollPeriodDetailsPage() {
             const summary = buildRunSummary(
               runDetailsResponse.data,
               attendanceResponse.data ?? [],
-              periodRange
+              currentPeriodRange              
             );
             const calculated = calculatePayableTotal(summary);
             return {
@@ -504,7 +505,7 @@ export function PayrollPeriodDetailsPage() {
     </Table.Tr>
   );
   });
-  
+
   return (
     <Stack gap="lg">
       <Group justify="space-between">
