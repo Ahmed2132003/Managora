@@ -18,6 +18,7 @@ from rest_framework.generics import (
     ListCreateAPIView,
 )
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -1771,6 +1772,15 @@ class PayrollRunPayslipPDFView(APIView):
 )
 class PayrollRunPayslipPNGView(APIView):
     permission_classes = [IsAuthenticated]
+
+    class PNGRenderer(BaseRenderer):
+        media_type = "image/png"
+        format = "png"
+
+        def render(self, data, media_type=None, renderer_context=None):
+            return data
+
+    renderer_classes = [PNGRenderer]
 
     def get_permissions(self):
         if self.request.method == "OPTIONS":
