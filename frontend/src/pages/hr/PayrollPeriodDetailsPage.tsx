@@ -440,18 +440,19 @@ export function PayrollPeriodDetailsPage() {
 
   async function handleDownload(runId: number) {
     try {
-      const response = await http.get<Blob>(endpoints.hr.payrollRunPayslip(runId), {
-        responseType: "blob",
+      const response = await http.get<ArrayBuffer>(endpoints.hr.payrollRunPayslip(runId), {
+        responseType: "arraybuffer",
         headers: {
           Accept: "application/pdf",
         },
       });
       const contentType =
         response.headers["content-type"] || response.headers["Content-Type"] || "application/pdf";
-      const blob = response.data instanceof Blob
-        ? response.data
-        : new Blob([response.data], { type: contentType });
-      const blobUrl = URL.createObjectURL(blob);
+      if (!String(contentType).toLowerCase().includes("application/pdf")) {
+        throw new Error("Non-PDF response");
+      }
+      const blob = new Blob([response.data], { type: contentType });
+      const blobUrl = URL.createObjectURL(blob);      
       const link = document.createElement("a");
       link.href = blobUrl;
       link.download = `payslip-${runId}.pdf`;      

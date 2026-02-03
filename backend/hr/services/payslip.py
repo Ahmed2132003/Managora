@@ -4,10 +4,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 
-from hr.models import PayrollLine
-
-
-def render_payslip_pdf(payroll_run):
+def render_payslip_pdf(payroll_run):    
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
@@ -31,41 +28,42 @@ def render_payslip_pdf(payroll_run):
     )    
     y -= 10 * mm
 
-    earnings = payroll_run.lines.filter(type=PayrollLine.LineType.EARNING)
-    deductions = payroll_run.lines.filter(type=PayrollLine.LineType.DEDUCTION)
-
+    all_lines = payroll_run.lines.all()
+    
     pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawString(20 * mm, y, "Earnings")
+    pdf.drawString(20 * mm, y, "Summary")
     y -= 6 * mm
 
     pdf.setFont("Helvetica", 10)
-    for line in earnings:
-        pdf.drawString(22 * mm, y, line.name)
-        pdf.drawRightString(width - 20 * mm, y, f"{line.amount:.2f}")
-        y -= 5 * mm
-        if y < 30 * mm:
-            pdf.showPage()
-            y = height - 20 * mm
-
-    y -= 4 * mm
-    pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawString(20 * mm, y, "Deductions")
-    y -= 6 * mm
-
-    pdf.setFont("Helvetica", 10)
-    for line in deductions:
-        pdf.drawString(22 * mm, y, line.name)
-        pdf.drawRightString(width - 20 * mm, y, f"{line.amount:.2f}")
-        y -= 5 * mm
-        if y < 30 * mm:
-            pdf.showPage()
-            y = height - 20 * mm
-
-    y -= 8 * mm
-    pdf.setFont("Helvetica-Bold", 11)
-    pdf.drawString(20 * mm, y, "Net Pay")
+    pdf.drawString(22 * mm, y, "Earnings Total")
+    pdf.drawRightString(width - 20 * mm, y, f"{payroll_run.earnings_total:.2f}")
+    y -= 5 * mm
+    pdf.drawString(22 * mm, y, "Deductions Total")
+    pdf.drawRightString(width - 20 * mm, y, f"{payroll_run.deductions_total:.2f}")
+    y -= 5 * mm
+    pdf.drawString(22 * mm, y, "Net Pay")
     pdf.drawRightString(width - 20 * mm, y, f"{payroll_run.net_total:.2f}")
+    y -= 8 * mm
 
+    pdf.setFont("Helvetica-Bold", 11)
+    pdf.drawString(20 * mm, y, "Lines")
+    y -= 6 * mm
+
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(22 * mm, y, "Name")
+    pdf.drawString(110 * mm, y, "Type")
+    pdf.drawRightString(width - 20 * mm, y, "Amount")
+    y -= 5 * mm
+    pdf.setFont("Helvetica", 10)
+    for line in all_lines:
+        pdf.drawString(22 * mm, y, line.name)
+        pdf.drawString(110 * mm, y, str(line.type))
+        pdf.drawRightString(width - 20 * mm, y, f"{line.amount:.2f}")
+        y -= 5 * mm
+        if y < 30 * mm:
+            pdf.showPage()
+            y = height - 20 * mm
+            
     pdf.showPage()
     pdf.save()
     buffer.seek(0)
