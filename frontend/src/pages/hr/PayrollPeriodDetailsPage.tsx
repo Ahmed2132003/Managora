@@ -16,7 +16,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
-import { isForbiddenError } from "../../shared/api/errors";
+import { formatApiError, isForbiddenError } from "../../shared/api/errors";
 import { useCan } from "../../shared/auth/useCan";
 import { useMe } from "../../shared/auth/useMe";
 import {
@@ -495,10 +495,10 @@ export function PayrollPeriodDetailsPage() {
       });
       runsQuery.refetch();
       runDetailsQuery.refetch();
-    } catch {
+    } catch (error) {      
       notifications.show({
         title: "Lock failed",
-        message: "تعذر قفل الفترة.",
+        message: formatApiError(error) || "تعذر قفل الفترة.",        
         color: "red",
       });
     }
