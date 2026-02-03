@@ -440,32 +440,55 @@ export function PayrollPeriodDetailsPage() {
 
   async function handleDownload(runId: number) {
     try {
-      const response = await http.get<ArrayBuffer>(endpoints.hr.payrollRunPayslip(runId), {
-        responseType: "arraybuffer",
-        headers: {
-          Accept: "application/pdf",
-        },
+      const response = await http.get(endpoints.hr.payrollRunPayslip(runId), {
+        responseType: "blob",
+        headers: { Accept: "application/pdf" },
+        validateStatus: (s) => s >= 200 && s < 300,
       });
-      const contentType =
-        response.headers["content-type"] || response.headers["Content-Type"] || "application/pdf";
-      if (!String(contentType).toLowerCase().includes("application/pdf")) {
-        throw new Error("Non-PDF response");
+
+      const blob = response.data as Blob;
+
+      // ✅ 1) تأكد content-type
+      const ct = (blob.type || "").toLowerCase();
+      if (!ct.includes("application/pdf")) {
+        // حاول نقرأ رسالة الخطأ
+        const text = await blob.text().catch(() => "");
+        throw new Error(`Non-PDF response: ${ct}. ${text?.slice(0, 200) ?? ""}`);
       }
-      const blob = new Blob([response.data], { type: contentType });
-      const blobUrl = URL.createObjectURL(blob);      
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `payslip-${runId}.pdf`;      
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);      
-    } catch {
+
+      // ✅ 2) تأكد فعليًا إن أول bytes = %PDF
+      const headBuf = await blob.slice(0, 4).arrayBuffer();
+      const head = new TextDecoder("ascii").decode(new Uint8Array(headBuf));
+      if (head !== "%PDF") {
+        const text = await blob.text().catch(() => "");
+        throw new Error(`Invalid PDF signature. ${text?.slice(0, 200) ?? ""}`);
+      }
+
+      // ✅ 3) اسم الملف من Content-Disposition لو موجود
+      const cd = (response.headers["content-disposition"] ||
+        response.headers["Content-Disposition"] ||
+        "") as string;
+
+      let filename = `payslip-${runId}.pdf`;
+      const match = /filename="([^"]+)"/i.exec(cd);
+      if (match?.[1]) filename = match[1];
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
       notifications.show({
         title: "Download failed",
-        message: "تعذر تنزيل كشف المرتب.",
+        message: "تعذر تنزيل كشف المرتب (الملف غير صالح أو يوجد خطأ بالسيرفر).",
         color: "red",
       });
+      // مفيد أثناء التطوير
+      console.error(e);
     }
   }
 
