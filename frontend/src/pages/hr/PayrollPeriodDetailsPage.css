@@ -1,0 +1,107 @@
+@import "../DashboardPage.css";
+
+.payroll-period-details-page .hero-panel {
+  align-items: flex-start;
+}
+
+.payroll-period-details__content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.payroll-period-details__header {
+  align-items: center;
+}
+
+.payroll-period-details__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.payroll-period-details__details {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.payroll-period-details__detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.payroll-period-details__detail-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.payroll-period-details__detail-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.payroll-period-details__detail-summary div,
+.payroll-period-details__summary-grid div,
+.payroll-period-details__footer-grid div {
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.payroll-period-details__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.payroll-period-details__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.payroll-period-details__footer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.status-pill--draft {
+  background: rgba(255, 195, 0, 0.2);
+  color: #b07a00;
+}
+
+.status-pill--locked {
+  background: rgba(47, 164, 106, 0.2);
+  color: #2fa46a;
+}
+
+.status-pill--approved {
+  background: rgba(47, 107, 255, 0.2);
+  color: #2f6bff;
+}
+
+.status-pill--paid {
+  background: rgba(36, 206, 173, 0.2);
+  color: #1aa58c;
+}
+
+@media (max-width: 720px) {
+  .payroll-period-details__detail-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .panel-actions {
+    width: 100%;
+  }
+}

@@ -1,19 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import {
-  Badge,
-  Button,
-  Card,
-  Drawer,
-  Group,
-  Skeleton,
-  SimpleGrid,
-  Stack,  
-  Table,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { formatApiError, isForbiddenError } from "../../shared/api/errors";
@@ -32,15 +18,10 @@ import type { AttendanceRecord, PayrollRun, PayrollRunDetail } from "../../share
 
 import { endpoints } from "../../shared/api/endpoints";
 import { http } from "../../shared/api/http";
+import { DashboardShell } from "../DashboardShell";
+import "./PayrollPeriodDetailsPage.css";
 
-const statusColors: Record<string, string> = {
-  draft: "yellow",
-  locked: "green",
-  approved: "blue",
-  paid: "teal",
-};
-
-function formatMoney(value: string | number) {
+function formatMoney(value: string | number) {  
   const amount = typeof value === "number" ? value : Number(value);
   return Number.isNaN(amount) ? "-" : amount.toFixed(2);
 }
@@ -183,12 +164,127 @@ function calculatePayableTotal(summary: RunSummary | null) {
   );
 }
 
-export function PayrollPeriodDetailsPage() {  
+const contentMap = {
+  en: {
+    title: "Payroll Period Details",
+    subtitle: "Review payroll runs, attendance, and payable totals.",
+    periodLabel: "Period",
+    statusLabel: "Status",
+    searchLabel: "Search",
+    searchPlaceholder: "Search by name",
+    lockPeriod: "Lock period",
+    locking: "Locking...",
+    runsTitle: "Payroll runs",
+    runsSubtitle: "Tap an employee to review payroll details.",
+    loadingRuns: "Loading payroll runs...",
+    emptyRuns: "No matching payroll runs.",
+    table: {
+      employee: "Employee",
+      earnings: "Earnings total",
+      deductions: "Deductions total",
+      net: "Net",
+      payable: "Payable total",
+      actions: "Actions",
+      view: "View details",
+    },
+    detailsTitle: "Run details",
+    detailsSubtitle: "Payroll breakdown, attendance, and approvals.",
+    closeDetails: "Hide details",
+    loadingDetails: "Loading payroll details...",
+    emptyDetails: "Select an employee to view details.",
+    basic: "Basic",
+    payableTotal: "Payable total",
+    summary: {
+      attendanceDays: "Attendance days",
+      absenceDays: "Absence days",
+      lateMinutes: "Late minutes",
+      bonuses: "Bonuses",
+      commissions: "Commissions",
+      deductions: "Deductions",
+      advances: "Advances",
+    },
+    linesTable: {
+      line: "Line",
+      type: "Type",
+      amount: "Amount",
+    },
+    company: "Company",
+    manager: "Manager",
+    hr: "HR",
+    markPaid: "Mark paid",
+    markPaidDone: "Paid",
+    savePng: "Save as PNG",
+    status: {
+      draft: "Draft",
+      locked: "Locked",
+      approved: "Approved",
+      paid: "Paid",
+    },
+  },
+  ar: {
+    title: "تفاصيل فترة الرواتب",
+    subtitle: "راجع الرواتب والحضور والإجمالي المستحق.",
+    periodLabel: "الفترة",
+    statusLabel: "الحالة",
+    searchLabel: "بحث",
+    searchPlaceholder: "ابحث بالاسم",
+    lockPeriod: "قفل الفترة",
+    locking: "جاري القفل...",
+    runsTitle: "رواتب الفترة",
+    runsSubtitle: "اختر موظفًا لعرض تفاصيل الراتب.",
+    loadingRuns: "جاري تحميل الرواتب...",
+    emptyRuns: "لا توجد رواتب مطابقة.",
+    table: {
+      employee: "الموظف",
+      earnings: "إجمالي الاستحقاقات",
+      deductions: "إجمالي الاستقطاعات",
+      net: "الصافي",
+      payable: "الإجمالي المستحق",
+      actions: "الإجراءات",
+      view: "عرض التفاصيل",
+    },
+    detailsTitle: "تفاصيل الراتب",
+    detailsSubtitle: "تفاصيل الراتب والحضور والاعتمادات.",
+    closeDetails: "إخفاء التفاصيل",
+    loadingDetails: "جاري تحميل تفاصيل الراتب...",
+    emptyDetails: "اختر موظفًا لعرض التفاصيل.",
+    basic: "الأساسي",
+    payableTotal: "الإجمالي المستحق",
+    summary: {
+      attendanceDays: "أيام الحضور",
+      absenceDays: "أيام الغياب",
+      lateMinutes: "دقائق التأخير",
+      bonuses: "المكافآت",
+      commissions: "العمولات",
+      deductions: "الخصومات",
+      advances: "السلف",
+    },
+    linesTable: {
+      line: "البند",
+      type: "النوع",
+      amount: "المبلغ",
+    },
+    company: "الشركة",
+    manager: "المدير",
+    hr: "الموارد البشرية",
+    markPaid: "تم الدفع",
+    markPaidDone: "مدفوع",
+    savePng: "حفظ كصورة",
+    status: {
+      draft: "مسودة",
+      locked: "مقفلة",
+      approved: "معتمدة",
+      paid: "مدفوعة",
+    },
+  },
+} as const;
+
+export function PayrollPeriodDetailsPage() {
   const params = useParams();
   const periodId = params.id ? Number(params.id) : null;
   const [search, setSearch] = useState("");
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
-  const [hrName, setHrName] = useState("-");
+  const [hrName, setHrName] = useState("-");  
   const runsQuery = usePeriodRuns(periodId);
   const periodsQuery = usePayrollPeriods();
   const runDetailsQuery = usePayrollRun(selectedRun?.id ?? null);   
@@ -504,241 +600,320 @@ export function PayrollPeriodDetailsPage() {
     }
   }
 
-  const rows = filteredRuns.map((run) => {
-    const payableValue = runPayables[run.id];
-    return (
-    <Table.Tr key={run.id}>
-      <Table.Td>{run.employee.full_name}</Table.Td>
-      <Table.Td>{formatMoney(run.earnings_total)}</Table.Td>      
-      <Table.Td>{formatMoney(run.deductions_total)}</Table.Td>
-      <Table.Td>{formatMoney(payableValue ?? run.net_total)}</Table.Td>
-      <Table.Td>{formatMoney(payableValue ?? run.net_total)}</Table.Td>
-      <Table.Td>
-                <Group gap="xs">
-                  <Button size="xs" variant="light" onClick={() => setSelectedRun(run)}>
-                    View details
-                  </Button>
-                </Group>
-      </Table.Td>
-    </Table.Tr>
+  const shellCopy = useMemo(
+    () => ({
+      en: { title: contentMap.en.title, subtitle: contentMap.en.subtitle },
+      ar: { title: contentMap.ar.title, subtitle: contentMap.ar.subtitle },
+    }),
+    []
   );
-  });
 
   return (
-    <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={3}>Payroll Period Runs</Title>        
-        {periodStatus && (
-          <Badge color={statusColors[periodStatus] ?? "gray"} variant="light">
-            {periodStatus}
-          </Badge>
-        )}
-      </Group>
-      {periodInfo && (
-        <Text c="dimmed" size="sm">
-          {periodInfo.period_type} · {periodInfo.start_date} → {periodInfo.end_date}
-        </Text>
-      )}
-      <Card withBorder radius="md" p="md">
-        <Group align="flex-end" gap="md">
-          <TextInput
-            label="Search"
-            placeholder="Search by name"
-            value={search}
-            onChange={(event) => setSearch(event.currentTarget.value)}
-          />
-          {periodStatus === "draft" && (
-            <Button
-              color="red"
-              onClick={handleLockPeriod}
-              loading={lockMutation.isPending}
-            >
-              Lock period
-            </Button>
-          )}
-        </Group>
-      </Card>
+    <DashboardShell copy={shellCopy} className="payroll-period-details-page">
+      {({ language, isArabic }) => {
+        const content = contentMap[language];
+        const statusLabel =
+          periodStatus && content.status[periodStatus as keyof typeof content.status]
+            ? content.status[periodStatus as keyof typeof content.status]
+            : periodStatus;
+        const runStatusLabel =
+          runDetailsQuery.data?.status &&
+          content.status[runDetailsQuery.data.status as keyof typeof content.status]
+            ? content.status[runDetailsQuery.data.status as keyof typeof content.status]
+            : runDetailsQuery.data?.status;
 
-      <Card withBorder radius="md" p="md">
-        <Stack gap="sm">
-          <Text fw={600}>Runs</Text>
-          {runsQuery.isLoading ? (
-            <Skeleton height={160} />
-          ) : filteredRuns.length === 0 ? (
-            <Text c="dimmed">لا توجد رواتب مطابقة.</Text>
-          ) : (
-            <Table withTableBorder>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Employee</Table.Th>
-                  <Table.Th>Earnings total</Table.Th>
-                  <Table.Th>Deductions total</Table.Th>
-                  <Table.Th>Net</Table.Th>
-                  <Table.Th>الإجمالي المستحق</Table.Th>
-                  <Table.Th>Actions</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>{rows}</Table.Tbody>
-            </Table>
-          )}
-        </Stack>
-      </Card>
+        const rows = filteredRuns.map((run) => {
+          const payableValue = runPayables[run.id];
+          return (
+            <tr key={run.id}>
+              <td>{run.employee.full_name}</td>
+              <td>{formatMoney(run.earnings_total)}</td>
+              <td>{formatMoney(run.deductions_total)}</td>
+              <td>{formatMoney(payableValue ?? run.net_total)}</td>
+              <td>{formatMoney(payableValue ?? run.net_total)}</td>
+              <td>
+                <button
+                  type="button"
+                  className="table-action"
+                  onClick={() => setSelectedRun(run)}
+                >
+                  {content.table.view}
+                </button>
+              </td>
+            </tr>
+          );
+        });
 
-      <Drawer
-        opened={Boolean(selectedRun)}
-        onClose={() => setSelectedRun(null)}
-        position="right"
-        size="lg"
-        title="Run details"
-      >
-        {runDetailsQuery.isLoading ? (
-          <Skeleton height={160} />
-        ) : runDetailsQuery.data ? (
-          <Stack gap="md">
-            <Group justify="space-between">
-              <div>
-                <Text fw={600}>{runDetailsQuery.data.employee.full_name}</Text>
-                <Text c="dimmed" size="sm">
-                  {runDetailsQuery.data.employee.employee_code}
-                </Text>
+        return (
+          <div
+            className="payroll-period-details__content"
+            dir={isArabic ? "rtl" : "ltr"}
+          >
+            <section className="panel hero-panel">
+              <div className="panel__header payroll-period-details__header">
+                <div>
+                  <h2>{content.runsTitle}</h2>
+                  <p>{content.runsSubtitle}</p>
+                </div>
+                {periodStatus && (
+                  <span
+                    className={`status-pill status-pill--${periodStatus}`}
+                    aria-label={`${content.statusLabel}: ${statusLabel}`}
+                  >
+                    {statusLabel}
+                  </span>
+                )}
               </div>
-              <Badge color={statusColors[runDetailsQuery.data.status] ?? "gray"}>
-                {runDetailsQuery.data.status}
-              </Badge>
-            </Group>
-
-            <Group gap="md">
-              <Text>Basic</Text>
-              <Text fw={600}>
-                {formatMoney(
-                  getBasicFromLines(runDetailsQuery.data.lines) ??
-                    runDetailsQuery.data.earnings_total
+              <div className="payroll-period-details__meta">
+                {periodInfo && (
+                  <span className="pill">
+                    {content.periodLabel}: {periodInfo.period_type} · {periodInfo.start_date} →{" "}
+                    {periodInfo.end_date}
+                  </span>
                 )}
-              </Text>
-              {payableTotal != null && (                
-                <Text c="dimmed" size="sm">
-                  الإجمالي المستحق: {formatMoney(payableTotal)}                  
-                </Text>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.searchLabel}</h2>
+                  <p>{content.searchPlaceholder}</p>
+                </div>
+                <div className="panel-actions panel-actions--right">
+                  {periodStatus === "draft" && (
+                    <button
+                      type="button"
+                      className={`action-button ${
+                        lockMutation.isPending ? "action-button--disabled" : ""
+                      }`}
+                      onClick={handleLockPeriod}
+                      disabled={lockMutation.isPending}
+                    >
+                      {lockMutation.isPending ? content.locking : content.lockPeriod}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="filters-grid">
+                <label className="field field--full">
+                  <span>{content.searchLabel}</span>
+                  <input
+                    value={search}
+                    placeholder={content.searchPlaceholder}
+                    onChange={(event) => setSearch(event.currentTarget.value)}
+                  />
+                </label>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.runsTitle}</h2>
+                  <p>{content.runsSubtitle}</p>
+                </div>
+              </div>
+              {runsQuery.isLoading ? (
+                <p className="helper-text">{content.loadingRuns}</p>
+              ) : filteredRuns.length === 0 ? (
+                <p className="helper-text">{content.emptyRuns}</p>
+              ) : (
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>{content.table.employee}</th>
+                        <th>{content.table.earnings}</th>
+                        <th>{content.table.deductions}</th>
+                        <th>{content.table.net}</th>
+                        <th>{content.table.payable}</th>
+                        <th>{content.table.actions}</th>
+                      </tr>
+                    </thead>
+                    <tbody>{rows}</tbody>
+                  </table>
+                </div>
               )}
-            </Group>
+            </section>
 
-            {runSummary && (
-              <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="md">
+            <section className="panel">
+              <div className="panel__header">
                 <div>
-                  <Text size="sm" c="dimmed">
-                    Attendance days
-                  </Text>
-                  <Text fw={600}>{runSummary.presentDays}</Text>
+                  <h2>{content.detailsTitle}</h2>
+                  <p>{content.detailsSubtitle}</p>
                 </div>
-                <div>
-                  <Text size="sm" c="dimmed">
-                    Absence days
-                  </Text>
-                  <Text fw={600}>{runSummary.absentDays}</Text>
-                </div>
-                <div>
-                  <Text size="sm" c="dimmed">
-                    Late minutes
-                  </Text>
-                  <Text fw={600}>{runSummary.lateMinutes}</Text>
-                </div>
-                <div>
-                  <Text size="sm" c="dimmed">
-                    Bonuses
-                  </Text>
-                  <Text fw={600}>{formatMoney(runSummary.bonuses)}</Text>
-                </div>
-                <div>
-                  <Text size="sm" c="dimmed">
-                    Deductions
-                  </Text>
-                  <Text fw={600}>{formatMoney(runSummary.deductions)}</Text>
-                </div>
-                <div>
-                  <Text size="sm" c="dimmed">
-                    Advances
-                  </Text>
-                  <Text fw={600}>{formatMoney(runSummary.advances)}</Text>
-                </div>
-                <div>
-                  <Text size="sm" c="dimmed">
-                    الإجمالي المستحق (Payable)
-                  </Text>
-                  <Text fw={600}>{formatMoney(payableTotal ?? 0)}</Text>                  
-                </div>
-              </SimpleGrid>
-            )}
-
-            <Table withTableBorder>              
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Line</Table.Th>
-                  <Table.Th>Type</Table.Th>
-                  <Table.Th>Amount</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {runDetailsQuery.data.lines.map((line) => (
-                  <Table.Tr key={line.id}>
-                    <Table.Td>{line.name}</Table.Td>
-                    <Table.Td>{line.type}</Table.Td>
-                    <Table.Td>{formatMoney(line.amount)}</Table.Td>
-                  </Table.Tr>
-                ))}
-                {runSummary && (
-                  <Table.Tr>
-                    <Table.Td colSpan={2}>
-                      <Text fw={600}>الإجمالي المستحق (Payable)</Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text fw={600}>{formatMoney(payableTotal ?? 0)}</Text>                      
-                    </Table.Td>
-                  </Table.Tr>
+                {selectedRun && (
+                  <button
+                    type="button"
+                    className="action-button action-button--ghost"
+                    onClick={() => setSelectedRun(null)}
+                  >
+                    {content.closeDetails}
+                  </button>
                 )}
-              </Table.Tbody>
-            </Table>
+              </div>
+              {runDetailsQuery.isLoading && selectedRun ? (
+                <p className="helper-text">{content.loadingDetails}</p>
+              ) : runDetailsQuery.data ? (
+                <div className="payroll-period-details__details">
+                  <div className="payroll-period-details__detail-header">
+                    <div>
+                      <h3>{runDetailsQuery.data.employee.full_name}</h3>
+                      <span className="helper-text">
+                        {runDetailsQuery.data.employee.employee_code}
+                      </span>
+                    </div>
+                    {runStatusLabel && (
+                      <span
+                        className={`status-pill status-pill--${runDetailsQuery.data.status}`}
+                      >
+                        {runStatusLabel}
+                      </span>
+                    )}
+                  </div>
 
-            <Stack gap="xs">
-              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs">
-                <div>
-                  <Text size="sm" c="dimmed">
-                    Company
-                  </Text>
-                  <Text fw={600}>{meQuery.data?.company.name ?? "-"}</Text>
+                  <div className="payroll-period-details__detail-summary">
+                    <div>
+                      <span className="helper-text">{content.basic}</span>
+                      <strong>
+                        {formatMoney(
+                          getBasicFromLines(runDetailsQuery.data.lines) ??
+                            runDetailsQuery.data.earnings_total
+                        )}
+                      </strong>
+                    </div>
+                    {payableTotal != null && (
+                      <div>
+                        <span className="helper-text">{content.payableTotal}</span>
+                        <strong>{formatMoney(payableTotal)}</strong>
+                      </div>
+                    )}
+                  </div>
+
+                  {runSummary && (
+                    <div className="payroll-period-details__summary-grid">
+                      <div>
+                        <span className="helper-text">
+                          {content.summary.attendanceDays}
+                        </span>
+                        <strong>{runSummary.presentDays}</strong>
+                      </div>
+                      <div>
+                        <span className="helper-text">
+                          {content.summary.absenceDays}
+                        </span>
+                        <strong>{runSummary.absentDays}</strong>
+                      </div>
+                      <div>
+                        <span className="helper-text">{content.summary.lateMinutes}</span>
+                        <strong>{runSummary.lateMinutes}</strong>
+                      </div>
+                      <div>
+                        <span className="helper-text">{content.summary.bonuses}</span>
+                        <strong>{formatMoney(runSummary.bonuses)}</strong>
+                      </div>
+                      <div>
+                        <span className="helper-text">{content.summary.commissions}</span>
+                        <strong>{formatMoney(runSummary.commissions)}</strong>
+                      </div>
+                      <div>
+                        <span className="helper-text">{content.summary.deductions}</span>
+                        <strong>{formatMoney(runSummary.deductions)}</strong>
+                      </div>
+                      <div>
+                        <span className="helper-text">{content.summary.advances}</span>
+                        <strong>{formatMoney(runSummary.advances)}</strong>
+                      </div>
+                      <div>
+                        <span className="helper-text">{content.payableTotal}</span>
+                        <strong>{formatMoney(payableTotal ?? 0)}</strong>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="table-wrapper">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>{content.linesTable.line}</th>
+                          <th>{content.linesTable.type}</th>
+                          <th>{content.linesTable.amount}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {runDetailsQuery.data.lines.map((line) => (
+                          <tr key={line.id}>
+                            <td>{line.name}</td>
+                            <td>{line.type}</td>
+                            <td>{formatMoney(line.amount)}</td>
+                          </tr>
+                        ))}
+                        {runSummary && (
+                          <tr>
+                            <td colSpan={2}>
+                              <strong>{content.payableTotal}</strong>
+                            </td>
+                            <td>
+                              <strong>{formatMoney(payableTotal ?? 0)}</strong>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="payroll-period-details__footer">
+                    <div className="payroll-period-details__footer-grid">
+                      <div>
+                        <span className="helper-text">{content.company}</span>
+                        <strong>{meQuery.data?.company.name ?? "-"}</strong>
+                      </div>
+                      <div>
+                        <span className="helper-text">{content.manager}</span>
+                        <strong>{managerName}</strong>
+                      </div>
+                      <div>
+                        <span className="helper-text">{content.hr}</span>
+                        <strong>{hrName}</strong>
+                      </div>
+                    </div>
+                    <div className="panel-actions">
+                      <button
+                        type="button"
+                        className={`action-button ${
+                          runDetailsQuery.data.status === "paid" ||
+                          markPaidMutation.isPending
+                            ? "action-button--disabled"
+                            : ""
+                        }`}
+                        onClick={handleMarkPaid}
+                        disabled={
+                          runDetailsQuery.data.status === "paid" ||
+                          markPaidMutation.isPending
+                        }
+                      >
+                        {runDetailsQuery.data.status === "paid"
+                          ? content.markPaidDone
+                          : content.markPaid}
+                      </button>
+                      <button
+                        type="button"
+                        className="action-button action-button--ghost"
+                        onClick={() => handleSavePng(runDetailsQuery.data.id)}
+                      >
+                        {content.savePng}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <Text size="sm" c="dimmed">
-                    Manager
-                  </Text>
-                  <Text fw={600}>{managerName}</Text>
-                </div>
-                <div>
-                  <Text size="sm" c="dimmed">
-                    HR
-                  </Text>
-                  <Text fw={600}>{hrName}</Text>
-                </div>
-              </SimpleGrid>
-              <Button
-                color="green"
-                onClick={handleMarkPaid}
-                loading={markPaidMutation.isPending}
-                disabled={runDetailsQuery.data.status === "paid"}
-              >
-                تم الدفع
-              </Button>
-              <Button
-                variant="light"
-                onClick={() => handleSavePng(runDetailsQuery.data.id)}
-              >
-                Save ك PNG
-              </Button>
-            </Stack>            
-          </Stack>
-        ) : (
-          <Text c="dimmed">اختر موظفًا لعرض التفاصيل.</Text>
-        )}
-      </Drawer>
-    </Stack>
+              ) : (
+                <p className="helper-text">{content.emptyDetails}</p>
+              )}
+            </section>
+          </div>
+        );
+      }}
+    </DashboardShell>
   );
 }
