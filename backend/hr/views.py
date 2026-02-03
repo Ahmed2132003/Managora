@@ -96,6 +96,7 @@ from hr.services.generator import generate_period
 from hr.services.leaves import approve_leave, reject_leave
 from hr.services.lock import lock_period
 from hr.services.payslip import render_payslip_pdf
+import re
 from corsheaders.defaults import default_headers
 
 
@@ -1691,8 +1692,14 @@ class PayrollRunPayslipPDFView(APIView):
         origin = request.headers.get("Origin")
         allow_all = getattr(settings, "CORS_ALLOW_ALL_ORIGINS", False)
         allowed_origins = getattr(settings, "CORS_ALLOWED_ORIGINS", [])
+        allowed_origin_regexes = getattr(settings, "CORS_ALLOWED_ORIGIN_REGEXES", [])
         allow_credentials = getattr(settings, "CORS_ALLOW_CREDENTIALS", False)
-        if origin and (allow_all or origin in allowed_origins):
+        is_allowed_origin = origin and (
+            allow_all
+            or origin in allowed_origins
+            or any(re.match(regex, origin) for regex in allowed_origin_regexes)
+        )
+        if is_allowed_origin:            
             if allow_all and not allow_credentials:
                 response["Access-Control-Allow-Origin"] = "*"
             else:
