@@ -454,7 +454,7 @@ export function PayrollPeriodDetailsPage() {
   }
 
   async function fetchPayslipPngBlob(runId: number): Promise<Blob> {
-    const url = (endpoints as any).hr?.payrollRunPayslipPng ? (endpoints as any).hr.payrollRunPayslipPng(runId) : endpoints.hr.payrollRunPayslip(runId);
+    const url = endpoints.hr.payrollRunPayslipPng(runId);    
     const res = await http.get(url, {
       responseType: "blob",
       headers: { Accept: "image/png" },
