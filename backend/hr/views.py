@@ -1598,9 +1598,8 @@ class PayrollPeriodGenerateView(APIView):
         period = get_object_or_404(PayrollPeriod, id=id, company=request.user.company)
         summary = generate_period(
             company=request.user.company,
-            year=period.year,
-            month=period.month,
             actor=request.user,
+            period=period,
         )
         return Response(summary)
 

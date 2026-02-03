@@ -149,9 +149,9 @@ class PayrollGeneratorTests(TestCase):
         self._create_employee_with_structure("EMP-A", company=self.company)
         self._create_employee_with_structure("EMP-B", company=company_b)
 
-        PayrollPeriod.objects.create(company=self.company, year=2026, month=6)
-        generate_period(self.company, 2026, 6, self.actor)
-
+        period = PayrollPeriod.objects.create(company=self.company, year=2026, month=6)
+        generate_period(self.company, actor=self.actor, period=period)
+        
         self.assertTrue(PayrollRun.objects.filter(company=self.company).exists())
         self.assertFalse(PayrollRun.objects.filter(company=company_b).exists())
 
@@ -173,8 +173,8 @@ class PayrollGeneratorTests(TestCase):
         )
         period = PayrollPeriod.objects.create(company=self.company, year=2026, month=5)
 
-        generate_period(self.company, 2026, 5, self.actor)
-
+        generate_period(self.company, actor=self.actor, period=period)
+        
         run = PayrollRun.objects.get(period=period, employee=employee)
         self.assertFalse(
             run.lines.filter(code__startswith="LOAN-").exists()

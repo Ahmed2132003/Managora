@@ -52,12 +52,23 @@ def _overlap_days(start_date, end_date, range_start, range_end):
     return Decimal((overlap_end - overlap_start).days + 1)
 
 
-def generate_period(company, year, month, actor):
-    try:
-        period = PayrollPeriod.objects.get(company=company, year=year, month=month)
-    except PayrollPeriod.DoesNotExist as exc:
-        raise ValidationError("Payroll period does not exist.") from exc
+def generate_period(company, year=None, month=None, actor=None, period=None):
+    if period is None:
+        if year is None or month is None:
+            raise ValidationError("Payroll period does not exist.")
+        period = (
+            PayrollPeriod.objects.filter(company=company, year=year, month=month)
+            .order_by("-start_date", "-id")
+            .first()
+        )
+        if period is None:
+            raise ValidationError("Payroll period does not exist.")
+    elif period.company_id != company.id:
+        raise ValidationError("Payroll period does not exist.")
 
+    year = period.year
+    month = period.month
+    
     if period.status == PayrollPeriod.Status.LOCKED:
         raise ValidationError("Payroll period is locked.")
 
