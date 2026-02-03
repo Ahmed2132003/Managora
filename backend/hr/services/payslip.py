@@ -143,7 +143,7 @@ def render_payslip_pdf(payroll_run, manager_name: str = "-", hr_name: str = "-")
     pdf.setFont("Helvetica-Bold", 10)
     pdf.drawString(40 * mm, y, _format_amount(basic_display))
     pdf.setFont("Helvetica", 10)
-    pdf.drawString(75 * mm, y, "الإجمالي المستحق:")
+    pdf.drawString(75 * mm, y, "Payable total:")    
     pdf.setFont("Helvetica-Bold", 10)
     pdf.drawString(110 * mm, y, _format_amount(payable_total))
     y -= 10 * mm
@@ -167,7 +167,7 @@ def render_payslip_pdf(payroll_run, manager_name: str = "-", hr_name: str = "-")
     draw_summary_cell(col_x[1], y, "Deductions", _format_amount(summary.get("deductions")))
     draw_summary_cell(col_x[2], y, "Advances", _format_amount(summary.get("advances")))
     y -= 12 * mm
-    draw_summary_cell(col_x[0], y, "الإجمالي المستحق (Payable)", _format_amount(payable_total))
+    draw_summary_cell(col_x[0], y, "Payable total", _format_amount(payable_total))    
     y -= 12 * mm
 
     pdf.setFont("Helvetica-Bold", 11)
@@ -194,7 +194,7 @@ def render_payslip_pdf(payroll_run, manager_name: str = "-", hr_name: str = "-")
         pdf.showPage()
         y = height - 20 * mm
     pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(22 * mm, y, "الإجمالي المستحق (Payable)")
+    pdf.drawString(22 * mm, y, "Payable total")    
     pdf.drawRightString(width - 20 * mm, y, _format_amount(payable_total))
     y -= 10 * mm
 
