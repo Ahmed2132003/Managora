@@ -276,6 +276,7 @@ export function PayrollPeriodDetailsPage() {
     if (!currentPeriodRange) {
       return;
     }
+    const { dateFrom, dateTo } = currentPeriodRange;
     const missingRuns = runs.filter((run) => runPayables[run.id] == null);
     if (missingRuns.length === 0) {
       return;
@@ -290,8 +291,8 @@ export function PayrollPeriodDetailsPage() {
               http.get<PayrollRunDetail>(endpoints.hr.payrollRun(run.id)),
               http.get<AttendanceRecord[]>(endpoints.hr.attendanceRecords, {
                 params: {
-                  date_from: currentPeriodRange.dateFrom,
-                  date_to: currentPeriodRange.dateTo,                  
+                  date_from: dateFrom,                  
+                  date_to: dateTo,                                 
                   employee_id: run.employee.id,
                 },
               }),
