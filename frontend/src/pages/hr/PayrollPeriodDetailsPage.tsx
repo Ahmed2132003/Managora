@@ -413,9 +413,10 @@ export function PayrollPeriodDetailsPage() {
     if (runSummary) {
       return calculatePayableTotal(runSummary);
     }
-    return runDetailsQuery.data?.net_total;
+    const netTotal = runDetailsQuery.data?.net_total;
+    return netTotal == null ? null : parseAmount(netTotal);
   }, [runDetailsQuery.data?.net_total, runSummary]);
-
+  
   useEffect(() => {
     const currentPeriodRange = periodRange;
     if (!currentPeriodRange) {
