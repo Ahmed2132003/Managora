@@ -96,6 +96,7 @@ from hr.services.generator import generate_period
 from hr.services.leaves import approve_leave, reject_leave
 from hr.services.lock import lock_period
 from hr.services.payslip import render_payslip_pdf
+from corsheaders.defaults import default_headers
 
 
 @extend_schema_view(
@@ -1681,6 +1682,21 @@ class PayrollPeriodLockView(APIView):
 class PayrollRunPayslipPDFView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def _apply_cors_headers(self, request, response):
+        origin = request.headers.get("Origin")
+        allow_all = getattr(settings, "CORS_ALLOW_ALL_ORIGINS", False)
+        allowed_origins = getattr(settings, "CORS_ALLOWED_ORIGINS", [])
+        allow_credentials = getattr(settings, "CORS_ALLOW_CREDENTIALS", False)
+        if origin and (allow_all or origin in allowed_origins):
+            if allow_all and not allow_credentials:
+                response["Access-Control-Allow-Origin"] = "*"
+            else:
+                response["Access-Control-Allow-Origin"] = origin
+            if allow_credentials:
+                response["Access-Control-Allow-Credentials"] = "true"
+            response.setdefault("Vary", "Origin")
+        return response
+
     def get(self, request, id=None):
         payroll_run = get_object_or_404(PayrollRun, id=id, company=request.user.company)
         has_permission = _user_has_payroll_permission(
@@ -1700,12 +1716,11 @@ class PayrollRunPayslipPDFView(APIView):
             filename=filename,
             content_type="application/pdf",
         )
-        origin = request.headers.get("Origin")
-        allow_all = getattr(settings, "CORS_ALLOW_ALL_ORIGINS", False)
-        allowed_origins = getattr(settings, "CORS_ALLOWED_ORIGINS", [])
-        if origin and (allow_all or origin in allowed_origins):
-            response["Access-Control-Allow-Origin"] = origin
-            if getattr(settings, "CORS_ALLOW_CREDENTIALS", False):
-                response["Access-Control-Allow-Credentials"] = "true"
-            response.setdefault("Vary", "Origin")
-        return response
+        return self._apply_cors_headers(request, response)
+
+    def options(self, request, *args, **kwargs):
+        response = Response(status=status.HTTP_200_OK)
+        request_headers = request.headers.get("Access-Control-Request-Headers")
+        response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response["Access-Control-Allow-Headers"] = request_headers or ", ".join(default_headers)
+        return self._apply_cors_headers(request, response)
