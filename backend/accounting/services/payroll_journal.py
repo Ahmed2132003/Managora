@@ -4,9 +4,10 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Sum
+from django.db.models import Q
 from rest_framework.exceptions import ValidationError
 
-from accounting.models import AccountMapping, JournalEntry, JournalLine
+from accounting.models import Account, AccountMapping, JournalEntry, JournalLine
 from hr.models import PayrollRun
 
 
@@ -15,10 +16,65 @@ def _period_end_date(period):
     return date(period.year, period.month, last_day)
 
 
+def _auto_map_payroll_accounts(company, required_keys):
+    if AccountMapping.Key.PAYROLL_SALARIES_EXPENSE in required_keys:
+        salaries_account = (
+            Account.objects.filter(company=company, code__in=["5000", "5200"])
+            .order_by("code")
+            .first()
+        )
+        if not salaries_account:
+            salaries_account = (
+                Account.objects.filter(
+                    company=company,
+                    type=Account.Type.EXPENSE,
+                )
+                .filter(
+                    Q(name__icontains="salaries")
+                    | Q(name__icontains="salary")
+                    | Q(name__icontains="payroll")
+                )
+                .order_by("code")
+                .first()
+            )
+        if salaries_account:
+            AccountMapping.objects.update_or_create(
+                company=company,
+                key=AccountMapping.Key.PAYROLL_SALARIES_EXPENSE,
+                defaults={"account": salaries_account, "required": True},
+            )
+
+    if AccountMapping.Key.PAYROLL_PAYABLE in required_keys:
+        payable_account = (
+            Account.objects.filter(company=company, code__in=["2100"])
+            .order_by("code")
+            .first()
+        )
+        if not payable_account:
+            payable_account = (
+                Account.objects.filter(
+                    company=company,
+                    type=Account.Type.LIABILITY,
+                )
+                .filter(
+                    Q(name__icontains="payroll payable")
+                    | (Q(name__icontains="payroll") & Q(name__icontains="payable"))
+                )
+                .order_by("code")
+                .first()
+            )
+        if payable_account:
+            AccountMapping.objects.update_or_create(
+                company=company,
+                key=AccountMapping.Key.PAYROLL_PAYABLE,
+                defaults={"account": payable_account, "required": True},
+            )
+
+
 def generate_payroll_journal(period, actor=None):
     company = period.company
     existing = JournalEntry.objects.filter(
-        company=company,
+        company=company,        
         reference_type=JournalEntry.ReferenceType.PAYROLL_PERIOD,
         reference_id=str(period.id),
     ).first()
@@ -28,19 +84,34 @@ def generate_payroll_journal(period, actor=None):
     required_keys = {
         AccountMapping.Key.PAYROLL_SALARIES_EXPENSE,
         AccountMapping.Key.PAYROLL_PAYABLE,
-    }    
+    }
     mappings = {
         mapping.key: mapping
         for mapping in AccountMapping.objects.filter(
             company=company, key__in=required_keys
         ).select_related("account")
     }
-    missing = [key for key in required_keys if key not in mappings or not mappings[key].account_id]
+    missing = [
+        key for key in required_keys if key not in mappings or not mappings[key].account_id
+    ]
     if missing:
-        raise ValidationError(
-            {"detail": f"Missing account mapping for: {', '.join(sorted(missing))}."}
-        )
-
+        _auto_map_payroll_accounts(company, required_keys)
+        mappings = {
+            mapping.key: mapping
+            for mapping in AccountMapping.objects.filter(
+                company=company, key__in=required_keys
+            ).select_related("account")
+        }
+        missing = [
+            key
+            for key in required_keys
+            if key not in mappings or not mappings[key].account_id
+        ]
+        if missing:
+            raise ValidationError(
+                {"detail": f"Missing account mapping for: {', '.join(sorted(missing))}."}
+            )
+            
     totals = PayrollRun.objects.filter(period=period).aggregate(
         gross_total=Sum("earnings_total"),
         net_total=Sum("net_total"),
