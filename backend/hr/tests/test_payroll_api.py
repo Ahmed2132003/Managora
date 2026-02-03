@@ -147,9 +147,9 @@ class PayrollApiTests(APITestCase):
         payslip_url = reverse("payroll-run-payslip", kwargs={"id": run_id})
         response = self.client.get(payslip_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response["Content-Type"], "application/pdf")
-        pdf_bytes = b"".join(response.streaming_content)
-        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertEqual(response["Content-Type"], "image/png")
+        png_bytes = b"".join(response.streaming_content)
+        self.assertTrue(png_bytes.startswith(b"\x89PNG\r\n\x1a\n"))
 
         salaries_account = Account.objects.create(
             company=self.company,

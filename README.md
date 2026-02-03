@@ -38,6 +38,6 @@ One platform for HR + Attendance + Payroll + Accounting + Dashboards (10–300 e
 6. Create a payroll period for the month.
 7. Generate payroll runs for the period.
 8. Verify payroll totals (earnings, deductions, net) per employee.
-9. Download the payslip PDF for an employee.
+9. Download the payslip PNG for an employee.
 10. Lock the payroll period.
 11. Attempt to generate again; it should fail due to the lock.

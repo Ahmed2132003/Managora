@@ -95,7 +95,7 @@ from hr.serializers import (
 from hr.services.generator import generate_period
 from hr.services.leaves import approve_leave, reject_leave
 from hr.services.lock import lock_period
-from hr.services.payslip import render_payslip_pdf
+from hr.services.payslip import render_payslip_png
 import re
 
 
@@ -1681,9 +1681,9 @@ import re
 
 @extend_schema(
     tags=["Payroll"],
-    summary="Download payslip PDF",
+    summary="Download payslip PNG",    
 )
-class PayrollRunPayslipPDFView(APIView):
+class PayrollRunPayslipPNGView(APIView):    
     permission_classes = [IsAuthenticated]
 
     def get_permissions(self):
@@ -1736,17 +1736,18 @@ class PayrollRunPayslipPDFView(APIView):
             if not employee or employee.id != payroll_run.employee_id:
                 raise PermissionDenied("You do not have permission to view this payslip.")
 
-        pdf_bytes = render_payslip_pdf(payroll_run)
-
+        png_bytes = render_payslip_png(payroll_run)
+        
         # ✅ ضمان إن اللي راجع PDF فعلاً
-        if not pdf_bytes or pdf_bytes[:4] != b"%PDF":
-            return HttpResponse("Payslip generation failed (invalid PDF).", status=500, content_type="text/plain")
-
-        filename = f"payslip-{payroll_run.id}.pdf"
-
-        resp = HttpResponse(pdf_bytes, content_type="application/pdf")
+        if not png_bytes or not png_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+            return HttpResponse("Payslip generation failed (invalid PNG).", status=500, content_type="text/plain")
+        
+        filename = f"payslip-{payroll_run.id}.png"
+        
+        resp = HttpResponse(png_bytes, content_type="image/png")
+                
         resp["Content-Disposition"] = f'attachment; filename="{filename}"'
-        resp["Content-Length"] = str(len(pdf_bytes))
+        resp["Content-Length"] = str(len(png_bytes))        
         resp["Cache-Control"] = "no-store"
 
         return self._apply_cors_headers(request, resp)
