@@ -28,7 +28,7 @@ import {
   usePeriodRuns,
   useAttendanceRecordsQuery,
 } from "../../shared/hr/hooks";
-import type { PayrollRun } from "../../shared/hr/hooks";
+import type { AttendanceRecord, PayrollRun, PayrollRunDetail } from "../../shared/hr/hooks";
 
 import { endpoints } from "../../shared/api/endpoints";
 import { http } from "../../shared/api/http";
@@ -105,7 +105,85 @@ function getPeriodRange(period?: { start_date?: string | null; end_date?: string
   return { dateFrom, dateTo, days };
 }
 
-export function PayrollPeriodDetailsPage() {
+type PeriodRange = ReturnType<typeof getPeriodRange>;
+
+type RunSummary = {
+  presentDays: number;
+  absentDays: number;
+  lateMinutes: number;
+  bonuses: number;
+  commissions: number;
+  deductions: number;
+  advances: number;
+  dailyRate: number;
+};
+
+function buildRunSummary(
+  run: PayrollRunDetail | null | undefined,
+  attendanceRecords: AttendanceRecord[],
+  periodRange: PeriodRange
+): RunSummary | null {
+  if (!run || !periodRange) {
+    return null;
+  }
+
+  const records = attendanceRecords ?? [];
+  const presentDays = records.filter((record) => record.status !== "absent").length;
+  const absentDays = Math.max(periodRange.days - presentDays, 0);
+  const lateMinutes = records.reduce((sum, record) => sum + (record.late_minutes ?? 0), 0);
+  const lines = run.lines ?? [];
+  const basicLine = lines.find((line) => line.code.toUpperCase() === "BASIC");
+  const basicAmount = basicLine ? parseAmount(basicLine.amount) : 0;
+  const metaRate = basicLine?.meta?.rate;
+  const dailyRate = metaRate
+    ? parseAmount(metaRate)
+    : resolveDailyRateByPeriod(run.period.period_type, basicAmount);
+  const bonuses = lines
+    .filter(
+      (line) =>
+        line.type === "earning" &&
+        line.code.toUpperCase() !== "BASIC" &&
+        !line.code.toUpperCase().startsWith("COMM-")
+    )
+    .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+  const commissions = lines
+    .filter((line) => line.type === "earning" && line.code.toUpperCase().startsWith("COMM-"))
+    .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+  const deductions = lines
+    .filter(
+      (line) => line.type === "deduction" && line.code.toUpperCase().startsWith("COMP-")
+    )
+    .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+  const advances = lines
+    .filter(
+      (line) => line.type === "deduction" && line.code.toUpperCase().startsWith("LOAN-")
+    )
+    .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+
+  return {
+    presentDays,
+    absentDays,
+    lateMinutes,
+    bonuses,
+    commissions,
+    deductions,
+    advances,
+    dailyRate: dailyRate ?? 0,
+  };
+}
+
+function calculatePayableTotal(summary: RunSummary | null) {
+  if (!summary) return null;
+  return (
+    summary.presentDays * summary.dailyRate +
+    summary.bonuses +
+    summary.commissions -
+    summary.deductions -
+    summary.advances
+  );
+}
+
+export function PayrollPeriodDetailsPage() {  
   const params = useParams();
   const periodId = params.id ? Number(params.id) : null;
   const [search, setSearch] = useState("");
@@ -114,7 +192,7 @@ export function PayrollPeriodDetailsPage() {
 
   const runsQuery = usePeriodRuns(periodId);
   const periodsQuery = usePayrollPeriods();
-  const runDetailsQuery = usePayrollRun(selectedRun?.id ?? null);  
+  const runDetailsQuery = usePayrollRun(selectedRun?.id ?? null);   
   const lockMutation = useLockPayrollPeriod(periodId);
   const generateMutation = useGeneratePeriod(periodId);
   const markPaidMutation = useMarkPayrollRunPaid();
@@ -125,10 +203,11 @@ export function PayrollPeriodDetailsPage() {
   const runsLoading = runsQuery.isLoading;
   const runsFetching = runsQuery.isFetching;
 
-  const runs = useMemo(() => runsQuery.data ?? [], [runsQuery.data]);  
+  const runs = useMemo(() => runsQuery.data ?? [], [runsQuery.data]);
+  const [runPayables, setRunPayables] = useState<Record<number, number>>({});
   const filteredRuns = useMemo(() => {
     if (!search) return runs;
-    const term = search.toLowerCase();
+    const term = search.toLowerCase();    
     return runs.filter((run) =>
       run.employee.full_name.toLowerCase().includes(term)
     );
@@ -142,9 +221,14 @@ export function PayrollPeriodDetailsPage() {
     runDetailsQuery.data?.period ??
     null;
 
+  const periodRange = useMemo(
+    () => (periodInfo ? getPeriodRange(periodInfo) : null),
+    [periodInfo]
+  );
+
   const runPeriodRange = useMemo(() => {
     return runDetailsQuery.data?.period
-      ? getPeriodRange(runDetailsQuery.data.period)
+      ? getPeriodRange(runDetailsQuery.data.period)      
       : null;
   }, [runDetailsQuery.data]);
   
@@ -159,58 +243,10 @@ export function PayrollPeriodDetailsPage() {
     Boolean(runDetailsQuery.data?.employee.id && runPeriodRange)
   );
 
-  const runSummary = useMemo(() => {
-    if (!runDetailsQuery.data || !runPeriodRange) {
-      return null;
-    }
-
-    const records = attendanceQuery.data ?? [];
-    const presentDays = records.filter((record) => record.status !== "absent").length;
-    const absentDays = Math.max(runPeriodRange.days - presentDays, 0);
-    const lateMinutes = records.reduce((sum, record) => sum + (record.late_minutes ?? 0), 0);
-    const lines = runDetailsQuery.data.lines ?? [];
-    const basicLine = lines.find((line) => line.code.toUpperCase() === "BASIC");
-    const basicAmount = basicLine ? parseAmount(basicLine.amount) : 0;
-    const metaRate = basicLine?.meta?.rate;
-    const dailyRate = metaRate
-      ? parseAmount(metaRate)
-      : resolveDailyRateByPeriod(runDetailsQuery.data.period.period_type, basicAmount);      
-    const bonuses = lines
-      .filter(
-        (line) =>
-          line.type === "earning" &&
-          line.code.toUpperCase() !== "BASIC" &&
-          !line.code.toUpperCase().startsWith("COMM-")
-      )
-      .reduce((sum, line) => sum + parseAmount(line.amount), 0);
-    const commissions = lines
-      .filter(
-        (line) => line.type === "earning" && line.code.toUpperCase().startsWith("COMM-")
-      )
-      .reduce((sum, line) => sum + parseAmount(line.amount), 0);
-    const deductions = lines
-      .filter(
-        (line) =>
-          line.type === "deduction" && line.code.toUpperCase().startsWith("COMP-")
-      )
-      .reduce((sum, line) => sum + parseAmount(line.amount), 0);
-    const advances = lines
-      .filter(
-        (line) =>
-          line.type === "deduction" && line.code.toUpperCase().startsWith("LOAN-")
-      )
-      .reduce((sum, line) => sum + parseAmount(line.amount), 0);
-    return {
-      presentDays,
-      absentDays,
-      lateMinutes,
-      bonuses,
-      commissions,
-      deductions,
-      advances,
-      dailyRate: dailyRate ?? 0,      
-    };
-  }, [attendanceQuery.data, runDetailsQuery.data, runPeriodRange]);
+  const runSummary = useMemo(
+    () => buildRunSummary(runDetailsQuery.data, attendanceQuery.data ?? [], runPeriodRange),
+    [attendanceQuery.data, runDetailsQuery.data, runPeriodRange]
+  );
 
   const currentUserName = useMemo(() => {
     const user = meQuery.data?.user;
@@ -230,16 +266,72 @@ export function PayrollPeriodDetailsPage() {
   const managerName = roleNames.includes("manager") || isSuperUser ? currentUserName : "-";
   const payableTotal = useMemo(() => {
     if (runSummary) {
-      return (
-        runSummary.presentDays * runSummary.dailyRate +
-        runSummary.bonuses +
-        runSummary.commissions -
-        runSummary.deductions -
-        runSummary.advances
-      );
+      return calculatePayableTotal(runSummary);
     }
     return runDetailsQuery.data?.net_total;
   }, [runDetailsQuery.data?.net_total, runSummary]);
+
+  useEffect(() => {
+    if (!periodRange) {
+      return;
+    }
+    const missingRuns = runs.filter((run) => runPayables[run.id] == null);
+    if (missingRuns.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    async function loadPayables() {
+      const results = await Promise.all(
+        missingRuns.map(async (run) => {
+          try {
+            const [runDetailsResponse, attendanceResponse] = await Promise.all([
+              http.get<PayrollRunDetail>(endpoints.hr.payrollRun(run.id)),
+              http.get<AttendanceRecord[]>(endpoints.hr.attendanceRecords, {
+                params: {
+                  date_from: periodRange.dateFrom,
+                  date_to: periodRange.dateTo,
+                  employee_id: run.employee.id,
+                },
+              }),
+            ]);
+            const summary = buildRunSummary(
+              runDetailsResponse.data,
+              attendanceResponse.data ?? [],
+              periodRange
+            );
+            const calculated = calculatePayableTotal(summary);
+            return {
+              id: run.id,
+              payable:
+                calculated ?? parseAmount(runDetailsResponse.data.net_total ?? run.net_total),
+            };
+          } catch {
+            return { id: run.id, payable: parseAmount(run.net_total) };
+          }
+        })
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      setRunPayables((prev) => {
+        const next = { ...prev };
+        results.forEach((result) => {
+          if (result) {
+            next[result.id] = result.payable;
+          }
+        });
+        return next;
+      });
+    }
+
+    loadPayables();
+    return () => {
+      cancelled = true;
+    };
+  }, [periodRange, runPayables, runs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -390,13 +482,15 @@ export function PayrollPeriodDetailsPage() {
     }
   }
 
-  const rows = filteredRuns.map((run) => (
+  const rows = filteredRuns.map((run) => {
+    const payableValue = runPayables[run.id];
+    return (
     <Table.Tr key={run.id}>
       <Table.Td>{run.employee.full_name}</Table.Td>
       <Table.Td>{formatMoney(run.earnings_total)}</Table.Td>      
       <Table.Td>{formatMoney(run.deductions_total)}</Table.Td>
-      <Table.Td>{formatMoney(run.net_total)}</Table.Td>
-      <Table.Td>{formatMoney(run.net_total)}</Table.Td>
+      <Table.Td>{formatMoney(payableValue ?? run.net_total)}</Table.Td>
+      <Table.Td>{formatMoney(payableValue ?? run.net_total)}</Table.Td>
       <Table.Td>
         <Group gap="xs">
           <Button size="xs" variant="light" onClick={() => setSelectedRun(run)}>
@@ -408,8 +502,9 @@ export function PayrollPeriodDetailsPage() {
         </Group>
       </Table.Td>
     </Table.Tr>
-  ));
-
+  );
+  });
+  
   return (
     <Stack gap="lg">
       <Group justify="space-between">
