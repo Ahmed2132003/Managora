@@ -95,7 +95,7 @@ from hr.serializers import (
 from hr.services.generator import generate_period
 from hr.services.leaves import approve_leave, reject_leave
 from hr.services.lock import lock_period
-from hr.services.payslip import render_payslip_png
+from hr.services.payslip import render_payslip_pdf
 import re
 
 
@@ -1676,18 +1676,103 @@ class PayrollPeriodLockView(APIView):
 
 
 from django.http import HttpResponse
-from django.conf import settings
-import re
+from corsheaders.defaults import default_headers
 
 @extend_schema(
     tags=["Payroll"],
-    summary="Download payslip PNG",    
+    summary="Download payslip PDF",
 )
-class PayrollRunPayslipPNGView(APIView):    
+class PayrollRunPayslipPDFView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get_permissions(self):
-        # اسمح للـ OPTIONS يعدّي بدون auth (preflight)
+        # خلّي OPTIONS من غير auth عشان الـ preflight مايتعطلش
+        if self.request.method == "OPTIONS":
+            return []
+        return [permission() for permission in self.permission_classes]
+
+    def _apply_cors_headers(self, request, response):
+        """
+        Force CORS headers for this endpoint (PDF download).
+        This fixes cases where browser blocks because Access-Control-Allow-Origin is missing.
+        """
+        origin = request.headers.get("Origin")
+
+        # لو Origin مش موجود لأي سبب، حط localhost:5174 كـ fallback
+        fallback_origin = "http://localhost:5174"
+
+        allow_all = getattr(settings, "CORS_ALLOW_ALL_ORIGINS", False)
+        allowed_origins = getattr(settings, "CORS_ALLOWED_ORIGINS", [])
+        allowed_origin_regexes = getattr(settings, "CORS_ALLOWED_ORIGIN_REGEXES", [])
+        allow_credentials = getattr(settings, "CORS_ALLOW_CREDENTIALS", False)
+
+        is_allowed_origin = False
+        if origin:
+            is_allowed_origin = (
+                allow_all
+                or origin in allowed_origins
+                or any(re.match(regex, origin) for regex in allowed_origin_regexes)
+            )
+
+        # ✅ المهم: لازم الهيدر ده يكون موجود وإلا Chrome هيعمل Block
+        if origin and is_allowed_origin:
+            response["Access-Control-Allow-Origin"] = origin
+        else:
+            response["Access-Control-Allow-Origin"] = fallback_origin
+
+        response["Vary"] = "Origin"
+        response["Access-Control-Allow-Credentials"] = "true" if allow_credentials else "false"
+
+        # ✅ headers/methods المطلوبة للـ preflight + GET
+        req_headers = request.headers.get("Access-Control-Request-Headers")
+        response["Access-Control-Allow-Headers"] = (
+            req_headers or "authorization, content-type, accept"
+        )
+        response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+
+        # ✅ لو عايز تقرأ اسم الملف من Content-Disposition في الفرونت
+        response["Access-Control-Expose-Headers"] = "Content-Disposition"
+
+        return response
+
+    def options(self, request, *args, **kwargs):
+        # لازم نرد على OPTIONS برد فيه CORS headers
+        response = HttpResponse(status=200)
+        return self._apply_cors_headers(request, response)
+
+    def get(self, request, id=None):
+        payroll_run = get_object_or_404(PayrollRun, id=id, company=request.user.company)
+
+        has_permission = _user_has_payroll_permission(
+            request.user,
+            ["hr.payroll.view", "hr.payroll.payslip", "hr.payroll.*"],
+        )
+        if not has_permission:
+            employee = getattr(request.user, "employee_profile", None)
+            if not employee or employee.id != payroll_run.employee_id:
+                raise PermissionDenied("You do not have permission to view this payslip.")
+
+        pdf_bytes = render_payslip_pdf(payroll_run)
+        filename = f"payslip-{payroll_run.id}.pdf"
+
+        response = FileResponse(
+            BytesIO(pdf_bytes),
+            as_attachment=True,
+            filename=filename,
+            content_type="application/pdf",
+        )
+
+        return self._apply_cors_headers(request, response)
+
+
+@extend_schema(
+    tags=["Payroll"],
+    summary="Download payslip PNG",
+)
+class PayrollRunPayslipPNGView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
         if self.request.method == "OPTIONS":
             return []
         return [permission() for permission in self.permission_classes]
@@ -1716,8 +1801,7 @@ class PayrollRunPayslipPNGView(APIView):
         req_headers = request.headers.get("Access-Control-Request-Headers")
         response["Access-Control-Allow-Headers"] = req_headers or "authorization, content-type, accept"
         response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
-        response["Access-Control-Expose-Headers"] = "Content-Disposition, Content-Length"
-
+        response["Access-Control-Expose-Headers"] = "Content-Disposition, Content-Length, Content-Type"
         return response
 
     def options(self, request, *args, **kwargs):
@@ -1736,18 +1820,16 @@ class PayrollRunPayslipPNGView(APIView):
             if not employee or employee.id != payroll_run.employee_id:
                 raise PermissionDenied("You do not have permission to view this payslip.")
 
-        png_bytes = render_payslip_png(payroll_run)
-        
-        # ✅ ضمان إن اللي راجع PDF فعلاً
-        if not png_bytes or not png_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
-            return HttpResponse("Payslip generation failed (invalid PNG).", status=500, content_type="text/plain")
-        
-        filename = f"payslip-{payroll_run.id}.png"
-        
-        resp = HttpResponse(png_bytes, content_type="image/png")
-                
-        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
-        resp["Content-Length"] = str(len(png_bytes))        
-        resp["Cache-Control"] = "no-store"
+        # Generate PNG bytes
+        from hr.services.payslip import render_payslip_png
 
+        png_bytes = render_payslip_png(payroll_run, dpi=200)
+        if not png_bytes or png_bytes[:8] != b"\x89PNG\r\n\x1a\n":
+            return HttpResponse("Payslip generation failed (invalid PNG).", status=500, content_type="text/plain")
+
+        filename = f"payslip-{payroll_run.id}.png"
+        resp = HttpResponse(png_bytes, content_type="image/png")
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+        resp["Content-Length"] = str(len(png_bytes))
+        resp["Cache-Control"] = "no-store"
         return self._apply_cors_headers(request, resp)

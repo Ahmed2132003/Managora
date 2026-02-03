@@ -6,13 +6,16 @@ import {
   Card,
   Drawer,
   Group,
+  Image,
+  Modal,
+  ScrollArea,
   Skeleton,
   SimpleGrid,
   Stack,
   Table,
   Text,
   TextInput,
-  Title,  
+  Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
@@ -183,156 +186,15 @@ function calculatePayableTotal(summary: RunSummary | null) {
   );
 }
 
-type RunDetailsContentProps = {
-  run: PayrollRunDetail;
-  runSummary: RunSummary | null;
-  payableTotal: number | null;
-  companyName: string;
-  managerName: string;
-  hrName: string;
-};
-
-function RunDetailsContent({
-  run,
-  runSummary,
-  payableTotal,
-  companyName,
-  managerName,
-  hrName,
-}: RunDetailsContentProps) {
-  return (
-    <Stack gap="md">
-      <Group justify="space-between">
-        <div>
-          <Text fw={600}>{run.employee.full_name}</Text>
-          <Text c="dimmed" size="sm">
-            {run.employee.employee_code}
-          </Text>
-        </div>
-        <Badge color={statusColors[run.status] ?? "gray"}>{run.status}</Badge>
-      </Group>
-
-      <Group gap="md">
-        <Text>Basic</Text>
-        <Text fw={600}>
-          {formatMoney(getBasicFromLines(run.lines) ?? run.earnings_total)}
-        </Text>
-        {payableTotal != null && (
-          <Text c="dimmed" size="sm">
-            الإجمالي المستحق: {formatMoney(payableTotal)}
-          </Text>
-        )}
-      </Group>
-
-      {runSummary && (
-        <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="md">
-          <div>
-            <Text size="sm" c="dimmed">
-              Attendance days
-            </Text>
-            <Text fw={600}>{runSummary.presentDays}</Text>
-          </div>
-          <div>
-            <Text size="sm" c="dimmed">
-              Absence days
-            </Text>
-            <Text fw={600}>{runSummary.absentDays}</Text>
-          </div>
-          <div>
-            <Text size="sm" c="dimmed">
-              Late minutes
-            </Text>
-            <Text fw={600}>{runSummary.lateMinutes}</Text>
-          </div>
-          <div>
-            <Text size="sm" c="dimmed">
-              Bonuses
-            </Text>
-            <Text fw={600}>{formatMoney(runSummary.bonuses)}</Text>
-          </div>
-          <div>
-            <Text size="sm" c="dimmed">
-              Deductions
-            </Text>
-            <Text fw={600}>{formatMoney(runSummary.deductions)}</Text>
-          </div>
-          <div>
-            <Text size="sm" c="dimmed">
-              Advances
-            </Text>
-            <Text fw={600}>{formatMoney(runSummary.advances)}</Text>
-          </div>
-          <div>
-            <Text size="sm" c="dimmed">
-              الإجمالي المستحق (Payable)
-            </Text>
-            <Text fw={600}>{formatMoney(payableTotal ?? 0)}</Text>
-          </div>
-        </SimpleGrid>
-      )}
-
-      <Table withTableBorder>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Line</Table.Th>
-            <Table.Th>Type</Table.Th>
-            <Table.Th>Amount</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {run.lines.map((line) => (
-            <Table.Tr key={line.id}>
-              <Table.Td>{line.name}</Table.Td>
-              <Table.Td>{line.type}</Table.Td>
-              <Table.Td>{formatMoney(line.amount)}</Table.Td>
-            </Table.Tr>
-          ))}
-          {runSummary && (
-            <Table.Tr>
-              <Table.Td colSpan={2}>
-                <Text fw={600}>الإجمالي المستحق (Payable)</Text>
-              </Table.Td>
-              <Table.Td>
-                <Text fw={600}>{formatMoney(payableTotal ?? 0)}</Text>
-              </Table.Td>
-            </Table.Tr>
-          )}
-        </Table.Tbody>
-      </Table>
-
-      <Stack gap="xs">
-        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs">
-          <div>
-            <Text size="sm" c="dimmed">
-              Company
-            </Text>
-            <Text fw={600}>{companyName}</Text>
-          </div>
-          <div>
-            <Text size="sm" c="dimmed">
-              Manager
-            </Text>
-            <Text fw={600}>{managerName}</Text>
-          </div>
-          <div>
-            <Text size="sm" c="dimmed">
-              HR
-            </Text>
-            <Text fw={600}>{hrName}</Text>
-          </div>
-        </SimpleGrid>
-      </Stack>
-    </Stack>
-  );
-}
-
 export function PayrollPeriodDetailsPage() {  
   const params = useParams();
   const periodId = params.id ? Number(params.id) : null;
   const [search, setSearch] = useState("");
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
   const [hrName, setHrName] = useState("-");
-  const [downloadRunId, setDownloadRunId] = useState<number | null>(null);
+  const [payslipPreviewOpen, setPayslipPreviewOpen] = useState(false);
+  const [payslipPreviewUrl, setPayslipPreviewUrl] = useState<string | null>(null);
+  const [payslipPreviewLoading, setPayslipPreviewLoading] = useState(false);
 
   const runsQuery = usePeriodRuns(periodId);
   const periodsQuery = usePayrollPeriods();
@@ -343,6 +205,15 @@ export function PayrollPeriodDetailsPage() {
   const canGenerate = useCan("hr.payroll.generate");
   const meQuery = useMe();
   const autoGeneratedRef = useRef(false);  
+
+  useEffect(() => {
+    return () => {
+      if (payslipPreviewUrl) {
+        URL.revokeObjectURL(payslipPreviewUrl);
+      }
+    };
+  }, [payslipPreviewUrl]);
+
   const runsCount = runsQuery.data?.length ?? 0;
   const runsLoading = runsQuery.isLoading;
   const runsFetching = runsQuery.isFetching;
@@ -408,15 +279,13 @@ export function PayrollPeriodDetailsPage() {
     
   const isSuperUser = meQuery.data?.user.is_superuser ?? false;
   const managerName = roleNames.includes("manager") || isSuperUser ? currentUserName : "-";
-  const companyName = meQuery.data?.company.name ?? "-";
   const payableTotal = useMemo(() => {
     if (runSummary) {
       return calculatePayableTotal(runSummary);
     }
-    const netTotal = runDetailsQuery.data?.net_total;
-    return netTotal == null ? null : parseAmount(netTotal);
+    return runDetailsQuery.data?.net_total;
   }, [runDetailsQuery.data?.net_total, runSummary]);
-  
+
   useEffect(() => {
     const currentPeriodRange = periodRange;
     if (!currentPeriodRange) {
@@ -584,58 +453,72 @@ export function PayrollPeriodDetailsPage() {
     return <AccessDenied />;
   }
 
-  async function handleDownload(runId: number) {
-    setDownloadRunId(runId);
+  async function fetchPayslipPngBlob(runId: number): Promise<Blob> {
+    const url = (endpoints as any).hr?.payrollRunPayslipPng ? (endpoints as any).hr.payrollRunPayslipPng(runId) : endpoints.hr.payrollRunPayslip(runId);
+    const res = await http.get(url, {
+      responseType: "blob",
+      headers: { Accept: "image/png" },
+      validateStatus: (s: number) => s >= 200 && s < 300,
+    });
+    const blob = res.data as Blob;
+    const ct = (blob.type || String(res.headers["content-type"] || "")).toLowerCase();
+    if (!ct.includes("image/png")) {
+      const txt = await blob.text().catch(() => "");
+      throw new Error(`Non-PNG response: ${ct}. ${txt.slice(0, 200)}`);
+    }
+    // Verify PNG signature
+    const headBuf = await blob.slice(0, 8).arrayBuffer();
+    const sig = Array.from(new Uint8Array(headBuf));
+    const pngSig = [137, 80, 78, 71, 13, 10, 26, 10];
+    const ok = pngSig.every((b, idx) => sig[idx] === b);
+    if (!ok) {
+      const txt = await blob.text().catch(() => "");
+      throw new Error(`Invalid PNG signature. ${txt.slice(0, 200)}`);
+    }
+    return blob;
+  }
+
+  async function handlePreviewPayslip(runId: number) {
     try {
-      const response = await http.get(endpoints.hr.payrollRunPayslip(runId), {
-        responseType: "blob",
-        headers: { Accept: "image/png" },
-        validateStatus: (s) => s >= 200 && s < 300,
-      });
-
-      const blob = response.data as Blob;
-      const ct = (blob.type || "").toLowerCase();
-      if (!ct.includes("image/png")) {
-        const text = await blob.text().catch(() => "");
-        throw new Error(`Non-PNG response: ${ct}. ${text?.slice(0, 200) ?? ""}`);
-      }
-
-      const headBuf = await blob.slice(0, 8).arrayBuffer();
-      const head = new Uint8Array(headBuf);
-      const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-      if (!pngSignature.every((value, index) => head[index] === value)) {
-        const text = await blob.text().catch(() => "");
-        throw new Error(`Invalid PNG signature. ${text?.slice(0, 200) ?? ""}`);
-      }
-
-      const cd = (response.headers["content-disposition"] ||
-        response.headers["Content-Disposition"] ||
-        "") as string;
-
-      let filename = `payslip-${runId}.png`;
-      const match = /filename="([^"]+)"/i.exec(cd);
-      if (match?.[1]) filename = match[1];
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setPayslipPreviewLoading(true);
+      // revoke old url
+      if (payslipPreviewUrl) URL.revokeObjectURL(payslipPreviewUrl);
+      const blob = await fetchPayslipPngBlob(runId);
+      const objectUrl = URL.createObjectURL(blob);
+      setPayslipPreviewUrl(objectUrl);
+      setPayslipPreviewOpen(true);
     } catch (e) {
+      console.error(e);
       notifications.show({
-        title: "Download failed",
-        message: "تعذر تنزيل كشف المرتب (تعذر إنشاء صورة).",
+        title: "Preview failed",
+        message: "تعذر عرض كشف المرتب.",
         color: "red",
       });
-      console.error(e);
     } finally {
-      setDownloadRunId(null);
+      setPayslipPreviewLoading(false);
     }
   }
 
+  async function handleDownload(runId: number) {
+    try {
+      const blob = await fetchPayslipPngBlob(runId);
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `payslip-${runId}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch (e) {
+      console.error(e);
+      notifications.show({
+        title: "Download failed",
+        message: "تعذر تنزيل كشف المرتب.",
+        color: "red",
+      });
+    }
+  }
   async function handleLockPeriod() {
     if (!periodId) {
       return;
@@ -667,19 +550,22 @@ export function PayrollPeriodDetailsPage() {
       <Table.Td>{formatMoney(payableValue ?? run.net_total)}</Table.Td>
       <Table.Td>{formatMoney(payableValue ?? run.net_total)}</Table.Td>
       <Table.Td>
-        <Group gap="xs">
-          <Button size="xs" variant="light" onClick={() => setSelectedRun(run)}>
-            View details
-          </Button>
-          <Button
-            size="xs"
-            variant="subtle"
-            onClick={() => handleDownload(run.id)}
-            loading={downloadRunId === run.id}
-          >
-            Download PNG
-          </Button>
-        </Group>
+                <Group gap="xs">
+                  <Button size="xs" variant="light" onClick={() => setSelectedRun(run)}>
+                    View details
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    loading={payslipPreviewLoading}
+                    onClick={() => handlePreviewPayslip(run.id)}
+                  >
+                    Preview PNG
+                  </Button>
+                  <Button size="xs" variant="subtle" onClick={() => handleDownload(run.id)}>
+                    Download PNG
+                  </Button>
+                </Group>
       </Table.Td>
     </Table.Tr>
   );
@@ -687,6 +573,27 @@ export function PayrollPeriodDetailsPage() {
 
   return (
     <Stack gap="lg">
+            <Modal
+              opened={payslipPreviewOpen}
+              onClose={() => {
+                setPayslipPreviewOpen(false);
+                if (payslipPreviewUrl) {
+                  URL.revokeObjectURL(payslipPreviewUrl);
+                  setPayslipPreviewUrl(null);
+                }
+              }}
+              title="Payslip Preview"
+              size="lg"
+            >
+              {payslipPreviewUrl ? (
+                <ScrollArea h={600}>
+                  <Image src={payslipPreviewUrl} alt="Payslip" fit="contain" />
+                </ScrollArea>
+              ) : (
+                <Text c="dimmed">لا يوجد معاينة.</Text>
+              )}
+            </Modal>
+
       <Group justify="space-between">
         <Title order={3}>Payroll Period Runs</Title>
         {periodStatus && (
@@ -756,22 +663,139 @@ export function PayrollPeriodDetailsPage() {
           <Skeleton height={160} />
         ) : runDetailsQuery.data ? (
           <Stack gap="md">
-            <RunDetailsContent
-              run={runDetailsQuery.data}
-              runSummary={runSummary}
-              payableTotal={payableTotal ?? null}
-              companyName={companyName}
-              managerName={managerName}
-              hrName={hrName}
-            />
-            <Button
-              color="green"
-              onClick={handleMarkPaid}
-              loading={markPaidMutation.isPending}
-              disabled={runDetailsQuery.data.status === "paid"}
-            >
-              تم الدفع
-            </Button>
+            <Group justify="space-between">
+              <div>
+                <Text fw={600}>{runDetailsQuery.data.employee.full_name}</Text>
+                <Text c="dimmed" size="sm">
+                  {runDetailsQuery.data.employee.employee_code}
+                </Text>
+              </div>
+              <Badge color={statusColors[runDetailsQuery.data.status] ?? "gray"}>
+                {runDetailsQuery.data.status}
+              </Badge>
+            </Group>
+
+            <Group gap="md">
+              <Text>Basic</Text>
+              <Text fw={600}>
+                {formatMoney(
+                  getBasicFromLines(runDetailsQuery.data.lines) ??
+                    runDetailsQuery.data.earnings_total
+                )}
+              </Text>
+              {payableTotal != null && (                
+                <Text c="dimmed" size="sm">
+                  الإجمالي المستحق: {formatMoney(payableTotal)}                  
+                </Text>
+              )}
+            </Group>
+
+            {runSummary && (
+              <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="md">
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Attendance days
+                  </Text>
+                  <Text fw={600}>{runSummary.presentDays}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Absence days
+                  </Text>
+                  <Text fw={600}>{runSummary.absentDays}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Late minutes
+                  </Text>
+                  <Text fw={600}>{runSummary.lateMinutes}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Bonuses
+                  </Text>
+                  <Text fw={600}>{formatMoney(runSummary.bonuses)}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Deductions
+                  </Text>
+                  <Text fw={600}>{formatMoney(runSummary.deductions)}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Advances
+                  </Text>
+                  <Text fw={600}>{formatMoney(runSummary.advances)}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    الإجمالي المستحق (Payable)
+                  </Text>
+                  <Text fw={600}>{formatMoney(payableTotal ?? 0)}</Text>                  
+                </div>
+              </SimpleGrid>
+            )}
+
+            <Table withTableBorder>              
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Line</Table.Th>
+                  <Table.Th>Type</Table.Th>
+                  <Table.Th>Amount</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {runDetailsQuery.data.lines.map((line) => (
+                  <Table.Tr key={line.id}>
+                    <Table.Td>{line.name}</Table.Td>
+                    <Table.Td>{line.type}</Table.Td>
+                    <Table.Td>{formatMoney(line.amount)}</Table.Td>
+                  </Table.Tr>
+                ))}
+                {runSummary && (
+                  <Table.Tr>
+                    <Table.Td colSpan={2}>
+                      <Text fw={600}>الإجمالي المستحق (Payable)</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text fw={600}>{formatMoney(payableTotal ?? 0)}</Text>                      
+                    </Table.Td>
+                  </Table.Tr>
+                )}
+              </Table.Tbody>
+            </Table>
+
+            <Stack gap="xs">
+              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs">
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Company
+                  </Text>
+                  <Text fw={600}>{meQuery.data?.company.name ?? "-"}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Manager
+                  </Text>
+                  <Text fw={600}>{managerName}</Text>
+                </div>
+                <div>
+                  <Text size="sm" c="dimmed">
+                    HR
+                  </Text>
+                  <Text fw={600}>{hrName}</Text>
+                </div>
+              </SimpleGrid>
+              <Button
+                color="green"
+                onClick={handleMarkPaid}
+                loading={markPaidMutation.isPending}
+                disabled={runDetailsQuery.data.status === "paid"}
+              >
+                تم الدفع
+              </Button>
+            </Stack>
           </Stack>
         ) : (
           <Text c="dimmed">اختر موظفًا لعرض التفاصيل.</Text>

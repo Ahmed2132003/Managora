@@ -44,6 +44,7 @@ from hr.views import (
     PayrollRunDetailView,
     PayrollRunMarkPaidView,
     PayrollRunPayslipPNGView,
+    PayrollRunPayslipPDFView,
     PolicyRuleViewSet,
     SalaryComponentViewSet,
     SalaryStructureViewSet,
@@ -121,7 +122,8 @@ urlpatterns = [
     path("payroll/periods/<int:id>/lock/", PayrollPeriodLockView.as_view(), name="payroll-period-lock"),
     path("payroll/runs/<int:id>/", PayrollRunDetailView.as_view(), name="payroll-run-detail"),
     path("payroll/runs/<int:id>/mark-paid/", PayrollRunMarkPaidView.as_view(), name="payroll-run-mark-paid"),
-    path("payroll/runs/<int:id>/payslip.png", PayrollRunPayslipPNGView.as_view(), name="payroll-run-payslip"),
+    path("payroll/runs/<int:id>/payslip.png", PayrollRunPayslipPNGView.as_view(), name="payroll-run-payslip-png"),
+    path("payroll/runs/<int:id>/payslip.pdf", PayrollRunPayslipPDFView.as_view(), name="payroll-run-payslip-pdf"),
 
     # ✅ Router URLs MUST be last
     path("", include(router.urls)),

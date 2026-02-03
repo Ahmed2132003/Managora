@@ -13,3 +13,4 @@ django-redis
 redis
 sentry-sdk
 cryptography>=42.0.0
+pymupdf
