@@ -1682,6 +1682,11 @@ class PayrollPeriodLockView(APIView):
 class PayrollRunPayslipPDFView(APIView):
     permission_classes = [IsAuthenticated]
 
+    def get_permissions(self):
+        if self.request.method == "OPTIONS":
+            return []
+        return [permission() for permission in self.permission_classes]
+    
     def _apply_cors_headers(self, request, response):
         origin = request.headers.get("Origin")
         allow_all = getattr(settings, "CORS_ALLOW_ALL_ORIGINS", False)
