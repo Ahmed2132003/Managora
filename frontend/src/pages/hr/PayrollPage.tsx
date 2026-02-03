@@ -754,10 +754,15 @@ export function PayrollPage() {
     const deductions = components
       .filter((component) => component.type === "deduction")
       .reduce((sum, component) => sum + Number(component.amount || 0), 0);
-    const advances = (loanAdvancesQuery.data ?? []).reduce(
-      (sum, loan) => sum + Number(loan.installment_amount || 0),
-      0
-    );
+    const advances = (loanAdvancesQuery.data ?? []).reduce((sum, loan) => {
+      if (
+        loan.type === "advance" &&
+        (loan.start_date < periodRange.dateFrom || loan.start_date > periodRange.dateTo)
+      ) {
+        return sum;
+      }
+      return sum + Number(loan.installment_amount || 0);
+    }, 0);    
     const commissions = (commissionQuery.data ?? []).reduce(
       (sum, commission) => sum + Number(commission.amount || 0),
       0

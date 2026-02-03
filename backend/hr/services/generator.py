@@ -289,10 +289,15 @@ def generate_period(company, year, month, actor):
                 remaining_amount__gt=0,
             )
             for loan in loans:
+                if (
+                    loan.type == LoanAdvance.LoanType.ADVANCE
+                    and not (start_date <= loan.start_date <= end_date)
+                ):
+                    continue
                 installment = min(loan.installment_amount, loan.remaining_amount)
                 installment_amount = _quantize_amount(installment)
                 if installment_amount > 0:
-                    lines.append(
+                    lines.append(                        
                         PayrollLine(
                             company=company,
                             payroll_run=None,

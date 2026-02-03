@@ -158,3 +158,24 @@ class PayrollGeneratorTests(TestCase):
         self.assertFalse(
             PayrollLine.objects.filter(company=company_b).exists()
         )
+
+    def test_generate_period_excludes_advances_outside_period(self):
+        employee = self._create_employee_with_structure("EMP-002")
+        LoanAdvance.objects.create(
+            company=self.company,
+            employee=employee,
+            type=LoanAdvance.LoanType.ADVANCE,
+            principal_amount=Decimal("500.00"),
+            start_date=date(2026, 4, 30),
+            installment_amount=Decimal("100.00"),
+            remaining_amount=Decimal("100.00"),
+            status=LoanAdvance.Status.ACTIVE,
+        )
+        period = PayrollPeriod.objects.create(company=self.company, year=2026, month=5)
+
+        generate_period(self.company, 2026, 5, self.actor)
+
+        run = PayrollRun.objects.get(period=period, employee=employee)
+        self.assertFalse(
+            run.lines.filter(code__startswith="LOAN-").exists()
+        )
