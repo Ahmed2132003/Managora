@@ -440,12 +440,17 @@ export function PayrollPeriodDetailsPage() {
 
   async function handleDownload(runId: number) {
     try {
-      const response = await http.get<ArrayBuffer>(endpoints.hr.payrollRunPayslip(runId), {
-        responseType: "arraybuffer",
+      const response = await http.get<Blob>(endpoints.hr.payrollRunPayslip(runId), {
+        responseType: "blob",
+        headers: {
+          Accept: "application/pdf",
+        },
       });
       const contentType =
         response.headers["content-type"] || response.headers["Content-Type"] || "application/pdf";
-      const blob = new Blob([response.data], { type: contentType });
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: contentType });
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
@@ -453,7 +458,7 @@ export function PayrollPeriodDetailsPage() {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(blobUrl);
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);      
     } catch {
       notifications.show({
         title: "Download failed",
