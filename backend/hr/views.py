@@ -487,6 +487,24 @@ def _user_role_names(user) -> set[str]:
     return {name.strip().lower() for name in user.roles.values_list("name", flat=True)}
 
 
+def _format_user_name(user) -> str:
+    if not user:
+        return "-"
+    first = (user.first_name or "").strip()
+    last = (user.last_name or "").strip()
+    full_name = f"{first} {last}".strip()
+    return full_name or user.username or "-"
+
+
+def _get_company_role_user(company, role_name: str):
+    if not company:
+        return None
+    return (
+        User.objects.filter(company=company, roles__name__iexact=role_name)
+        .distinct()
+        .first()
+    )
+
 def _ensure_adjustment_access(user, employee: Employee):
     roles = _user_role_names(user)
     if "admin" in roles or "manager" in roles:
@@ -1753,7 +1771,13 @@ class PayrollRunPayslipPDFView(APIView):
             if not employee or employee.id != payroll_run.employee_id:
                 raise PermissionDenied("You do not have permission to view this payslip.")
 
-        pdf_bytes = render_payslip_pdf(payroll_run)
+        manager_name = "-"
+        if request.user.is_superuser or "manager" in _user_role_names(request.user):
+            manager_name = _format_user_name(request.user)
+        hr_name = _format_user_name(_get_company_role_user(request.user.company, "hr"))
+        pdf_bytes = render_payslip_pdf(
+            payroll_run, manager_name=manager_name, hr_name=hr_name
+        )        
         filename = f"payslip-{payroll_run.id}.pdf"
 
         response = FileResponse(
@@ -1833,7 +1857,13 @@ class PayrollRunPayslipPNGView(APIView):
         # Generate PNG bytes
         from hr.services.payslip import render_payslip_png
 
-        png_bytes = render_payslip_png(payroll_run, dpi=200)
+        manager_name = "-"
+        if request.user.is_superuser or "manager" in _user_role_names(request.user):
+            manager_name = _format_user_name(request.user)
+        hr_name = _format_user_name(_get_company_role_user(request.user.company, "hr"))
+        png_bytes = render_payslip_png(
+            payroll_run, dpi=200, manager_name=manager_name, hr_name=hr_name
+        )        
         if not png_bytes or png_bytes[:8] != b"\x89PNG\r\n\x1a\n":
             return HttpResponse("Payslip generation failed (invalid PNG).", status=500, content_type="text/plain")
 
