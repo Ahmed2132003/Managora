@@ -228,8 +228,19 @@ export function PayrollPeriodDetailsPage() {
     
   const isSuperUser = meQuery.data?.user.is_superuser ?? false;
   const managerName = roleNames.includes("manager") || isSuperUser ? currentUserName : "-";
-  const payableTotal = runDetailsQuery.data?.net_total;
-
+  const payableTotal = useMemo(() => {
+    if (runSummary) {
+      return (
+        runSummary.presentDays * runSummary.dailyRate +
+        runSummary.bonuses +
+        runSummary.commissions -
+        runSummary.deductions -
+        runSummary.advances
+      );
+    }
+    return runDetailsQuery.data?.net_total;
+  }, [runDetailsQuery.data?.net_total, runSummary]);
+  
   useEffect(() => {
     let cancelled = false;
 
