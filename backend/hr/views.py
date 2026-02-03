@@ -1694,9 +1694,18 @@ class PayrollRunPayslipPDFView(APIView):
 
         pdf_bytes = render_payslip_pdf(payroll_run)
         filename = f"payslip-{payroll_run.id}.pdf"
-        return FileResponse(
+        response = FileResponse(            
             BytesIO(pdf_bytes),
             as_attachment=True,
             filename=filename,
             content_type="application/pdf",
         )
+        origin = request.headers.get("Origin")
+        allow_all = getattr(settings, "CORS_ALLOW_ALL_ORIGINS", False)
+        allowed_origins = getattr(settings, "CORS_ALLOWED_ORIGINS", [])
+        if origin and (allow_all or origin in allowed_origins):
+            response["Access-Control-Allow-Origin"] = origin
+            if getattr(settings, "CORS_ALLOW_CREDENTIALS", False):
+                response["Access-Control-Allow-Credentials"] = "true"
+            response.setdefault("Vary", "Origin")
+        return response
