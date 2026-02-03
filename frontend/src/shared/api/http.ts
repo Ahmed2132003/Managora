@@ -4,11 +4,14 @@ import { env } from "../config/env";
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "../auth/tokens";
 import { endpoints } from "./endpoints";
 
+// In dev we use Vite proxy (/api -> backend) to avoid CORS.
+const API_BASE_URL = import.meta.env.DEV ? "" : env.API_BASE_URL;
+
 /**
  * Main API client
  */
 export const http = axios.create({
-  baseURL: env.API_BASE_URL,
+  baseURL: API_BASE_URL,
   withCredentials: false, // JWT في الهيدر، مش كوكيز
   headers: {
     "Content-Type": "application/json",
@@ -19,7 +22,7 @@ export const http = axios.create({
  * Separate client for refresh to avoid interceptor loops
  */
 const refreshClient = axios.create({
-  baseURL: env.API_BASE_URL,
+  baseURL: API_BASE_URL,
   withCredentials: false,
   headers: {
     "Content-Type": "application/json",

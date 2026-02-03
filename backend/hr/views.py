@@ -97,7 +97,6 @@ from hr.services.leaves import approve_leave, reject_leave
 from hr.services.lock import lock_period
 from hr.services.payslip import render_payslip_pdf
 import re
-from corsheaders.defaults import default_headers
 
 
 @extend_schema_view(
@@ -1676,6 +1675,9 @@ class PayrollPeriodLockView(APIView):
         return Response(PayrollPeriodSerializer(period).data)
 
 
+from django.http import HttpResponse
+from corsheaders.defaults import default_headers
+
 @extend_schema(
     tags=["Payroll"],
     summary="Download payslip PDF",
@@ -1684,33 +1686,63 @@ class PayrollRunPayslipPDFView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get_permissions(self):
+        # خلّي OPTIONS من غير auth عشان الـ preflight مايتعطلش
         if self.request.method == "OPTIONS":
             return []
         return [permission() for permission in self.permission_classes]
-    
+
     def _apply_cors_headers(self, request, response):
+        """
+        Force CORS headers for this endpoint (PDF download).
+        This fixes cases where browser blocks because Access-Control-Allow-Origin is missing.
+        """
         origin = request.headers.get("Origin")
+
+        # لو Origin مش موجود لأي سبب، حط localhost:5174 كـ fallback
+        fallback_origin = "http://localhost:5174"
+
         allow_all = getattr(settings, "CORS_ALLOW_ALL_ORIGINS", False)
         allowed_origins = getattr(settings, "CORS_ALLOWED_ORIGINS", [])
         allowed_origin_regexes = getattr(settings, "CORS_ALLOWED_ORIGIN_REGEXES", [])
         allow_credentials = getattr(settings, "CORS_ALLOW_CREDENTIALS", False)
-        is_allowed_origin = origin and (
-            allow_all
-            or origin in allowed_origins
-            or any(re.match(regex, origin) for regex in allowed_origin_regexes)
+
+        is_allowed_origin = False
+        if origin:
+            is_allowed_origin = (
+                allow_all
+                or origin in allowed_origins
+                or any(re.match(regex, origin) for regex in allowed_origin_regexes)
+            )
+
+        # ✅ المهم: لازم الهيدر ده يكون موجود وإلا Chrome هيعمل Block
+        if origin and is_allowed_origin:
+            response["Access-Control-Allow-Origin"] = origin
+        else:
+            response["Access-Control-Allow-Origin"] = fallback_origin
+
+        response["Vary"] = "Origin"
+        response["Access-Control-Allow-Credentials"] = "true" if allow_credentials else "false"
+
+        # ✅ headers/methods المطلوبة للـ preflight + GET
+        req_headers = request.headers.get("Access-Control-Request-Headers")
+        response["Access-Control-Allow-Headers"] = (
+            req_headers or "authorization, content-type, accept"
         )
-        if is_allowed_origin:            
-            if allow_all and not allow_credentials:
-                response["Access-Control-Allow-Origin"] = "*"
-            else:
-                response["Access-Control-Allow-Origin"] = origin
-            if allow_credentials:
-                response["Access-Control-Allow-Credentials"] = "true"
-            response.setdefault("Vary", "Origin")
+        response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+
+        # ✅ لو عايز تقرأ اسم الملف من Content-Disposition في الفرونت
+        response["Access-Control-Expose-Headers"] = "Content-Disposition"
+
         return response
+
+    def options(self, request, *args, **kwargs):
+        # لازم نرد على OPTIONS برد فيه CORS headers
+        response = HttpResponse(status=200)
+        return self._apply_cors_headers(request, response)
 
     def get(self, request, id=None):
         payroll_run = get_object_or_404(PayrollRun, id=id, company=request.user.company)
+
         has_permission = _user_has_payroll_permission(
             request.user,
             ["hr.payroll.view", "hr.payroll.payslip", "hr.payroll.*"],
@@ -1722,17 +1754,12 @@ class PayrollRunPayslipPDFView(APIView):
 
         pdf_bytes = render_payslip_pdf(payroll_run)
         filename = f"payslip-{payroll_run.id}.pdf"
-        response = FileResponse(            
+
+        response = FileResponse(
             BytesIO(pdf_bytes),
             as_attachment=True,
             filename=filename,
             content_type="application/pdf",
         )
-        return self._apply_cors_headers(request, response)
 
-    def options(self, request, *args, **kwargs):
-        response = Response(status=status.HTTP_200_OK)
-        request_headers = request.headers.get("Access-Control-Request-Headers")
-        response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
-        response["Access-Control-Allow-Headers"] = request_headers or ", ".join(default_headers)
         return self._apply_cors_headers(request, response)
