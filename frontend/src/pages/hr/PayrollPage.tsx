@@ -791,11 +791,12 @@ export function PayrollPage() {
     attendanceQuery.data,
     commissionQuery.data,
     loanAdvancesQuery.data,
+    periodRange.dateFrom,
+    periodRange.dateTo,
     periodRange.days,    
     salaryComponentsQuery.data,
     selectedSalaryStructure,
   ]);
-
   const shellCopy = useMemo(
     () => ({
       en: { title: contentMap.en.title, subtitle: contentMap.en.subtitle },
