@@ -37,11 +37,18 @@ def _auto_map_payroll_accounts(company, required_keys):
                 .order_by("code")
                 .first()
             )
+        if not salaries_account:
+            salaries_account = Account.objects.create(
+                company=company,
+                code="5000",
+                name="Payroll Salaries Expense",
+                type=Account.Type.EXPENSE,
+            )
         if salaries_account:
             AccountMapping.objects.update_or_create(
                 company=company,
                 key=AccountMapping.Key.PAYROLL_SALARIES_EXPENSE,
-                defaults={"account": salaries_account, "required": True},
+                defaults={"account": salaries_account, "required": True},                
             )
 
     if AccountMapping.Key.PAYROLL_PAYABLE in required_keys:
@@ -63,10 +70,17 @@ def _auto_map_payroll_accounts(company, required_keys):
                 .order_by("code")
                 .first()
             )
+        if not payable_account:
+            payable_account = Account.objects.create(
+                company=company,
+                code="2100",
+                name="Payroll Payable",
+                type=Account.Type.LIABILITY,
+            )
         if payable_account:
             AccountMapping.objects.update_or_create(
                 company=company,
-                key=AccountMapping.Key.PAYROLL_PAYABLE,
+                key=AccountMapping.Key.PAYROLL_PAYABLE,                
                 defaults={"account": payable_account, "required": True},
             )
 

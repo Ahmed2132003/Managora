@@ -236,10 +236,26 @@ class PayrollApiTests(APITestCase):
 
         lock_url = reverse("payroll-period-lock", kwargs={"id": period.id})
         response = self.client.post(lock_url, format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         period.refresh_from_db()
-        self.assertEqual(period.status, PayrollPeriod.Status.DRAFT)
-
+        self.assertEqual(period.status, PayrollPeriod.Status.LOCKED)
+        mapping_keys = {
+            mapping.key
+            for mapping in AccountMapping.objects.filter(
+                company=self.company,
+                key__in=[
+                    AccountMapping.Key.PAYROLL_SALARIES_EXPENSE,
+                    AccountMapping.Key.PAYROLL_PAYABLE,
+                ],
+            )
+        }
+        self.assertEqual(
+            mapping_keys,
+            {
+                AccountMapping.Key.PAYROLL_SALARIES_EXPENSE,
+                AccountMapping.Key.PAYROLL_PAYABLE,
+            },
+        )
     def test_lock_creates_payroll_journal_entry(self):
         self._auth(self.hr_user)
         period = PayrollPeriod.objects.create(
