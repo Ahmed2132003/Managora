@@ -123,19 +123,20 @@ def generate_period(company, year=None, month=None, actor=None, period=None):
                 employee=employee,
                 date__range=(start_date, end_date),
             )
-            period_days = Decimal((end_date - start_date).days + 1)
             present_days = Decimal(
                 attendance_qs.exclude(status=AttendanceRecord.Status.ABSENT).count()
             )
-            absent_days = max(period_days - present_days, Decimal("0"))
-
+            absent_days = Decimal(
+                attendance_qs.filter(status=AttendanceRecord.Status.ABSENT).count()
+            )
+            
             earnings_total = Decimal("0")
             deductions_total = Decimal("0")
             lines = []
 
-            attendance_based_salary = (
-                salary_structure.salary_type != SalaryStructure.SalaryType.COMMISSION
-                and daily_rate is not None
+            attendance_based_salary = salary_structure.salary_type in (
+                SalaryStructure.SalaryType.DAILY,
+                SalaryStructure.SalaryType.WEEKLY,                
             )
             basic_salary_amount = basic_salary
             if attendance_based_salary and daily_rate is not None:
