@@ -526,6 +526,14 @@ export function PayrollPeriodDetailsPage() {
     runsQuery,
   ]);
 
+  const shellCopy = useMemo(
+    () => ({
+      en: { title: contentMap.en.title, subtitle: contentMap.en.subtitle },
+      ar: { title: contentMap.ar.title, subtitle: contentMap.ar.subtitle },
+    }),
+    []
+  );
+
   if (
     isForbiddenError(runsQuery.error) ||
     isForbiddenError(runDetailsQuery.error) ||
@@ -600,15 +608,7 @@ export function PayrollPeriodDetailsPage() {
     }
   }
 
-  const shellCopy = useMemo(
-    () => ({
-      en: { title: contentMap.en.title, subtitle: contentMap.en.subtitle },
-      ar: { title: contentMap.ar.title, subtitle: contentMap.ar.subtitle },
-    }),
-    []
-  );
-
-  return (
+  return (    
     <DashboardShell copy={shellCopy} className="payroll-period-details-page">
       {({ language, isArabic }) => {
         const content = contentMap[language];
