@@ -174,7 +174,7 @@ export function PayrollPeriodDetailsPage() {
     const metaRate = basicLine?.meta?.rate;
     const dailyRate = metaRate
       ? parseAmount(metaRate)
-      : resolveDailyRateByPeriod(runDetailsQuery.data.period.period_type, basicAmount);
+      : resolveDailyRateByPeriod(runDetailsQuery.data.period.period_type, basicAmount);      
     const bonuses = lines
       .filter(
         (line) =>
@@ -208,7 +208,7 @@ export function PayrollPeriodDetailsPage() {
       commissions,
       deductions,
       advances,
-      dailyRate,
+      dailyRate: dailyRate ?? 0,      
     };
   }, [attendanceQuery.data, runDetailsQuery.data, runPeriodRange]);
 
@@ -240,7 +240,7 @@ export function PayrollPeriodDetailsPage() {
     }
     return runDetailsQuery.data?.net_total;
   }, [runDetailsQuery.data?.net_total, runSummary]);
-  
+
   useEffect(() => {
     let cancelled = false;
 
