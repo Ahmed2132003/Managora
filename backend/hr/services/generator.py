@@ -76,7 +76,10 @@ def generate_period(company, year=None, month=None, actor=None, period=None):
     start_date = period.start_date
     end_date = period.end_date
     if not start_date or not end_date:
-        start_date, end_date = _month_date_range(year, month)
+        if period.period_type == PayrollPeriod.PeriodType.MONTHLY and year and month:
+            start_date, end_date = _month_date_range(year, month)
+        else:
+            raise ValidationError("Payroll period start and end dates are required.")        
     employees = Employee.objects.filter(
         company=company, status=Employee.Status.ACTIVE
     ).select_related("salary_structure")

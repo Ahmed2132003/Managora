@@ -584,7 +584,8 @@ class PayrollPeriod(BaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["company", "period_type", "start_date", "end_date"],
-                name="unique_payroll_period_per_company_range",                
+                condition=Q(is_deleted=False),
+                name="unique_payroll_period_per_company_range",                             
             ),
         ]
 
