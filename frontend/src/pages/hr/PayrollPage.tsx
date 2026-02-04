@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Modal } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -584,18 +584,20 @@ export function PayrollPage() {
     selectedPeriod,
   ]);
 
-  useEffect(() => {
-    if (adjustmentType === "advance" || editingComponentId) return;
-    if (selectedPeriod?.id) {
-      setAdjustmentPeriodId(selectedPeriod.id);
-      return;
+  const resolvedAdjustmentPeriodId = useMemo(() => {
+    if (adjustmentType === "advance" || editingComponentId) {
+      return adjustmentPeriodId;
     }
     if (
       adjustmentPeriodId &&
-      !availableAdjustmentPeriods.some((period) => period.id === adjustmentPeriodId)
+      availableAdjustmentPeriods.some((period) => period.id === adjustmentPeriodId)
     ) {
-      setAdjustmentPeriodId(null);
+      return adjustmentPeriodId;
     }
+    if (selectedPeriod?.id) {
+      return selectedPeriod.id;
+    }
+    return availableAdjustmentPeriods[0]?.id ?? null;
   }, [
     adjustmentPeriodId,
     adjustmentType,
@@ -819,7 +821,7 @@ export function PayrollPage() {
       return;
     }
 
-    if (!adjustmentPeriodId) {
+    if (!resolvedAdjustmentPeriodId) {      
       notifications.show({
         title: "Missing info",
         message: "يرجى اختيار فترة الرواتب.",
@@ -836,7 +838,7 @@ export function PayrollPage() {
           id: editingComponentId,
           payload: {
             salary_structure: selectedSalaryStructure.id,
-            payroll_period: adjustmentPeriodId,
+            payroll_period: resolvedAdjustmentPeriodId,            
             name: adjustmentLabel,
             type: adjustmentType === "bonus" ? "earning" : "deduction",
             amount: adjustmentAmount,
@@ -846,7 +848,7 @@ export function PayrollPage() {
       } else {
         await createSalaryComponentMutation.mutateAsync({
           salary_structure: selectedSalaryStructure.id,
-          payroll_period: adjustmentPeriodId,
+          payroll_period: resolvedAdjustmentPeriodId,          
           name: adjustmentLabel,
           type: adjustmentType === "bonus" ? "earning" : "deduction",
           amount: adjustmentAmount,
@@ -948,7 +950,7 @@ export function PayrollPage() {
 
   return (
     <DashboardShell copy={shellCopy} className="payroll-page">
-      {({ language, isArabic }) => {
+      {({ language }) => {        
         const content = contentMap[language];
         const months = monthOptions[language];
         const salaryTypeOptions = salaryTypeOptionsByLanguage[language];
@@ -989,6 +991,36 @@ export function PayrollPage() {
                   }}
                 >
                   {content.adjustments.editAction}
+                </button>
+              </td>
+            </tr>
+          );
+        });
+        const employeeRows = (employeesQuery.data ?? []).map((employee) => {
+          const structure = salaryStructuresByEmployee.get(employee.id) ?? null;
+          const salaryTypeLabel = structure
+            ? salaryTypeOptions.find((option) => option.value === structure.salary_type)?.label ??
+              structure.salary_type
+            : "—";
+          const dailyRateValue = structure
+            ? resolveDailyRate(structure.salary_type, Number(structure.basic_salary))
+            : null;
+          const dailyRateLabel = dailyRateValue === null ? "—" : dailyRateValue.toFixed(2);
+          return (
+            <tr key={employee.id}>
+              <td>{employee.employee_code}</td>
+              <td>{employee.full_name}</td>
+              <td>{salaryTypeLabel}</td>
+              <td>{structure ? Number(structure.basic_salary).toFixed(2) : "—"}</td>
+              <td>{structure?.currency ?? "—"}</td>
+              <td>{dailyRateLabel}</td>
+              <td>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => openSalaryModal(employee.id)}
+                >
+                  {structure ? content.employees.editSalary : content.employees.setSalary}
                 </button>
               </td>
             </tr>
@@ -1335,7 +1367,7 @@ export function PayrollPage() {
                       <label className="form-field">
                         <span>{content.adjustments.periodLabel}</span>
                         <select
-                          value={adjustmentPeriodId ?? ""}
+                          value={resolvedAdjustmentPeriodId ?? ""}                          
                           onChange={(event) =>
                             setAdjustmentPeriodId(
                               event.target.value ? Number(event.target.value) : null

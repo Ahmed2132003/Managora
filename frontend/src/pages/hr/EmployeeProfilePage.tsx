@@ -36,7 +36,6 @@ import {
   type SalaryType,
 } from "../../shared/hr/hooks.ts";
 import { AccessDenied } from "../../shared/ui/AccessDenied.tsx";
-import { endpoints } from "../../shared/api/endpoints.ts";
 import { DashboardShell } from "../DashboardShell.tsx";
 import "../DashboardPage.css";
 import "./EmployeeProfilePage.css";
@@ -707,6 +706,14 @@ export function EmployeeProfilePage() {
   });
 
   const userSelectDisabled = selectableUsersQuery.isLoading;
+  const selectableUserOptions = useMemo(
+    () =>
+      (selectableUsersQuery.data ?? []).map((user) => ({
+        value: String(user.id),
+        label: user.email ? `${user.username} (${user.email})` : user.username,
+      })),
+    [selectableUsersQuery.data]
+  );
 
   useEffect(() => {
     if (employeeQuery.data && !isNew) {
@@ -722,10 +729,18 @@ export function EmployeeProfilePage() {
         user_id: employeeQuery.data.user ? String(employeeQuery.data.user.id) : "",
         shift_id: employeeQuery.data.shift ? String(employeeQuery.data.shift.id) : null,
       });
-    } else if (!isNew) {
-      form.reset(employeeDefaults);
+      return;
     }
-  }, [employeeDefaults, employeeQuery.data, form, isNew]);
+    if (isNew) {
+      form.reset({
+        ...employeeDefaults,
+        manager_id: defaultsQuery.data?.manager ? String(defaultsQuery.data.manager.id) : null,
+        shift_id: defaultsQuery.data?.shift ? String(defaultsQuery.data.shift.id) : null,
+      });
+      return;
+    }
+    form.reset(employeeDefaults);
+  }, [defaultsQuery.data, employeeQuery.data, form, isNew]);
 
   useEffect(() => {
     if (!salaryStructure) {
@@ -738,7 +753,7 @@ export function EmployeeProfilePage() {
       basic_salary: Number(salaryStructure.basic_salary),
       currency: salaryStructure.currency ?? "",
     });
-  }, [salaryDefaults, salaryForm, salaryStructure]);
+  }, [salaryForm, salaryStructure]);
 
   const showAccessDenied =
     isForbiddenError(employeeQuery.error) ||
@@ -749,7 +764,10 @@ export function EmployeeProfilePage() {
 
   async function handleCreateJobTitle(values: JobTitleFormValues) {
     try {
-      const created = await createJobTitleMutation.mutateAsync(values);
+      const created = await createJobTitleMutation.mutateAsync({
+        ...values,
+        is_active: true,
+      });      
       notifications.show({
         title: "Job title created",
         message: "تم إنشاء المسمى الوظيفي.",
@@ -828,6 +846,94 @@ export function EmployeeProfilePage() {
     }
   }
 
+  async function handleSaveEmployee(values: EmployeeFormValues) {
+    const payload = {
+      employee_code: values.employee_code,
+      full_name: values.full_name,
+      national_id: values.national_id ? values.national_id : null,
+      hire_date: values.hire_date,
+      status: values.status,
+      department: values.department_id ? Number(values.department_id) : null,
+      job_title: values.job_title_id ? Number(values.job_title_id) : null,
+      manager: values.manager_id ? Number(values.manager_id) : null,
+      user: values.user_id ? Number(values.user_id) : null,
+      shift: values.shift_id ? Number(values.shift_id) : null,
+    };
+
+    try {
+      if (employeeId) {
+        await updateEmployeeMutation.mutateAsync({ id: employeeId, payload });
+        notifications.show({
+          title: "Employee saved",
+          message: "تم حفظ بيانات الموظف.",
+        });
+        employeeQuery.refetch();
+        return;
+      }
+      const created = await createEmployeeMutation.mutateAsync(payload);
+      notifications.show({
+        title: "Employee created",
+        message: "تم إنشاء الموظف.",
+      });
+      navigate(`/hr/employees/${created.id}`);
+    } catch (error) {
+      notifications.show({
+        title: "Save failed",
+        message: extractApiErrorMessage(error),
+        color: "red",
+      });
+    }
+  }
+
+  async function handleUploadDocument(values: DocumentFormValues) {
+    if (!employeeId) return;
+    if (!values.file) {
+      notifications.show({
+        title: "Missing file",
+        message: "يرجى اختيار ملف.",
+        color: "red",
+      });
+      return;
+    }
+    try {
+      await uploadDocumentMutation.mutateAsync({
+        employeeId,
+        doc_type: values.doc_type,
+        title: values.title,
+        file: values.file,
+      });
+      notifications.show({
+        title: "Document uploaded",
+        message: "تم رفع المستند بنجاح.",
+      });
+      documentsQuery.refetch();
+      documentForm.reset(documentDefaults);
+    } catch (error) {
+      notifications.show({
+        title: "Upload failed",
+        message: extractApiErrorMessage(error),
+        color: "red",
+      });
+    }
+  }
+
+  async function handleDeleteDocument(documentId: number) {
+    try {
+      await deleteDocumentMutation.mutateAsync(documentId);
+      notifications.show({
+        title: "Document deleted",
+        message: "تم حذف المستند.",
+      });
+      documentsQuery.refetch();
+    } catch (error) {
+      notifications.show({
+        title: "Delete failed",
+        message: extractApiErrorMessage(error),
+        color: "red",
+      });
+    }
+  }
+
   const attendanceStats = useMemo(() => {
     const records = attendanceQuery.data ?? [];
     const presentDays = records.filter((record) => record.status !== "absent").length;
@@ -876,18 +982,20 @@ export function EmployeeProfilePage() {
 
   if (employeeQuery.isLoading && !employeeQuery.data && !isNew) {
     return (
-      <DashboardShell copy={{ en: { title: pageCopy.en.title }, ar: { title: pageCopy.ar.title } }}>
-        <div className="employee-profile__loading">Loading...</div>
+      <DashboardShell
+        copy={{
+          en: { title: pageCopy.en.title, subtitle: pageCopy.en.subtitle },
+          ar: { title: pageCopy.ar.title, subtitle: pageCopy.ar.subtitle },
+        }}
+      >
+        {() => <div className="employee-profile__loading">Loading...</div>}
       </DashboardShell>
     );
   }
 
   const departmentOptions = departmentsQuery.data ?? [];
   const jobTitleOptions = jobTitlesQuery.data ?? [];
-  const shiftOptions = shiftsQuery.data ?? [];
-  const canSaveEmployee = Boolean(employeeId || isNew);
-  const employeeDefaults = defaultsQuery.data ?? {};
-  const salaryStructure = salaryStructuresQuery.data?.[0] ?? null;
+  const shiftOptions = shiftsQuery.data ?? [];  
   const salaryTypeValue = salaryForm.watch("salary_type");
   const basicSalaryValue = Number(salaryForm.watch("basic_salary") || 0);
   const dailyRateValue = resolveDailyRate(salaryTypeValue, basicSalaryValue);
@@ -1000,9 +1108,15 @@ export function EmployeeProfilePage() {
     }
   }
 
-  return (    
-    <DashboardShell copy={{ en: { title: pageCopy.en.title }, ar: { title: pageCopy.ar.title } }} className="employee-profile-page">
-      {({ language, isArabic }) => {
+  return (
+    <DashboardShell
+      copy={{
+        en: { title: pageCopy.en.title, subtitle: pageCopy.en.subtitle },
+        ar: { title: pageCopy.ar.title, subtitle: pageCopy.ar.subtitle },
+      }}
+      className="employee-profile-page"
+    >
+      {({ language }) => {        
         const content = pageCopy[language];
         const statusOptions = statusOptionsByLanguage[language];
         const salaryTypeOptions = salaryTypeOptionsByLanguage[language];
@@ -1406,7 +1520,7 @@ export function EmployeeProfilePage() {
                                 <div className="employee-profile__document-actions">
                                   <a
                                     className="ghost-button"
-                                    href={`${env.API_URL}${doc.file}`}
+                                    href={`${env.API_BASE_URL}${doc.file}`}                                    
                                     target="_blank"
                                     rel="noreferrer"
                                   >
