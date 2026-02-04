@@ -4,7 +4,15 @@ import { isForbiddenError } from "../../shared/api/errors";
 import { clearTokens } from "../../shared/auth/tokens";
 import { hasPermission } from "../../shared/auth/useCan";
 import { useMe } from "../../shared/auth/useMe";
-import { type HRAction, useHrActionsQuery, useUpdateHrActionMutation } from "../../shared/hr/hooks";
+import {
+  type HRAction,
+  type PayrollPeriod,
+  type SalaryType,
+  useHrActionsQuery,
+  usePayrollPeriods,
+  useSalaryStructures,
+  useUpdateHrActionMutation,
+} from "../../shared/hr/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import "../DashboardPage.css";
 import "./HRActionsPage.css";
@@ -17,10 +25,8 @@ type FormState = {
   action_type: HRAction["action_type"];
   value: string;
   reason: string;
-  period_start: string;
-  period_end: string;
+  payroll_period_id: string;
 };
-
 
 type Content = {
   brand: string;
@@ -59,8 +65,8 @@ type Content = {
     actionType: string;
     value: string;
     reason: string;
-    periodStart: string;
-    periodEnd: string;
+    payrollPeriod: string;
+    noPeriods: string;    
     cancel: string;
     save: string;
   };
@@ -144,8 +150,8 @@ const contentMap: Record<Language, Content> = {
       actionType: "Action type",
       value: "Value",
       reason: "Reason",
-      periodStart: "Period start",
-      periodEnd: "Period end",
+      payrollPeriod: "Payroll period",
+      noPeriods: "No payroll periods available",      
       cancel: "Cancel",
       save: "Save changes",
     },    
@@ -230,8 +236,8 @@ const contentMap: Record<Language, Content> = {
       actionType: "نوع الإجراء",
       value: "القيمة",
       reason: "السبب",
-      periodStart: "بداية الفترة",
-      periodEnd: "نهاية الفترة",
+      payrollPeriod: "فترة الراتب",
+      noPeriods: "لا توجد فترات رواتب متاحة",      
       cancel: "إلغاء",
       save: "حفظ التعديلات",
     },    
@@ -290,8 +296,14 @@ const defaultFormState: FormState = {
   action_type: "warning",
   value: "",
   reason: "",
-  period_start: "",
-  period_end: "",
+  payroll_period_id: "",
+};
+
+const salaryPeriodMap: Record<SalaryType, PayrollPeriod["period_type"] | null> = {
+  monthly: "monthly",
+  weekly: "weekly",
+  daily: "daily",
+  commission: "monthly",
 };
 
 function formatValue(value: string) {
@@ -304,11 +316,16 @@ export function HRActionsPage() {
   const location = useLocation();
   const { data: meData, isLoading: isProfileLoading, isError } = useMe();
   const actionsQuery = useHrActionsQuery();
+  const payrollPeriodsQuery = usePayrollPeriods();
   const updateActionMutation = useUpdateHrActionMutation();
   const [searchTerm, setSearchTerm] = useState("");
   const [editingAction, setEditingAction] = useState<HRAction | null>(null);
   const [formState, setFormState] = useState<FormState>(defaultFormState);
   const [errorMessage, setErrorMessage] = useState("");    
+  const salaryStructuresQuery = useSalaryStructures({
+    employeeId: editingAction?.employee.id ?? null,
+    enabled: Boolean(editingAction),
+  });  
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
       typeof window !== "undefined"
@@ -344,6 +361,23 @@ export function HRActionsPage() {
   }, [theme]);
 
   const actions = useMemo(() => actionsQuery.data ?? [], [actionsQuery.data]);
+  const payrollPeriods = useMemo(
+    () => payrollPeriodsQuery.data ?? [],
+    [payrollPeriodsQuery.data]
+  );
+  const salaryType = useMemo(() => {
+    if (!salaryStructuresQuery.data || salaryStructuresQuery.data.length === 0) {
+      return null;
+    }
+    return salaryStructuresQuery.data[0].salary_type;
+  }, [salaryStructuresQuery.data]);
+  const payrollPeriodType = salaryType ? salaryPeriodMap[salaryType] : null;
+  const filteredPayrollPeriods = useMemo(() => {
+    if (!payrollPeriodType) {
+      return payrollPeriods;
+    }
+    return payrollPeriods.filter((period) => period.period_type === payrollPeriodType);
+  }, [payrollPeriodType, payrollPeriods]);  
   const filteredActions = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) {
@@ -376,8 +410,7 @@ export function HRActionsPage() {
       action_type: action.action_type,
       value: action.value ?? "",
       reason: action.reason ?? "",
-      period_start: action.period_start ?? "",
-      period_end: action.period_end ?? "",
+      payroll_period_id: "",
     });
     setErrorMessage("");
   }
@@ -387,10 +420,46 @@ export function HRActionsPage() {
     setErrorMessage("");
     setFormState(defaultFormState);
   }
+
+  useEffect(() => {
+    if (!editingAction) {
+      return;
+    }
+    if (filteredPayrollPeriods.length === 0) {
+      setFormState((prev) => ({
+        ...prev,
+        payroll_period_id: "",
+      }));
+      return;
+    }
+    setFormState((prev) => {
+      const existing =
+        prev.payroll_period_id &&
+        filteredPayrollPeriods.some(
+          (period) => String(period.id) === prev.payroll_period_id
+        );
+      if (existing) {
+        return prev;
+      }
+      const matched = filteredPayrollPeriods.find(
+        (period) =>
+          period.start_date === editingAction.period_start &&
+          period.end_date === editingAction.period_end
+      );
+      return {
+        ...prev,
+        payroll_period_id: String(matched?.id ?? filteredPayrollPeriods[0].id),
+      };
+    });
+  }, [editingAction, filteredPayrollPeriods]);
   
   async function handleSubmitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingAction) return;
+    const selectedPeriod =
+      filteredPayrollPeriods.find(
+        (period) => String(period.id) === formState.payroll_period_id
+      ) ?? null;
     try {
       await updateActionMutation.mutateAsync({
         id: editingAction.id,
@@ -398,12 +467,12 @@ export function HRActionsPage() {
           action_type: formState.action_type,
           value: formState.value,
           reason: formState.reason,
-          period_start: formState.period_start || null,
-          period_end: formState.period_end || null,
+          period_start: selectedPeriod?.start_date ?? null,
+          period_end: selectedPeriod?.end_date ?? null,
         },
       });
       await actionsQuery.refetch();
-      handleCloseEdit();
+      handleCloseEdit();      
     } catch (error) {
       setErrorMessage(String(error));
     }
@@ -850,29 +919,29 @@ export function HRActionsPage() {
                   }
                 />
               </label>
-              <div className="hr-actions-form__row">
-                <label className="form-field">
-                  {content.modal.periodStart}
-                  <input
-                    type="date"
-                    value={formState.period_start}
-                    onChange={(event) =>
-                      setFormState((prev) => ({ ...prev, period_start: event.target.value }))
-                    }
-                  />
-                </label>
-                <label className="form-field">
-                  {content.modal.periodEnd}
-                  <input
-                    type="date"
-                    value={formState.period_end}
-                    onChange={(event) =>
-                      setFormState((prev) => ({ ...prev, period_end: event.target.value }))
-                    }
-                  />
-                </label>
-              </div>
-              {errorMessage && <p className="form-error">{errorMessage}</p>}
+              <label className="form-field">
+                {content.modal.payrollPeriod}
+                <select
+                  value={formState.payroll_period_id}
+                  onChange={(event) =>
+                    setFormState((prev) => ({
+                      ...prev,
+                      payroll_period_id: event.target.value,
+                    }))
+                  }
+                  disabled={payrollPeriodsQuery.isLoading}
+                >
+                  {filteredPayrollPeriods.length === 0 && (
+                    <option value="">{content.modal.noPeriods}</option>
+                  )}
+                  {filteredPayrollPeriods.map((period) => (
+                    <option key={period.id} value={String(period.id)}>
+                      {period.start_date} → {period.end_date}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {errorMessage && <p className="form-error">{errorMessage}</p>}              
               <div className="hr-actions-form__actions">
                 <button type="button" className="ghost-button" onClick={handleCloseEdit}>
                   {content.modal.cancel}

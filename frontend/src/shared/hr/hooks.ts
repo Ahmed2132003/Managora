@@ -544,13 +544,14 @@ export function useEmployeeDocuments(employeeId: number | null) {
   });
 }
 
-export function useSalaryStructures(params?: { employeeId?: number | null }) {
+export function useSalaryStructures(params?: { employeeId?: number | null; enabled?: boolean }) {
   return useQuery({
     queryKey: ["hr", "salary-structures", params],
+    enabled: params?.enabled ?? true,
     queryFn: async () => {
       const response = await http.get<
         SalaryStructure[] | { results: SalaryStructure[] }
-      >(endpoints.hr.salaryStructures, {
+      >(endpoints.hr.salaryStructures, {        
         params: {
           employee: params?.employeeId ?? undefined,
         },
