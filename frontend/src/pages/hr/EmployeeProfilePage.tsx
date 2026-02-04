@@ -976,26 +976,9 @@ export function EmployeeProfilePage() {
     salaryComponentsQuery.data,
   ]);
 
-  if (showAccessDenied) {
-    return <AccessDenied />;
-  }
-
-  if (employeeQuery.isLoading && !employeeQuery.data && !isNew) {
-    return (
-      <DashboardShell
-        copy={{
-          en: { title: pageCopy.en.title, subtitle: pageCopy.en.subtitle },
-          ar: { title: pageCopy.ar.title, subtitle: pageCopy.ar.subtitle },
-        }}
-      >
-        {() => <div className="employee-profile__loading">Loading...</div>}
-      </DashboardShell>
-    );
-  }
-
   const departmentOptions = departmentsQuery.data ?? [];
   const jobTitleOptions = jobTitlesQuery.data ?? [];
-  const shiftOptions = shiftsQuery.data ?? [];  
+  const shiftOptions = shiftsQuery.data ?? [];
   const salaryTypeValue = useWatch({
     control: salaryForm.control,
     name: "salary_type",
@@ -1005,7 +988,7 @@ export function EmployeeProfilePage() {
       control: salaryForm.control,
       name: "basic_salary",
     }) || 0
-  );  
+  );
   const dailyRateValue = resolveDailyRate(salaryTypeValue, basicSalaryValue);
   const dailyRateLabel = dailyRateValue === null ? "—" : dailyRateValue.toFixed(2);
   const bonusTotal = adjustmentTotals.bonuses;
@@ -1020,6 +1003,23 @@ export function EmployeeProfilePage() {
       : attendanceEarnings + bonusTotal;
   const netPay = baseEarnings - (deductionTotal + advanceTotal);
   const netPayLabel = Number.isFinite(netPay) ? netPay.toFixed(2) : "0.00";
+
+  if (showAccessDenied) {
+    return <AccessDenied />;
+  }
+  
+  if (employeeQuery.isLoading && !employeeQuery.data && !isNew) {
+    return (
+      <DashboardShell
+        copy={{
+          en: { title: pageCopy.en.title, subtitle: pageCopy.en.subtitle },
+          ar: { title: pageCopy.ar.title, subtitle: pageCopy.ar.subtitle },
+        }}
+      >
+        {() => <div className="employee-profile__loading">Loading...</div>}
+      </DashboardShell>
+    );
+  }
 
   async function handleAddAdjustment() {
     if (!employeeId) {
