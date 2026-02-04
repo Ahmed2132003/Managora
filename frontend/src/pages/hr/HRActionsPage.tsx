@@ -4,7 +4,7 @@ import { isForbiddenError } from "../../shared/api/errors";
 import { clearTokens } from "../../shared/auth/tokens";
 import { hasPermission } from "../../shared/auth/useCan";
 import { useMe } from "../../shared/auth/useMe";
-import { HRAction, useHrActionsQuery, useUpdateHrActionMutation } from "../../shared/hr/hooks";
+import { type HRAction, useHrActionsQuery, useUpdateHrActionMutation } from "../../shared/hr/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import "../DashboardPage.css";
 import "./HRActionsPage.css";
@@ -12,6 +12,15 @@ import "./HRActionsPage.css";
 type Language = "en" | "ar";
 
 type ThemeMode = "light" | "dark";
+
+type FormState = {
+  action_type: HRAction["action_type"];
+  value: string;
+  reason: string;
+  period_start: string;
+  period_end: string;
+};
+
 
 type Content = {
   brand: string;
@@ -277,6 +286,14 @@ const actionToneMap: Record<string, string> = {
   deduction: "danger",
 };
 
+const defaultFormState: FormState = {
+  action_type: "warning",
+  value: "",
+  reason: "",
+  period_start: "",
+  period_end: "",
+};
+
 function formatValue(value: string) {
   const num = Number(value);
   return Number.isNaN(num) ? value : num.toFixed(2);
@@ -290,14 +307,8 @@ export function HRActionsPage() {
   const updateActionMutation = useUpdateHrActionMutation();
   const [searchTerm, setSearchTerm] = useState("");
   const [editingAction, setEditingAction] = useState<HRAction | null>(null);
-  const [formState, setFormState] = useState({
-    action_type: "warning" as HRAction["action_type"],
-    value: "",
-    reason: "",
-    period_start: "",
-    period_end: "",
-  });
-  const [errorMessage, setErrorMessage] = useState("");  
+  const [formState, setFormState] = useState<FormState>(defaultFormState);
+  const [errorMessage, setErrorMessage] = useState("");    
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
       typeof window !== "undefined"
@@ -314,7 +325,7 @@ export function HRActionsPage() {
   });
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
-  const userPermissions = meData?.permissions ?? [];
+  const userPermissions = useMemo(() => meData?.permissions ?? [], [meData?.permissions]);  
   const userName =
     meData?.user.first_name || meData?.user.username || content.userFallback;
 
@@ -332,8 +343,7 @@ export function HRActionsPage() {
     window.localStorage.setItem("managora-theme", theme);
   }, [theme]);
 
-  const actions = actionsQuery.data ?? [];
-
+  const actions = useMemo(() => actionsQuery.data ?? [], [actionsQuery.data]);
   const filteredActions = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) {
@@ -360,36 +370,24 @@ export function HRActionsPage() {
     };
   }, [actions]);
 
-  useEffect(() => {
-    if (!editingAction) {
-      setFormState({
-        action_type: "warning",
-        value: "",
-        reason: "",
-        period_start: "",
-        period_end: "",
-      });
-      return;
-    }
-    setFormState({
-      action_type: editingAction.action_type,
-      value: editingAction.value ?? "",
-      reason: editingAction.reason ?? "",
-      period_start: editingAction.period_start ?? "",
-      period_end: editingAction.period_end ?? "",
-    });
-    setErrorMessage("");
-  }, [editingAction]);
-
   function handleOpenEdit(action: HRAction) {
     setEditingAction(action);
+    setFormState({
+      action_type: action.action_type,
+      value: action.value ?? "",
+      reason: action.reason ?? "",
+      period_start: action.period_start ?? "",
+      period_end: action.period_end ?? "",
+    });
+    setErrorMessage("");
   }
 
   function handleCloseEdit() {
     setEditingAction(null);
     setErrorMessage("");
+    setFormState(defaultFormState);
   }
-
+  
   async function handleSubmitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingAction) return;
