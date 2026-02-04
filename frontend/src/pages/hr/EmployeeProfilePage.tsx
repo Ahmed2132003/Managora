@@ -561,7 +561,7 @@ export function EmployeeProfilePage() {
   );
   const [adjustmentName, setAdjustmentName] = useState("");
   const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
-  const [adjustmentRecurring, setAdjustmentRecurring] = useState(true);
+  const [adjustmentRecurring, setAdjustmentRecurring] = useState(false);  
   const [advanceAmount, setAdvanceAmount] = useState<number>(0);
   const [advanceInstallment, setAdvanceInstallment] = useState<number>(0);
   const [advanceStartDate, setAdvanceStartDate] = useState(() => {
@@ -980,7 +980,7 @@ export function EmployeeProfilePage() {
     loanAdvancesQuery.data,
     salaryComponentsQuery.data,
   ]);
-  
+
   if (showAccessDenied) {
     return <AccessDenied />;
   }
