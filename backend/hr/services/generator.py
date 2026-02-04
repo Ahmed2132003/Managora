@@ -9,7 +9,9 @@ from rest_framework.exceptions import ValidationError
 
 from hr.models import (
     AttendanceRecord,
+    CommissionRequest,
     Employee,
+    HRAction,
     LeaveRequest,
     LoanAdvance,
     PayrollLine,
@@ -17,7 +19,6 @@ from hr.models import (
     PayrollRun,
     SalaryComponent,
     SalaryStructure,
-    CommissionRequest,
 )
 
 WORKING_DAYS_PER_MONTH = Decimal("30")
@@ -293,7 +294,40 @@ def generate_period(company, year=None, month=None, actor=None, period=None):
                         )
                     )
                     earnings_total += commission.amount
-                    
+
+            policy_deductions = HRAction.objects.filter(
+                company=company,
+                employee=employee,
+                action_type=HRAction.ActionType.DEDUCTION,
+            ).filter(
+                Q(attendance_record__date__range=(start_date, end_date))
+                | Q(period_end__range=(start_date, end_date))
+                | Q(
+                    attendance_record__isnull=True,
+                    period_end__isnull=True,
+                    created_at__date__range=(start_date, end_date),
+                )
+            )
+            for action in policy_deductions:
+                if action.value <= 0:
+                    continue
+                lines.append(
+                    PayrollLine(
+                        company=company,
+                        payroll_run=None,
+                        code=f"POLICY-{action.id}",
+                        name=f"Policy deduction: {action.rule.name}",
+                        type=PayrollLine.LineType.DEDUCTION,
+                        amount=_quantize_amount(action.value),
+                        meta={
+                            "rule_id": action.rule_id,
+                            "action_id": action.id,
+                            "reason": action.reason,
+                        },
+                    )
+                )
+                deductions_total += action.value
+                                    
             loans = LoanAdvance.objects.filter(
                 company=company,
                 employee=employee,
