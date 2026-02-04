@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Modal } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -14,6 +14,7 @@ import {
   useUpdateSalaryStructure,
   useSalaryComponentsQuery,
   useCreateSalaryComponent,
+  useUpdateSalaryComponent,
   useLoanAdvancesQuery,
   useCreateLoanAdvance,
   useAttendanceRecordsQuery,
@@ -92,16 +93,31 @@ type PageContent = {
     typeLabel: string;
     nameLabel: string;
     amountLabel: string;
-    recurringLabel: string;
+    periodLabel: string;
     startDateLabel: string;
     installmentLabel: string;
     addAction: string;
+    saveAction: string;
+    cancelEdit: string;
     bonusType: string;
     deductionType: string;
     advanceType: string;
     namePlaceholder: string;
     amountPlaceholder: string;
+    periodPlaceholder: string;
     missingSalaryStructure: string;
+    missingPeriod: string;
+    listTitle: string;
+    listEmpty: string;
+    columns: {
+      name: string;
+      type: string;
+      amount: string;
+      period: string;
+      createdAt: string;
+      actions: string;
+    };
+    editAction: string;
   };
   modal: {
     title: string;
@@ -175,21 +191,36 @@ const contentMap: Record<Language, PageContent> = {
       noEmployee: "Select an employee to view their summary.",
     },
     adjustments: {
-      title: "Add payroll adjustment",
-      subtitle: "Add a bonus, deduction, or advance for the selected employee.",
+      title: "Bonus & deduction management",
+      subtitle: "Review and manage bonuses, deductions, and advances for the selected employee.",
       typeLabel: "Adjustment type",
       nameLabel: "Label",
       amountLabel: "Amount",
-      recurringLabel: "Recurring",
+      periodLabel: "Payroll period",
       startDateLabel: "Start date",
       installmentLabel: "Installment amount",
       addAction: "Add adjustment",
+      saveAction: "Save changes",
+      cancelEdit: "Cancel edit",
       bonusType: "Bonus",
       deductionType: "Deduction",
       advanceType: "Advance",
       namePlaceholder: "e.g. Sales bonus",
       amountPlaceholder: "Enter amount",
+      periodPlaceholder: "Select a payroll period",
       missingSalaryStructure: "Save payroll data first to add bonuses or deductions.",
+      missingPeriod: "Please select a payroll period.",
+      listTitle: "Recorded bonuses & deductions",
+      listEmpty: "No bonuses or deductions yet.",
+      columns: {
+        name: "Label",
+        type: "Type",
+        amount: "Amount",
+        period: "Period",
+        createdAt: "Created",
+        actions: "Actions",
+      },
+      editAction: "Edit",
     },
     modal: {
       title: "Payroll details",
@@ -261,21 +292,36 @@ const contentMap: Record<Language, PageContent> = {
       noEmployee: "اختر موظفاً لعرض الملخص.",
     },
     adjustments: {
-      title: "إضافة تعديل على الراتب",
-      subtitle: "إضافة مكافأة أو خصم أو سلفة للموظف المختار.",
+      title: "إدارة الخصومات والمكافآت",
+      subtitle: "متابعة وإدارة المكافآت والخصومات والسلف للموظف المختار.",
       typeLabel: "نوع التعديل",
       nameLabel: "الوصف",
       amountLabel: "القيمة",
-      recurringLabel: "متكرر",
+      periodLabel: "فترة الرواتب",
       startDateLabel: "تاريخ البداية",
       installmentLabel: "قيمة القسط",
       addAction: "إضافة التعديل",
+      saveAction: "حفظ التعديلات",
+      cancelEdit: "إلغاء التعديل",
       bonusType: "مكافأة",
       deductionType: "خصم",
       advanceType: "سلفة",
       namePlaceholder: "مثال: مكافأة مبيعات",
       amountPlaceholder: "أدخل المبلغ",
+      periodPlaceholder: "اختر فترة الرواتب",
       missingSalaryStructure: "احفظ بيانات الرواتب أولاً لإضافة المكافآت أو الخصومات.",
+      missingPeriod: "يرجى اختيار فترة الرواتب.",
+      listTitle: "المكافآت والخصومات المسجلة",
+      listEmpty: "لا توجد مكافآت أو خصومات بعد.",
+      columns: {
+        name: "الوصف",
+        type: "النوع",
+        amount: "القيمة",
+        period: "الفترة",
+        createdAt: "التاريخ",
+        actions: "الإجراءات",
+      },
+      editAction: "تعديل",
     },
     modal: {
       title: "تفاصيل الراتب",
@@ -364,11 +410,21 @@ function resolveDailyRate(type: SalaryType, basicSalary: number): number | null 
   return basicSalary / 30;
 }
 
+function resolvePeriodTypeFromSalary(type: SalaryType): PayrollPeriod["period_type"] {
+  if (type === "daily") return "daily";
+  if (type === "weekly") return "weekly";
+  return "monthly";
+}
+
 function isComponentInRange(
-  component: { is_recurring: boolean; created_at?: string },
+  component: { is_recurring: boolean; created_at?: string; payroll_period?: number | null },
+  periodId: number | null,
   dateFrom: string,
   dateTo: string
 ) {
+  if (component.payroll_period) {
+    return periodId === component.payroll_period;
+  }
   if (component.is_recurring) return true;
   if (!component.created_at) return false;
   const created = new Date(component.created_at);
@@ -403,7 +459,8 @@ export function PayrollPage() {
   );
   const [adjustmentName, setAdjustmentName] = useState("");
   const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
-  const [adjustmentRecurring, setAdjustmentRecurring] = useState(true);
+  const [adjustmentPeriodId, setAdjustmentPeriodId] = useState<number | null>(null);
+  const [editingComponentId, setEditingComponentId] = useState<number | null>(null);
   const [advanceAmount, setAdvanceAmount] = useState<number>(0);
   const [advanceInstallment, setAdvanceInstallment] = useState<number>(0);
   const [advanceStartDate, setAdvanceStartDate] = useState(() => {
@@ -418,6 +475,7 @@ export function PayrollPage() {
   const createSalaryStructureMutation = useCreateSalaryStructure();
   const updateSalaryStructureMutation = useUpdateSalaryStructure();
   const createSalaryComponentMutation = useCreateSalaryComponent();
+  const updateSalaryComponentMutation = useUpdateSalaryComponent();
   const createLoanAdvanceMutation = useCreateLoanAdvance();
 
   const periods = useMemo(() => periodsQuery.data ?? [], [periodsQuery.data]);
@@ -488,6 +546,12 @@ export function PayrollPage() {
     ? salaryStructuresByEmployee.get(selectedEmployeeId) ?? null
     : null;
 
+  const availableAdjustmentPeriods = useMemo(() => {
+    if (!selectedSalaryStructure) return periods;
+    const periodType = resolvePeriodTypeFromSalary(selectedSalaryStructure.salary_type);
+    return periods.filter((period) => period.period_type === periodType);
+  }, [periods, selectedSalaryStructure]);
+
   const now = new Date();
   const fallbackMonth = month ? Number(month) : now.getMonth() + 1;
   const fallbackYear = year ? Number(year) : now.getFullYear();
@@ -518,6 +582,26 @@ export function PayrollPage() {
     periodStartDate,
     periodType,
     selectedPeriod,
+  ]);
+
+  useEffect(() => {
+    if (adjustmentType === "advance" || editingComponentId) return;
+    if (selectedPeriod?.id) {
+      setAdjustmentPeriodId(selectedPeriod.id);
+      return;
+    }
+    if (
+      adjustmentPeriodId &&
+      !availableAdjustmentPeriods.some((period) => period.id === adjustmentPeriodId)
+    ) {
+      setAdjustmentPeriodId(null);
+    }
+  }, [
+    adjustmentPeriodId,
+    adjustmentType,
+    availableAdjustmentPeriods,
+    editingComponentId,
+    selectedPeriod?.id,
   ]);
 
   const attendanceQuery = useAttendanceRecordsQuery(
@@ -582,14 +666,18 @@ export function PayrollPage() {
       });
       notifications.show({
         title: "Period created",
-        message: `تم إنشاء فترة ${formatPeriodLabel(created)}.`,
+        message: "تم إنشاء فترة الرواتب.",
       });
-      setSelectedPeriodId(created.id);
       periodsQuery.refetch();
+      setSelectedPeriodId(created.id);
+      setMonth(String(created.month));
+      setYear(String(created.year));
+      setPeriodStartDate(created.start_date);
+      setPeriodEndDate(created.end_date);
     } catch {
       notifications.show({
-        title: "Failed to create period",
-        message: "حدث خطأ أثناء إنشاء الفترة.",        
+        title: "Create failed",
+        message: "تعذر إنشاء الفترة.",
         color: "red",
       });
     }
@@ -598,7 +686,7 @@ export function PayrollPage() {
   async function handleGeneratePeriod() {
     if (!selectedPeriod) {
       notifications.show({
-        title: "Select period",
+        title: "Missing period",
         message: "اختر فترة موجودة أولاً.",
         color: "red",
       });
@@ -731,26 +819,53 @@ export function PayrollPage() {
       return;
     }
 
-    const adjustmentLabel = adjustmentName.trim() || (adjustmentType === "bonus" ? "Bonus" : "Deduction");
-    try {
-      await createSalaryComponentMutation.mutateAsync({
-        salary_structure: selectedSalaryStructure.id,
-        name: adjustmentLabel,
-        type: adjustmentType === "bonus" ? "earning" : "deduction",
-        amount: adjustmentAmount,
-        is_recurring: adjustmentRecurring,
-      });
+    if (!adjustmentPeriodId) {
       notifications.show({
-        title: "Adjustment added",
-        message: "تمت إضافة التعديل بنجاح.",
+        title: "Missing info",
+        message: "يرجى اختيار فترة الرواتب.",
+        color: "red",
+      });
+      return;
+    }
+
+    const adjustmentLabel =
+      adjustmentName.trim() || (adjustmentType === "bonus" ? "Bonus" : "Deduction");
+    try {
+      if (editingComponentId) {
+        await updateSalaryComponentMutation.mutateAsync({
+          id: editingComponentId,
+          payload: {
+            salary_structure: selectedSalaryStructure.id,
+            payroll_period: adjustmentPeriodId,
+            name: adjustmentLabel,
+            type: adjustmentType === "bonus" ? "earning" : "deduction",
+            amount: adjustmentAmount,
+            is_recurring: false,
+          },
+        });
+      } else {
+        await createSalaryComponentMutation.mutateAsync({
+          salary_structure: selectedSalaryStructure.id,
+          payroll_period: adjustmentPeriodId,
+          name: adjustmentLabel,
+          type: adjustmentType === "bonus" ? "earning" : "deduction",
+          amount: adjustmentAmount,
+          is_recurring: false,
+        });
+      }
+      notifications.show({
+        title: editingComponentId ? "Adjustment updated" : "Adjustment added",
+        message: editingComponentId ? "تم تحديث التعديل بنجاح." : "تمت إضافة التعديل بنجاح.",
       });
       salaryComponentsQuery.refetch();
       setAdjustmentName("");
       setAdjustmentAmount(0);
+      setAdjustmentPeriodId(null);
+      setEditingComponentId(null);
     } catch {
       notifications.show({
         title: "Failed",
-        message: "تعذر إضافة التعديل.",
+        message: editingComponentId ? "تعذر تحديث التعديل." : "تعذر إضافة التعديل.",
         color: "red",
       });
     }
@@ -763,7 +878,7 @@ export function PayrollPage() {
     const lateMinutes = records.reduce((sum, record) => sum + (record.late_minutes ?? 0), 0);
     const components = salaryComponentsQuery.data ?? [];
     const relevantComponents = components.filter((component) =>
-      isComponentInRange(component, periodRange.dateFrom, periodRange.dateTo)
+      isComponentInRange(component, selectedPeriod?.id ?? null, periodRange.dateFrom, periodRange.dateTo)
     );
     const bonuses = relevantComponents
       .filter((component) => component.type === "earning")
@@ -812,6 +927,7 @@ export function PayrollPage() {
     periodRange.dateTo,
     periodRange.days,    
     salaryComponentsQuery.data,
+    selectedPeriod?.id,
     selectedSalaryStructure,
   ]);
   const shellCopy = useMemo(
@@ -845,41 +961,35 @@ export function PayrollPage() {
             {employee.full_name}
           </option>
         ));
-        const employeeRows = (employeesQuery.data ?? []).map((employee) => {          
-          const structure = salaryStructuresByEmployee.get(employee.id);
-          const dailyRate = structure
-            ? resolveDailyRate(structure.salary_type, Number(structure.basic_salary))
-            : null;
-          const salaryTypeLabel = structure
-            ? salaryTypeOptions.find((option) => option.value === structure.salary_type)?.label ?? structure.salary_type
-            : "—";
-          const isSelected = employee.id === selectedEmployeeId;
-
+        const adjustmentPeriodOptions = availableAdjustmentPeriods.map((period) => ({
+          value: period.id,
+          label: formatPeriodLabel(period),
+        }));
+        const adjustmentRows = (salaryComponentsQuery.data ?? []).map((component) => {
+          const periodLabel = periods.find((period) => period.id === component.payroll_period);
+          const typeLabel =
+            component.type === "earning" ? content.adjustments.bonusType : content.adjustments.deductionType;
           return (
-            <tr key={employee.id}>
-              <td>{employee.employee_code}</td>
-              <td>{employee.full_name}</td>
-              <td>{salaryTypeLabel}</td>
-              <td>{structure ? Number(structure.basic_salary).toFixed(2) : "—"}</td>
-              <td>{structure?.currency ?? "—"}</td>
-              <td>{dailyRate === null ? "—" : dailyRate.toFixed(2)}</td>
+            <tr key={component.id}>
+              <td>{component.name}</td>
+              <td>{typeLabel}</td>
+              <td>{Number(component.amount).toFixed(2)}</td>
+              <td>{periodLabel ? formatPeriodLabel(periodLabel) : "—"}</td>
+              <td>{component.created_at.slice(0, 10)}</td>
               <td>
-                <div className="payroll-actions">
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => openSalaryModal(employee.id)}
-                  >
-                    {structure ? content.employees.editSalary : content.employees.setSalary}
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => setSelectedEmployeeId(employee.id)}
-                  >
-                    {isSelected ? (isArabic ? "محدد" : "Selected") : (isArabic ? "عرض" : "View")}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => {
+                    setEditingComponentId(component.id);
+                    setAdjustmentType(component.type === "earning" ? "bonus" : "deduction");
+                    setAdjustmentName(component.name);
+                    setAdjustmentAmount(Number(component.amount));
+                    setAdjustmentPeriodId(component.payroll_period ?? null);
+                  }}
+                >
+                  {content.adjustments.editAction}
+                </button>
               </td>
             </tr>
           );
@@ -1223,13 +1333,21 @@ export function PayrollPage() {
                         />
                       </label>
                       <label className="form-field">
-                        <span>{content.adjustments.recurringLabel}</span>
+                        <span>{content.adjustments.periodLabel}</span>
                         <select
-                          value={adjustmentRecurring ? "yes" : "no"}
-                          onChange={(event) => setAdjustmentRecurring(event.target.value === "yes")}
+                          value={adjustmentPeriodId ?? ""}
+                          onChange={(event) =>
+                            setAdjustmentPeriodId(
+                              event.target.value ? Number(event.target.value) : null
+                            )
+                          }
                         >
-                          <option value="yes">{isArabic ? "نعم" : "Yes"}</option>
-                          <option value="no">{isArabic ? "لا" : "No"}</option>
+                          <option value="">{content.adjustments.periodPlaceholder}</option>
+                          {adjustmentPeriodOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
                         </select>
                       </label>
                     </>
@@ -1276,12 +1394,53 @@ export function PayrollPage() {
                     disabled={
                       createSalaryComponentMutation.isPending ||
                       createLoanAdvanceMutation.isPending ||
+                      updateSalaryComponentMutation.isPending ||
                       !selectedEmployeeId
                     }
                   >
-                    {content.adjustments.addAction}
+                    {editingComponentId ? content.adjustments.saveAction : content.adjustments.addAction}
                   </button>
+                  {editingComponentId && (
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      onClick={() => {
+                        setEditingComponentId(null);
+                        setAdjustmentName("");
+                        setAdjustmentAmount(0);
+                        setAdjustmentPeriodId(null);
+                      }}
+                    >
+                      {content.adjustments.cancelEdit}
+                    </button>
+                  )}
                 </div>
+              </div>
+              <div className="payroll-table-wrapper">
+                <div className="panel__header">
+                  <div>
+                    <h3>{content.adjustments.listTitle}</h3>
+                  </div>
+                </div>
+                {salaryComponentsQuery.isLoading ? (
+                  <div className="payroll-state">Loading...</div>
+                ) : adjustmentRows.length === 0 ? (
+                  <div className="payroll-state">{content.adjustments.listEmpty}</div>
+                ) : (
+                  <table className="payroll-table">
+                    <thead>
+                      <tr>
+                        <th>{content.adjustments.columns.name}</th>
+                        <th>{content.adjustments.columns.type}</th>
+                        <th>{content.adjustments.columns.amount}</th>
+                        <th>{content.adjustments.columns.period}</th>
+                        <th>{content.adjustments.columns.createdAt}</th>
+                        <th>{content.adjustments.columns.actions}</th>
+                      </tr>
+                    </thead>
+                    <tbody>{adjustmentRows}</tbody>
+                  </table>
+                )}
               </div>
             </section>
 

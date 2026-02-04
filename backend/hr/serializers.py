@@ -849,6 +849,7 @@ class SalaryComponentSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "salary_structure",
+            "payroll_period",
             "name",
             "type",
             "amount",
@@ -856,12 +857,15 @@ class SalaryComponentSerializer(serializers.ModelSerializer):
             "created_at",
         )
         read_only_fields = ("id", "created_at")
-        
+                
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         request = self.context.get("request")
         if request and request.user.is_authenticated:
             self.fields["salary_structure"].queryset = SalaryStructure.objects.filter(
+                company=request.user.company
+            )
+            self.fields["payroll_period"].queryset = PayrollPeriod.objects.filter(
                 company=request.user.company
             )
 
@@ -870,13 +874,34 @@ class SalaryComponentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"company": "This field is not allowed."})
         request = self.context.get("request")
         company = request.user.company if request else None
-        salary_structure = attrs.get("salary_structure")
+        salary_structure = attrs.get("salary_structure") or getattr(self.instance, "salary_structure", None)
+        payroll_period = attrs.get("payroll_period") or getattr(self.instance, "payroll_period", None)
+        is_recurring = attrs.get("is_recurring")
         if salary_structure and company and salary_structure.company_id != company.id:
             raise serializers.ValidationError(
                 {"salary_structure": "Salary structure must belong to the same company."}
             )
+        if not self.instance and payroll_period is None:
+            raise serializers.ValidationError({"payroll_period": "Payroll period is required."})
+        if payroll_period and company and payroll_period.company_id != company.id:
+            raise serializers.ValidationError(
+                {"payroll_period": "Payroll period must belong to the same company."}
+            )
+        if salary_structure and payroll_period:
+            salary_type = salary_structure.salary_type
+            expected_period_type = (
+                PayrollPeriod.PeriodType.MONTHLY
+                if salary_type == SalaryStructure.SalaryType.COMMISSION
+                else salary_type
+            )
+            if payroll_period.period_type != expected_period_type:
+                raise serializers.ValidationError(
+                    {"payroll_period": "Payroll period type must match the employee salary type."}
+                )
+        if payroll_period and (is_recurring is True or (is_recurring is None and getattr(self.instance, "is_recurring", True))):
+            attrs["is_recurring"] = False
         return attrs
-
+    
     def create(self, validated_data):
         request = self.context.get("request")
         validated_data["company"] = request.user.company

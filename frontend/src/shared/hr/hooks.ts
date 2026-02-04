@@ -261,6 +261,7 @@ export type SalaryStructure = {
 export type SalaryComponent = {
   id: number;
   salary_structure: number;
+  payroll_period: number | null;
   name: string;
   type: "earning" | "deduction";
   amount: string;
@@ -628,17 +629,43 @@ export function useCreateSalaryComponent() {
   return useMutation({
     mutationFn: async (payload: {
       salary_structure: number;
+      payroll_period: number;
       name: string;
       type: "earning" | "deduction";
       amount: number;
       is_recurring?: boolean;
-    }) => {
+    }) => {      
       const response = await http.post<SalaryComponent>(
         endpoints.hr.salaryComponents,
         {
           ...payload,
           is_recurring: payload.is_recurring ?? true,
         }
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useUpdateSalaryComponent() {
+  return useMutation({
+    mutationFn: async ({
+      id,
+      payload,
+    }: {
+      id: number;
+      payload: {
+        salary_structure?: number;
+        payroll_period?: number;
+        name?: string;
+        type?: "earning" | "deduction";
+        amount?: number;
+        is_recurring?: boolean;
+      };
+    }) => {
+      const response = await http.patch<SalaryComponent>(
+        endpoints.hr.salaryComponent(id),
+        payload
       );
       return response.data;
     },

@@ -21,6 +21,7 @@ import {
   useSalaryStructures,
   useSalaryComponentsQuery,
   useCreateSalaryComponent,
+  usePayrollPeriods,
   useLoanAdvancesQuery,
   useCreateLoanAdvance,
   useCommissionApprovalsInboxQuery,
@@ -82,7 +83,7 @@ type PageContent = {
     typeLabel: string;
     nameLabel: string;
     amountLabel: string;
-    recurringLabel: string;
+    periodLabel: string;
     startDateLabel: string;
     installmentLabel: string;
     addAction: string;
@@ -91,7 +92,9 @@ type PageContent = {
     advanceType: string;
     namePlaceholder: string;
     amountPlaceholder: string;
+    periodPlaceholder: string;
     missingSalaryStructure: string;
+    missingPeriod: string;
   };
   fields: {    
     employeeCode: string;
@@ -196,7 +199,7 @@ const pageCopy: Record<Language, PageContent> = {
       typeLabel: "Adjustment type",
       nameLabel: "Label",
       amountLabel: "Amount",
-      recurringLabel: "Recurring",
+      periodLabel: "Payroll period",
       startDateLabel: "Start date",
       installmentLabel: "Installment amount",
       addAction: "Add adjustment",
@@ -205,7 +208,9 @@ const pageCopy: Record<Language, PageContent> = {
       advanceType: "Advance",
       namePlaceholder: "e.g. Performance bonus",
       amountPlaceholder: "Enter amount",
+      periodPlaceholder: "Select a payroll period",
       missingSalaryStructure: "Save payroll data first to add bonuses or deductions.",
+      missingPeriod: "Please select a payroll period.",
     },
     fields: {
       employeeCode: "Employee code",
@@ -308,7 +313,7 @@ const pageCopy: Record<Language, PageContent> = {
       typeLabel: "نوع التعديل",
       nameLabel: "الوصف",
       amountLabel: "القيمة",
-      recurringLabel: "متكرر",
+      periodLabel: "فترة الرواتب",
       startDateLabel: "تاريخ البداية",
       installmentLabel: "قيمة القسط",
       addAction: "إضافة التعديل",
@@ -317,7 +322,9 @@ const pageCopy: Record<Language, PageContent> = {
       advanceType: "سلفة",
       namePlaceholder: "مثال: مكافأة أداء",
       amountPlaceholder: "أدخل المبلغ",
+      periodPlaceholder: "اختر فترة الرواتب",
       missingSalaryStructure: "احفظ بيانات الرواتب أولاً لإضافة المكافآت أو الخصومات.",
+      missingPeriod: "يرجى اختيار فترة الرواتب.",
     },
     fields: {
       employeeCode: "كود الموظف",
@@ -513,11 +520,23 @@ function resolveDailyRate(type: SalaryType, basicSalary: number): number | null 
   return basicSalary / 30;
 }
 
+function resolvePeriodTypeFromSalary(type: SalaryType): "monthly" | "weekly" | "daily" {
+  if (type === "daily") return "daily";
+  if (type === "weekly") return "weekly";
+  return "monthly";
+}
+
 function isComponentInRange(
-  component: { is_recurring: boolean; created_at?: string },
+  component: { is_recurring: boolean; created_at?: string; payroll_period?: number | null },
+  payrollPeriodMap: Map<number, { start_date: string; end_date: string }>,
   dateFrom: string,
   dateTo: string
 ) {
+  if (component.payroll_period) {
+    const period = payrollPeriodMap.get(component.payroll_period);
+    if (!period) return false;
+    return period.start_date >= dateFrom && period.end_date <= dateTo;
+  }
   if (component.is_recurring) return true;
   if (!component.created_at) return false;
   const created = new Date(component.created_at);
@@ -561,7 +580,7 @@ export function EmployeeProfilePage() {
   );
   const [adjustmentName, setAdjustmentName] = useState("");
   const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
-  const [adjustmentRecurring, setAdjustmentRecurring] = useState(false);  
+  const [adjustmentPeriodId, setAdjustmentPeriodId] = useState<number | null>(null);
   const [advanceAmount, setAdvanceAmount] = useState<number>(0);
   const [advanceInstallment, setAdvanceInstallment] = useState<number>(0);
   const [advanceStartDate, setAdvanceStartDate] = useState(() => {
@@ -581,6 +600,7 @@ export function EmployeeProfilePage() {
     () => salaryStructuresQuery.data?.[0] ?? null,
     [salaryStructuresQuery.data]
   );
+  const payrollPeriodsQuery = usePayrollPeriods();
   const salaryComponentsQuery = useSalaryComponentsQuery({
     salaryStructureId: salaryStructure?.id ?? null,
     enabled: Boolean(salaryStructure?.id),
@@ -619,6 +639,36 @@ export function EmployeeProfilePage() {
     dateTo: attendanceRange.dateTo,
     enabled: Boolean(employeeId),
   });
+
+  const payrollPeriodMap = useMemo(
+    () =>
+      new Map(
+        (payrollPeriodsQuery.data ?? []).map((period) => [
+          period.id,
+          { start_date: period.start_date, end_date: period.end_date },
+        ])
+      ),
+    [payrollPeriodsQuery.data]
+  );
+  const availableAdjustmentPeriods = useMemo(() => {
+    if (!salaryStructure) return payrollPeriodsQuery.data ?? [];
+    const periodType = resolvePeriodTypeFromSalary(salaryStructure.salary_type);
+    return (payrollPeriodsQuery.data ?? []).filter(
+      (period) => period.period_type === periodType
+    );
+  }, [payrollPeriodsQuery.data, salaryStructure]);
+
+  useEffect(() => {
+    if (!availableAdjustmentPeriods.length) return;
+    if (adjustmentPeriodId) {
+      const exists = availableAdjustmentPeriods.some(
+        (period) => period.id === adjustmentPeriodId
+      );
+      if (!exists) setAdjustmentPeriodId(null);
+      return;
+    }
+    setAdjustmentPeriodId(availableAdjustmentPeriods[0].id);
+  }, [adjustmentPeriodId, availableAdjustmentPeriods]);
 
   const createEmployeeMutation = useCreateEmployee();
   const createJobTitleMutation = useCreateJobTitle();
@@ -669,202 +719,40 @@ export function EmployeeProfilePage() {
         department_id: employeeQuery.data.department ? String(employeeQuery.data.department.id) : null,
         job_title_id: employeeQuery.data.job_title ? String(employeeQuery.data.job_title.id) : null,
         manager_id: employeeQuery.data.manager ? String(employeeQuery.data.manager.id) : null,
-        user_id: employeeQuery.data.user ? String(employeeQuery.data.user) : "",
+        user_id: employeeQuery.data.user ? String(employeeQuery.data.user.id) : "",
         shift_id: employeeQuery.data.shift ? String(employeeQuery.data.shift.id) : null,
       });
+    } else if (!isNew) {
+      form.reset(employeeDefaults);
     }
-  }, [employeeQuery.data, form, isNew]);
+  }, [employeeDefaults, employeeQuery.data, form, isNew]);
 
   useEffect(() => {
-    if (!isNew || !defaultsQuery.data) return;
-
-    if (defaultsQuery.data.manager) {
-      form.setValue("manager_id", String(defaultsQuery.data.manager.id));
-    }
-    if (defaultsQuery.data.shift) {
-      form.setValue("shift_id", String(defaultsQuery.data.shift.id));
-    }
-  }, [defaultsQuery.data, form, isNew]);
-
-  useEffect(() => {
-    if (!employeeId) {
+    if (!salaryStructure) {
       salaryForm.reset(salaryDefaults);
       return;
     }
-    const structure = salaryStructuresQuery.data?.[0];
-    if (structure) {
-      salaryForm.reset({
-        salary_type: structure.salary_type,
-        basic_salary: Number(structure.basic_salary),
-        currency: structure.currency ?? "",
-      });
-    } else {
-      salaryForm.reset(salaryDefaults);
-    }
-  }, [employeeId, salaryForm, salaryStructuresQuery.data]);
 
-  const departmentOptions = useMemo(
-    () =>
-      (departmentsQuery.data ?? []).map((dept) => ({
-        value: String(dept.id),
-        label: dept.name,
-      })),
-    [departmentsQuery.data]
-  );
-
-  const jobTitleOptions = useMemo(
-    () =>
-      (jobTitlesQuery.data ?? []).map((job) => ({
-        value: String(job.id),
-        label: job.name,
-      })),
-    [jobTitlesQuery.data]
-  );
-
-  const shiftOptions = useMemo(
-    () =>
-      (shiftsQuery.data ?? []).map((shift) => ({
-        value: String(shift.id),
-        label: `${shift.name} (${shift.start_time} - ${shift.end_time})`,
-      })),
-    [shiftsQuery.data]
-  );
-
-  const selectableUserOptions = useMemo(
-    () =>
-      (selectableUsersQuery.data ?? []).map((user) => ({
-        value: String(user.id),
-        label: user.email ? `${user.username} (${user.email})` : `${user.username}`,
-      })),
-    [selectableUsersQuery.data]
-  );
-
-  const managerDisplayName =
-    !isNew && employeeQuery.data?.manager
-      ? employeeQuery.data.manager.full_name
-      : isNew && defaultsQuery.data?.manager
-        ? defaultsQuery.data.manager.full_name
-        : "";
+    salaryForm.reset({
+      salary_type: salaryStructure.salary_type,
+      basic_salary: Number(salaryStructure.basic_salary),
+      currency: salaryStructure.currency ?? "",
+    });
+  }, [salaryDefaults, salaryForm, salaryStructure]);
 
   const showAccessDenied =
     isForbiddenError(employeeQuery.error) ||
     isForbiddenError(departmentsQuery.error) ||
     isForbiddenError(jobTitlesQuery.error) ||
     isForbiddenError(shiftsQuery.error) ||
-    isForbiddenError(defaultsQuery.error) ||
-    isForbiddenError(selectableUsersQuery.error) ||
-    isForbiddenError(documentsQuery.error) ||
-    isForbiddenError(salaryStructuresQuery.error);
-
-  const shellCopy = useMemo(
-    () => ({
-      en: {
-        title: isNew ? "New employee" : pageCopy.en.title,
-        subtitle: pageCopy.en.subtitle,
-        helper: pageCopy.en.helper,
-      },
-      ar: {
-        title: isNew ? "موظف جديد" : pageCopy.ar.title,
-        subtitle: pageCopy.ar.subtitle,
-        helper: pageCopy.ar.helper,
-      },
-    }),
-    [isNew]
-  );
-
-  async function handleSubmit(values: EmployeeFormValues) {    
-    const payload = {
-      employee_code: values.employee_code,
-      full_name: values.full_name,
-      national_id: values.national_id || null,
-      hire_date: values.hire_date,
-      status: values.status as EmployeeStatus,
-      department: values.department_id ? Number(values.department_id) : null,
-      job_title: values.job_title_id ? Number(values.job_title_id) : null,
-      manager: values.manager_id ? Number(values.manager_id) : null,
-      user: values.user_id ? Number(values.user_id) : null,
-      shift: values.shift_id ? Number(values.shift_id) : null,
-    };
-
-    try {
-      if (isNew) {
-        const created = await createEmployeeMutation.mutateAsync(payload);
-        notifications.show({
-          title: "Employee created",
-          message: "تم إنشاء الموظف بنجاح",
-        });
-        navigate(`/hr/employees/${created.id}`);
-      } else if (employeeId) {
-        await updateEmployeeMutation.mutateAsync({ id: employeeId, payload });
-        notifications.show({
-          title: "Employee updated",
-          message: "تم تحديث بيانات الموظف",
-        });
-      }
-    } catch (error) {
-      notifications.show({
-        title: "Save failed",
-        message: extractApiErrorMessage(error),
-        color: "red",
-      });
-    }
-  }
-
-  async function handleDocumentSubmit(values: DocumentFormValues) {
-    if (!employeeId) return;
-    if (!values.file) {
-      documentForm.setError("file", { message: "الملف مطلوب" });
-      return;
-    }
-    try {
-      await uploadDocumentMutation.mutateAsync({
-        employeeId,
-        doc_type: values.doc_type,
-        title: values.title,
-        file: values.file,
-      });
-      notifications.show({
-        title: "Document uploaded",
-        message: "تم رفع المستند بنجاح",
-      });
-      documentForm.reset(documentDefaults);
-      documentsQuery.refetch();
-    } catch (error) {
-      notifications.show({
-        title: "Upload failed",
-        message: extractApiErrorMessage(error),
-        color: "red",
-      });
-    }
-  }
-
-  async function handleDeleteDocument(documentId: number) {
-    try {
-      await deleteDocumentMutation.mutateAsync(documentId);
-      notifications.show({
-        title: "Document deleted",
-        message: "تم حذف المستند",
-      });
-      documentsQuery.refetch();
-    } catch (error) {
-      notifications.show({
-        title: "Delete failed",
-        message: extractApiErrorMessage(error),
-        color: "red",
-      });
-    }
-  }
+    isForbiddenError(defaultsQuery.error);
 
   async function handleCreateJobTitle(values: JobTitleFormValues) {
     try {
-      const created = await createJobTitleMutation.mutateAsync({
-        name: values.name,
-        is_active: true,
-      });
-
+      const created = await createJobTitleMutation.mutateAsync(values);
       notifications.show({
         title: "Job title created",
-        message: "تم إنشاء المسمى الوظيفي",
+        message: "تم إنشاء المسمى الوظيفي.",
       });
       jobTitlesQuery.refetch();
       form.setValue("job_title_id", String(created.id));
@@ -884,7 +772,7 @@ export function EmployeeProfilePage() {
       const created = await createShiftMutation.mutateAsync(values);
       notifications.show({
         title: "Shift created",
-        message: "تم إنشاء الشيفت",
+        message: "تم إنشاء الشيفت.",
       });
       shiftsQuery.refetch();
       form.setValue("shift_id", String(created.id));
@@ -951,7 +839,7 @@ export function EmployeeProfilePage() {
   const adjustmentTotals = useMemo(() => {
     const components = salaryComponentsQuery.data ?? [];
     const relevantComponents = components.filter((component) =>
-      isComponentInRange(component, attendanceRange.dateFrom, attendanceRange.dateTo)
+      isComponentInRange(component, payrollPeriodMap, attendanceRange.dateFrom, attendanceRange.dateTo)
     );
     const bonuses = relevantComponents
       .filter((component) => component.type === "earning")
@@ -978,13 +866,45 @@ export function EmployeeProfilePage() {
     attendanceRange.dateTo,
     commissionQuery.data,
     loanAdvancesQuery.data,
+    payrollPeriodMap,
     salaryComponentsQuery.data,
   ]);
 
   if (showAccessDenied) {
     return <AccessDenied />;
   }
-  
+
+  if (employeeQuery.isLoading && !employeeQuery.data && !isNew) {
+    return (
+      <DashboardShell copy={{ en: { title: pageCopy.en.title }, ar: { title: pageCopy.ar.title } }}>
+        <div className="employee-profile__loading">Loading...</div>
+      </DashboardShell>
+    );
+  }
+
+  const departmentOptions = departmentsQuery.data ?? [];
+  const jobTitleOptions = jobTitlesQuery.data ?? [];
+  const shiftOptions = shiftsQuery.data ?? [];
+  const canSaveEmployee = Boolean(employeeId || isNew);
+  const employeeDefaults = defaultsQuery.data ?? {};
+  const salaryStructure = salaryStructuresQuery.data?.[0] ?? null;
+  const salaryTypeValue = salaryForm.watch("salary_type");
+  const basicSalaryValue = Number(salaryForm.watch("basic_salary") || 0);
+  const dailyRateValue = resolveDailyRate(salaryTypeValue, basicSalaryValue);
+  const dailyRateLabel = dailyRateValue === null ? "—" : dailyRateValue.toFixed(2);
+  const bonusTotal = adjustmentTotals.bonuses;
+  const deductionTotal = adjustmentTotals.deductions;
+  const advanceTotal = adjustmentTotals.advances;
+  const commissionTotal = adjustmentTotals.commissions;
+  const attendanceEarnings =
+    dailyRateValue === null ? 0 : dailyRateValue * attendanceStats.presentDays;
+  const baseEarnings =
+    salaryTypeValue === "commission"
+      ? commissionTotal + bonusTotal
+      : attendanceEarnings + bonusTotal;
+  const netPay = baseEarnings - (deductionTotal + advanceTotal);
+  const netPayLabel = Number.isFinite(netPay) ? netPay.toFixed(2) : "0.00";
+
   async function handleAddAdjustment() {
     if (!employeeId) {
       return;
@@ -1042,16 +962,26 @@ export function EmployeeProfilePage() {
       return;
     }
 
+    if (!adjustmentPeriodId) {
+      notifications.show({
+        title: "Missing info",
+        message: "يرجى اختيار فترة الرواتب.",
+        color: "red",
+      });
+      return;
+    }
+
     const adjustmentLabel =
       adjustmentName.trim() ||
       (adjustmentType === "bonus" ? "Bonus" : "Deduction");
     try {
       await createSalaryComponentMutation.mutateAsync({
         salary_structure: salaryStructure.id,
+        payroll_period: adjustmentPeriodId,
         name: adjustmentLabel,
         type: adjustmentType === "bonus" ? "earning" : "deduction",
         amount: adjustmentAmount,
-        is_recurring: adjustmentRecurring,
+        is_recurring: false,
       });
       notifications.show({
         title: "Adjustment added",
@@ -1060,6 +990,7 @@ export function EmployeeProfilePage() {
       salaryComponentsQuery.refetch();
       setAdjustmentName("");
       setAdjustmentAmount(0);
+      setAdjustmentPeriodId(null);
     } catch (error) {
       notifications.show({
         title: "Failed",
@@ -1070,7 +1001,7 @@ export function EmployeeProfilePage() {
   }
 
   return (    
-    <DashboardShell copy={shellCopy} className="employee-profile-page">
+    <DashboardShell copy={{ en: { title: pageCopy.en.title }, ar: { title: pageCopy.ar.title } }} className="employee-profile-page">
       {({ language, isArabic }) => {
         const content = pageCopy[language];
         const statusOptions = statusOptionsByLanguage[language];
@@ -1079,270 +1010,235 @@ export function EmployeeProfilePage() {
           selectableUserOptions.length > 0
             ? selectableUserOptions
             : [{ value: "", label: content.fields.userEmpty }];
-        const salaryTypeValue = salaryForm.watch("salary_type");
-        const basicSalaryValue = Number(salaryForm.watch("basic_salary") || 0);
-        const dailyRateValue = resolveDailyRate(salaryTypeValue, basicSalaryValue);
-        const dailyRateLabel = dailyRateValue === null ? "—" : dailyRateValue.toFixed(2);
-        const bonusTotal = adjustmentTotals.bonuses;
-        const deductionTotal = adjustmentTotals.deductions;
-        const advanceTotal = adjustmentTotals.advances;
-        const commissionTotal = adjustmentTotals.commissions;
-        const attendanceEarnings =
-          dailyRateValue === null ? 0 : dailyRateValue * attendanceStats.presentDays;
-        const baseEarnings =
-          salaryTypeValue === "commission"
-            ? commissionTotal + bonusTotal
-            : attendanceEarnings + bonusTotal;
-        const netPay = baseEarnings - (deductionTotal + advanceTotal);
-        const netPayLabel = Number.isFinite(netPay) ? netPay.toFixed(2) : "0.00";
 
         return (
           <div className="employee-profile">
             <section className="panel employee-profile__panel">
               <div className="panel__header">
-                <div>                  
-                  <h2>{content.section.basicTitle}</h2>
-                  <p>{content.section.basicSubtitle}</p>
+                <div>
+                  <h1>{content.title}</h1>
+                  <p>{content.subtitle}</p>
                 </div>
-                {!isNew && employeeQuery.data && (
-                  <span className="status-pill" data-status={employeeQuery.data.status}>
-                    {content.statusBadge[employeeQuery.data.status] ?? employeeQuery.data.status}
-                  </span>
-                )}
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => navigate("/hr/employees")}
+                >
+                  {content.buttons.back}
+                </button>
               </div>
 
-              <form className="employee-profile__form" onSubmit={form.handleSubmit(handleSubmit)}>
-                <div className="employee-profile__tabs" role="tablist">
-                  <button
-                    type="button"
-                    className={`tab-button${activeTab === "basic" ? " tab-button--active" : ""}`}
-                    onClick={() => setActiveTab("basic")}
-                    role="tab"
-                    aria-selected={activeTab === "basic"}
-                  >
-                    {content.tabs.basic}
-                  </button>
-                  <button
-                    type="button"
-                    className={`tab-button${activeTab === "job" ? " tab-button--active" : ""}`}
-                    onClick={() => setActiveTab("job")}
-                    role="tab"
-                    aria-selected={activeTab === "job"}
-                  >
-                    {content.tabs.job}
-                  </button>
-                  <button
-                    type="button"
-                    className={`tab-button${activeTab === "documents" ? " tab-button--active" : ""}`}
-                    onClick={() => setActiveTab("documents")}
-                    role="tab"
-                    aria-selected={activeTab === "documents"}
-                    disabled={isNew}
-                  >
-                    {content.tabs.documents}
-                  </button>
-                  <button
-                    type="button"
-                    className={`tab-button${activeTab === "payroll" ? " tab-button--active" : ""}`}
-                    onClick={() => setActiveTab("payroll")}
-                    role="tab"
-                    aria-selected={activeTab === "payroll"}
-                    disabled={isNew}
-                  >
-                    {content.tabs.payroll}
-                  </button>
-                </div>
+              <p className="helper-text">{content.helper}</p>
 
+              <div className="employee-profile__tabs">
+                {(["basic", "job", "documents", "payroll"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    className={`tab-button ${activeTab === tab ? "active" : ""}`}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {content.tabs[tab]}
+                  </button>
+                ))}
+              </div>
+
+              <form className="employee-profile__form" onSubmit={form.handleSubmit(handleSaveEmployee)}>
                 {activeTab === "basic" && (
-                  <div className="employee-profile__grid">                    
-                    <label className="form-field">
-                      <span>
-                        {content.fields.employeeCode} <span className="required">*</span>
-                      </span>
-                      <input
-                        type="text"
-                        {...form.register("employee_code")}
-                        required
-                        aria-invalid={Boolean(form.formState.errors.employee_code)}
-                      />
-                      {form.formState.errors.employee_code?.message && (
-                        <span className="field-error">{form.formState.errors.employee_code?.message}</span>
-                      )}
-                    </label>
-
-                    <label className="form-field">
-                      <span>
-                        {content.fields.fullName} <span className="required">*</span>
-                      </span>
-                      <input
-                        type="text"
-                        {...form.register("full_name")}
-                        required
-                        aria-invalid={Boolean(form.formState.errors.full_name)}
-                      />
-                      {form.formState.errors.full_name?.message && (
-                        <span className="field-error">{form.formState.errors.full_name?.message}</span>
-                      )}
-                    </label>
-
-                    <label className="form-field">
-                      <span>{content.fields.nationalId}</span>
-                      <input
-                        type="text"
-                        {...form.register("national_id")}
-                        aria-invalid={Boolean(form.formState.errors.national_id)}
-                      />
-                      {form.formState.errors.national_id?.message && (
-                        <span className="field-error">{form.formState.errors.national_id?.message}</span>
-                      )}
-                    </label>
-
-                    <div className="form-field form-field--inline">
-                      <Controller
-                        name="job_title_id"
-                        control={form.control}
-                        render={({ field }) => (
-                          <>
-                            <label>
-                              <span>{content.fields.jobTitle}</span>
-                              <select
-                                value={field.value ?? ""}
-                                onChange={(event) => field.onChange(event.target.value || null)}
-                              >
-                                <option value="">{isArabic ? "اختر المسمى" : "Select job title"}</option>
-                                {jobTitleOptions.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <button
-                              type="button"
-                              className="ghost-button"
-                              onClick={() => setJobTitleModalOpen(true)}
-                            >
-                              {content.buttons.addJobTitle}
-                            </button>
-                          </>
-                        )}
-                      />
+                  <section className="panel employee-profile__subpanel">
+                    <div className="panel__header">
+                      <div>
+                        <h2>{content.section.basicTitle}</h2>
+                        <p>{content.section.basicSubtitle}</p>
+                      </div>
                     </div>
 
-                    <div className="form-field form-field--row">
-                      <label>
-                        <span>
-                          {content.fields.hireDate} <span className="required">*</span>
-                        </span>
-                        <input
-                          type="date"
-                          {...form.register("hire_date")}
-                          required
-                          aria-invalid={Boolean(form.formState.errors.hire_date)}
+                    <div className="employee-profile__grid">
+                      <label className="form-field">
+                        <span>{content.fields.employeeCode}</span>
+                        <Controller
+                          name="employee_code"
+                          control={form.control}
+                          render={({ field }) => (
+                            <TextInput
+                              value={field.value}
+                              onChange={field.onChange}
+                              error={form.formState.errors.employee_code?.message}
+                            />
+                          )}
                         />
-                        {form.formState.errors.hire_date?.message && (
-                          <span className="field-error">{form.formState.errors.hire_date?.message}</span>
-                        )}
                       </label>
 
-                      <Controller
-                        name="status"
-                        control={form.control}
-                        render={({ field }) => (
-                          <label>
-                            <span>
-                              {content.fields.status} <span className="required">*</span>
-                            </span>
-                            <select
+                      <label className="form-field">
+                        <span>{content.fields.fullName}</span>
+                        <Controller
+                          name="full_name"
+                          control={form.control}
+                          render={({ field }) => (
+                            <TextInput
                               value={field.value}
-                              onChange={(event) => field.onChange(event.target.value)}
-                              required
-                            >
+                              onChange={field.onChange}
+                              error={form.formState.errors.full_name?.message}
+                            />
+                          )}
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>{content.fields.nationalId}</span>
+                        <Controller
+                          name="national_id"
+                          control={form.control}
+                          render={({ field }) => (
+                            <TextInput
+                              value={field.value}
+                              onChange={field.onChange}
+                              error={form.formState.errors.national_id?.message}
+                            />
+                          )}
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>{content.fields.hireDate}</span>
+                        <Controller
+                          name="hire_date"
+                          control={form.control}
+                          render={({ field }) => (
+                            <TextInput
+                              type="date"
+                              value={field.value}
+                              onChange={field.onChange}
+                              error={form.formState.errors.hire_date?.message}
+                            />
+                          )}
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>{content.fields.status}</span>
+                        <Controller
+                          name="status"
+                          control={form.control}
+                          render={({ field }) => (
+                            <select value={field.value} onChange={(event) => field.onChange(event.target.value)}>
                               {statusOptions.map((option) => (
                                 <option key={option.value} value={option.value}>
                                   {option.label}
                                 </option>
                               ))}
                             </select>
-                            {form.formState.errors.status?.message && (
-                              <span className="field-error">{form.formState.errors.status?.message}</span>
-                            )}
-                          </label>
-                        )}
-                      />
-                    </div>
-
-                    <label className="form-field">
-                      <span>{content.fields.manager}</span>
-                      <input
-                        type="text"
-                        value={managerDisplayName}
-                        placeholder={content.fields.managerPlaceholder}
-                        readOnly
-                        aria-readonly="true"
-                      />
-                    </label>
-
-                    <Controller
-                      name="user_id"
-                      control={form.control}
-                      render={({ field }) => (
-                        <label className="form-field">
-                          <span>
-                            {content.fields.user} <span className="required">*</span>
-                          </span>
-                          <select
-                            value={field.value ?? ""}
-                            onChange={(event) => field.onChange(event.target.value)}
-                            required
-                            disabled={userSelectDisabled}
-                          >
-                            <option value="">{content.fields.userPlaceholder}</option>
-                            {userOptions.map((option) => (
-                              <option key={option.value || option.label} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          {form.formState.errors.user_id?.message && (
-                            <span className="field-error">{form.formState.errors.user_id?.message}</span>
                           )}
-                        </label>
-                      )}
-                    />
+                        />
+                      </label>
 
-                    <div className="form-field form-field--inline">
-                      <Controller
-                        name="shift_id"
-                        control={form.control}
-                        render={({ field }) => (
-                          <>
-                            <label>
-                              <span>{content.fields.shift}</span>
-                              <select
-                                value={field.value ?? ""}
-                                onChange={(event) => field.onChange(event.target.value || null)}
-                              >
-                                <option value="">{isArabic ? "اختر الشيفت" : "Select shift"}</option>
-                                {shiftOptions.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <button
-                              type="button"
-                              className="ghost-button"
-                              onClick={() => setShiftModalOpen(true)}
+                      <label className="form-field">
+                        <span>{content.fields.manager}</span>
+                        <Controller
+                          name="manager_id"
+                          control={form.control}
+                          render={({ field }) => (
+                            <select
+                              value={field.value ?? ""}
+                              onChange={(event) => field.onChange(event.target.value || null)}
                             >
-                              {content.buttons.addShift}
-                            </button>
-                          </>
-                        )}
-                      />
+                              <option value="">{content.fields.managerPlaceholder}</option>
+                              {userOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>{content.fields.user}</span>
+                        <Controller
+                          name="user_id"
+                          control={form.control}
+                          render={({ field }) => (
+                            <select
+                              value={field.value}
+                              onChange={(event) => field.onChange(event.target.value)}
+                              disabled={userSelectDisabled}
+                            >
+                              <option value="">{content.fields.userPlaceholder}</option>
+                              {userOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>{content.fields.department}</span>
+                        <Controller
+                          name="department_id"
+                          control={form.control}
+                          render={({ field }) => (
+                            <select
+                              value={field.value ?? ""}
+                              onChange={(event) => field.onChange(event.target.value || null)}
+                            >
+                              <option value="">{content.fields.department}</option>
+                              {departmentOptions.map((department) => (
+                                <option key={department.id} value={department.id}>
+                                  {department.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>{content.fields.jobTitle}</span>
+                        <Controller
+                          name="job_title_id"
+                          control={form.control}
+                          render={({ field }) => (
+                            <select
+                              value={field.value ?? ""}
+                              onChange={(event) => field.onChange(event.target.value || null)}
+                            >
+                              <option value="">{content.fields.jobTitle}</option>
+                              {jobTitleOptions.map((job) => (
+                                <option key={job.id} value={job.id}>
+                                  {job.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>{content.fields.shift}</span>
+                        <Controller
+                          name="shift_id"
+                          control={form.control}
+                          render={({ field }) => (
+                            <select
+                              value={field.value ?? ""}
+                              onChange={(event) => field.onChange(event.target.value || null)}
+                            >
+                              <option value="">{content.fields.shift}</option>
+                              {shiftOptions.map((shift) => (
+                                <option key={shift.id} value={shift.id}>
+                                  {shift.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        />
+                      </label>
                     </div>
-                  </div>
+                  </section>
                 )}
 
                 {activeTab === "job" && (
@@ -1353,27 +1249,70 @@ export function EmployeeProfilePage() {
                         <p>{content.section.jobSubtitle}</p>
                       </div>
                     </div>
+
                     <div className="employee-profile__grid">
-                      <Controller
-                        name="department_id"
-                        control={form.control}
-                        render={({ field }) => (
-                          <label className="form-field">
-                            <span>{content.fields.department}</span>
+                      <label className="form-field">
+                        <span>{content.fields.department}</span>
+                        <Controller
+                          name="department_id"
+                          control={form.control}
+                          render={({ field }) => (
                             <select
                               value={field.value ?? ""}
                               onChange={(event) => field.onChange(event.target.value || null)}
                             >
-                              <option value="">{isArabic ? "اختر القسم" : "Select department"}</option>
-                              {departmentOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
+                              <option value="">{content.fields.department}</option>
+                              {departmentOptions.map((department) => (
+                                <option key={department.id} value={department.id}>
+                                  {department.name}
                                 </option>
                               ))}
                             </select>
-                          </label>
-                        )}
-                      />
+                          )}
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>{content.fields.jobTitle}</span>
+                        <Controller
+                          name="job_title_id"
+                          control={form.control}
+                          render={({ field }) => (
+                            <select
+                              value={field.value ?? ""}
+                              onChange={(event) => field.onChange(event.target.value || null)}
+                            >
+                              <option value="">{content.fields.jobTitle}</option>
+                              {jobTitleOptions.map((job) => (
+                                <option key={job.id} value={job.id}>
+                                  {job.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        />
+                      </label>
+
+                      <label className="form-field">
+                        <span>{content.fields.shift}</span>
+                        <Controller
+                          name="shift_id"
+                          control={form.control}
+                          render={({ field }) => (
+                            <select
+                              value={field.value ?? ""}
+                              onChange={(event) => field.onChange(event.target.value || null)}
+                            >
+                              <option value="">{content.fields.shift}</option>
+                              {shiftOptions.map((shift) => (
+                                <option key={shift.id} value={shift.id}>
+                                  {shift.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        />
+                      </label>
                     </div>
                   </section>
                 )}
@@ -1382,142 +1321,170 @@ export function EmployeeProfilePage() {
                   <section className="panel employee-profile__subpanel">
                     <div className="panel__header">
                       <div>
-                        <h2>{content.section.documentsTitle}</h2>
-                        <p>{content.section.documentsSubtitle}</p>
+                        <h2>{content.documents.title}</h2>
+                        <p>{content.documents.empty}</p>
                       </div>
                     </div>
 
-                    {!employeeId ? (
-                      <p className="helper-text">{content.documents.saveHint}</p>
-                    ) : (
-                      <div className="employee-documents">
-                        <div className="employee-documents__form">
-                          <Controller
-                            name="doc_type"
-                            control={documentForm.control}
-                            render={({ field }) => (
-                              <label className="form-field">
-                                <span>
-                                  {content.documents.docType} <span className="required">*</span>
-                                </span>
-                                <input
-                                  type="text"
-                                  {...field}
-                                  aria-invalid={Boolean(documentForm.formState.errors.doc_type)}
+                    {!employeeId && <p className="helper-text">{content.documents.saveHint}</p>}
+
+                    {documentsQuery.isLoading ? (
+                      <div className="employee-profile__loading">{content.documents.loading}</div>
+                    ) : documentsQuery.data?.length ? (
+                      <div className="employee-profile__documents">
+                        <div className="employee-profile__document-header">
+                          <label className="form-field">
+                            <span>{content.documents.docType}</span>
+                            <Controller
+                              name="doc_type"
+                              control={documentForm.control}
+                              render={({ field }) => (
+                                <TextInput
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  error={documentForm.formState.errors.doc_type?.message}
+                                  disabled={!employeeId}
                                 />
-                                {documentForm.formState.errors.doc_type?.message && (
-                                  <span className="field-error">{documentForm.formState.errors.doc_type?.message}</span>
-                                )}
-                              </label>
-                            )}
-                          />
+                              )}
+                            />
+                          </label>
 
-                          <Controller
-                            name="title"
-                            control={documentForm.control}
-                            render={({ field }) => (
-                              <label className="form-field">
-                                <span>
-                                  {content.documents.title} <span className="required">*</span>
-                                </span>
-                                <input
-                                  type="text"
-                                  {...field}
-                                  aria-invalid={Boolean(documentForm.formState.errors.title)}
+                          <label className="form-field">
+                            <span>{content.documents.title}</span>
+                            <Controller
+                              name="title"
+                              control={documentForm.control}
+                              render={({ field }) => (
+                                <TextInput
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  error={documentForm.formState.errors.title?.message}
+                                  disabled={!employeeId}
                                 />
-                                {documentForm.formState.errors.title?.message && (
-                                  <span className="field-error">{documentForm.formState.errors.title?.message}</span>
-                                )}
-                              </label>
-                            )}
-                          />
+                              )}
+                            />
+                          </label>
 
-                          <Controller
-                            name="file"
-                            control={documentForm.control}
-                            render={({ field }) => {
-                              const { onChange, ...rest } = field;
-                              return (
-                                <label className="form-field">
-                                  <span>
-                                    {content.documents.file} <span className="required">*</span>
-                                  </span>
-
-                                  <input
-                                    type="file"
-                                    name={rest.name}
-                                    ref={rest.ref}
-                                    onBlur={rest.onBlur}
-                                    disabled={rest.disabled}
-                                    onChange={(event) => onChange(event.target.files?.[0] ?? null)}
-                                  />
-
-                                  {documentForm.formState.errors.file?.message && (
-                                    <span className="field-error">{documentForm.formState.errors.file?.message}</span>
-                                  )}
-                                </label>
-                              );
-                            }}
-                          />
+                          <label className="form-field">
+                            <span>{content.documents.file}</span>
+                            <Controller
+                              name="file"
+                              control={documentForm.control}
+                              render={({ field }) => (
+                                <input
+                                  type="file"
+                                  onChange={(event) => field.onChange(event.target.files?.[0] ?? null)}
+                                  disabled={!employeeId}
+                                />
+                              )}
+                            />
+                          </label>
 
                           <button
                             type="button"
                             className="primary-button"
-                            onClick={documentForm.handleSubmit(handleDocumentSubmit)}
-                            disabled={uploadDocumentMutation.isPending}
+                            onClick={documentForm.handleSubmit(handleUploadDocument)}
+                            disabled={!employeeId || uploadDocumentMutation.isPending}
                           >
                             {content.buttons.upload}
                           </button>
                         </div>
 
-                        <div className="employee-documents__list">
-                          {documentsQuery.isLoading ? (
-                            <p className="helper-text">{content.documents.loading}</p>
-                          ) : (documentsQuery.data ?? []).length === 0 ? (
-                            <p className="helper-text">{content.documents.empty}</p>
-                          ) : (
-                            <div className="employees-table-wrapper">
-                              <table className="employees-table">
-                                <thead>
-                                  <tr>
-                                    <th>{content.documents.title}</th>
-                                    <th>{content.documents.docType}</th>
-                                    <th>{content.documents.uploaded}</th>
-                                    <th>{content.documents.actions}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {(documentsQuery.data ?? []).map((doc) => (
-                                    <tr key={doc.id}>
-                                      <td>{doc.title}</td>
-                                      <td>{doc.doc_type}</td>
-                                      <td>{new Date(doc.created_at).toLocaleDateString()}</td>
-                                      <td>
-                                        <div className="table-actions">
-                                          <a
-                                            className="ghost-button"
-                                            href={`${env.API_BASE_URL}${endpoints.hr.documentDownload(doc.id)}`}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                          >
-                                            {content.buttons.download}
-                                          </a>
-                                          <button
-                                            type="button"
-                                            className="ghost-button ghost-button--danger"
-                                            onClick={() => handleDeleteDocument(doc.id)}
-                                            disabled={deleteDocumentMutation.isPending}
-                                          >
-                                            {content.buttons.delete}
-                                          </button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
+                        <div className="employee-profile__document-list">
+                          <div className="employee-profile__document-list-header">
+                            <span>{content.documents.docType}</span>
+                            <span>{content.documents.title}</span>
+                            <span>{content.documents.uploaded}</span>
+                            <span>{content.documents.actions}</span>
+                          </div>
+                          <div className="employee-profile__document-list-body">
+                            {documentsQuery.data.map((doc) => (
+                              <div className="employee-profile__document-row" key={doc.id}>
+                                <span>{doc.doc_type}</span>
+                                <span>{doc.title}</span>
+                                <span>{doc.created_at ? doc.created_at.slice(0, 10) : ""}</span>
+                                <div className="employee-profile__document-actions">
+                                  <a
+                                    className="ghost-button"
+                                    href={`${env.API_URL}${doc.file}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    {content.buttons.download}
+                                  </a>
+                                  <button
+                                    type="button"
+                                    className="ghost-button ghost-button--danger"
+                                    onClick={() => handleDeleteDocument(doc.id)}
+                                    disabled={deleteDocumentMutation.isPending}
+                                  >
+                                    {content.buttons.delete}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="employee-profile__documents empty">
+                        <p>{content.documents.empty}</p>
+                        <div className="employee-profile__document-header">
+                          <label className="form-field">
+                            <span>{content.documents.docType}</span>
+                            <Controller
+                              name="doc_type"
+                              control={documentForm.control}
+                              render={({ field }) => (
+                                <TextInput
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  error={documentForm.formState.errors.doc_type?.message}
+                                  disabled={!employeeId}
+                                />
+                              )}
+                            />
+                          </label>
+
+                          <label className="form-field">
+                            <span>{content.documents.title}</span>
+                            <Controller
+                              name="title"
+                              control={documentForm.control}
+                              render={({ field }) => (
+                                <TextInput
+                                  value={field.value}
+                                  onChange={field.onChange}
+                                  error={documentForm.formState.errors.title?.message}
+                                  disabled={!employeeId}
+                                />
+                              )}
+                            />
+                          </label>
+
+                          <label className="form-field">
+                            <span>{content.documents.file}</span>
+                            <Controller
+                              name="file"
+                              control={documentForm.control}
+                              render={({ field }) => (
+                                <input
+                                  type="file"
+                                  onChange={(event) => field.onChange(event.target.files?.[0] ?? null)}
+                                  disabled={!employeeId}
+                                />
+                              )}
+                            />
+                          </label>
+
+                          <button
+                            type="button"
+                            className="primary-button"
+                            onClick={documentForm.handleSubmit(handleUploadDocument)}
+                            disabled={!employeeId || uploadDocumentMutation.isPending}
+                          >
+                            {content.buttons.upload}
+                          </button>
                         </div>
                       </div>
                     )}
@@ -1727,13 +1694,23 @@ export function EmployeeProfilePage() {
                               />
                             </label>
                             <label className="form-field">
-                              <span>{content.adjustments.recurringLabel}</span>
+                              <span>{content.adjustments.periodLabel}</span>
                               <select
-                                value={adjustmentRecurring ? "yes" : "no"}
-                                onChange={(event) => setAdjustmentRecurring(event.target.value === "yes")}
+                                value={adjustmentPeriodId ?? ""}
+                                onChange={(event) =>
+                                  setAdjustmentPeriodId(
+                                    event.target.value ? Number(event.target.value) : null
+                                  )
+                                }
                               >
-                                <option value="yes">{isArabic ? "نعم" : "Yes"}</option>
-                                <option value="no">{isArabic ? "لا" : "No"}</option>
+                                <option value="">{content.adjustments.periodPlaceholder}</option>
+                                {availableAdjustmentPeriods.map((period) => (
+                                  <option key={period.id} value={period.id}>
+                                    {period.period_type === "monthly"
+                                      ? `${period.year}-${String(period.month).padStart(2, "0")}`
+                                      : `${period.start_date} → ${period.end_date}`}
+                                  </option>
+                                ))}
                               </select>
                             </label>
                           </>

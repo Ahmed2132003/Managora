@@ -691,7 +691,13 @@ class SalaryComponent(BaseModel):
     type = models.CharField(max_length=10, choices=ComponentType.choices)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     is_recurring = models.BooleanField(default=True)
-
+    payroll_period = models.ForeignKey(
+        "hr.PayrollPeriod",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="salary_components",
+    )
     def save(self, *args, **kwargs):
         if self.salary_structure_id:
             self.company_id = self.salary_structure.company_id
