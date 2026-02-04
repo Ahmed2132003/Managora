@@ -513,7 +513,21 @@ function resolveDailyRate(type: SalaryType, basicSalary: number): number | null 
   return basicSalary / 30;
 }
 
-function extractApiErrorMessage(err: unknown): string {
+function isComponentInRange(
+  component: { is_recurring: boolean; created_at?: string },
+  dateFrom: string,
+  dateTo: string
+) {
+  if (component.is_recurring) return true;
+  if (!component.created_at) return false;
+  const created = new Date(component.created_at);
+  const start = new Date(dateFrom);
+  const end = new Date(dateTo);
+  if (Number.isNaN(created.getTime())) return false;
+  return created >= start && created <= end;
+}
+
+function extractApiErrorMessage(err: unknown): string {  
   if (axios.isAxiosError(err)) {
     const ae = err as AxiosError<unknown>;
     const data = ae.response?.data;
@@ -936,12 +950,15 @@ export function EmployeeProfilePage() {
 
   const adjustmentTotals = useMemo(() => {
     const components = salaryComponentsQuery.data ?? [];
-    const bonuses = components
+    const relevantComponents = components.filter((component) =>
+      isComponentInRange(component, attendanceRange.dateFrom, attendanceRange.dateTo)
+    );
+    const bonuses = relevantComponents
       .filter((component) => component.type === "earning")
       .reduce((sum, component) => sum + Number(component.amount || 0), 0);
-    const deductions = components
+    const deductions = relevantComponents
       .filter((component) => component.type === "deduction")
-      .reduce((sum, component) => sum + Number(component.amount || 0), 0);
+      .reduce((sum, component) => sum + Number(component.amount || 0), 0);      
     const advances = (loanAdvancesQuery.data ?? []).reduce(
       (sum, loan) => sum + Number(loan.installment_amount || 0),
       0
@@ -956,8 +973,14 @@ export function EmployeeProfilePage() {
       advances,
       commissions,
     };
-  }, [commissionQuery.data, loanAdvancesQuery.data, salaryComponentsQuery.data]);
-
+  }, [
+    attendanceRange.dateFrom,
+    attendanceRange.dateTo,
+    commissionQuery.data,
+    loanAdvancesQuery.data,
+    salaryComponentsQuery.data,
+  ]);
+  
   if (showAccessDenied) {
     return <AccessDenied />;
   }

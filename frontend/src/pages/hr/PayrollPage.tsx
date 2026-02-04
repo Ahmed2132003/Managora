@@ -364,7 +364,21 @@ function resolveDailyRate(type: SalaryType, basicSalary: number): number | null 
   return basicSalary / 30;
 }
 
-export function PayrollPage() {
+function isComponentInRange(
+  component: { is_recurring: boolean; created_at?: string },
+  dateFrom: string,
+  dateTo: string
+) {
+  if (component.is_recurring) return true;
+  if (!component.created_at) return false;
+  const created = new Date(component.created_at);
+  const start = new Date(dateFrom);
+  const end = new Date(dateTo);
+  if (Number.isNaN(created.getTime())) return false;
+  return created >= start && created <= end;
+}
+
+export function PayrollPage() {  
   const navigate = useNavigate();
   const [month, setMonth] = useState<string | null>(null);
   const [year, setYear] = useState<string | null>(null);
@@ -748,12 +762,15 @@ export function PayrollPage() {
     const absentDays = Math.max(periodRange.days - presentDays, 0);    
     const lateMinutes = records.reduce((sum, record) => sum + (record.late_minutes ?? 0), 0);
     const components = salaryComponentsQuery.data ?? [];
-    const bonuses = components
+    const relevantComponents = components.filter((component) =>
+      isComponentInRange(component, periodRange.dateFrom, periodRange.dateTo)
+    );
+    const bonuses = relevantComponents
       .filter((component) => component.type === "earning")
       .reduce((sum, component) => sum + Number(component.amount || 0), 0);
-    const deductions = components
+    const deductions = relevantComponents
       .filter((component) => component.type === "deduction")
-      .reduce((sum, component) => sum + Number(component.amount || 0), 0);
+      .reduce((sum, component) => sum + Number(component.amount || 0), 0);      
     const advances = (loanAdvancesQuery.data ?? []).reduce((sum, loan) => {
       if (
         loan.type === "advance" &&

@@ -265,6 +265,7 @@ export type SalaryComponent = {
   type: "earning" | "deduction";
   amount: string;
   is_recurring: boolean;
+  created_at: string;
 };
 
 export type LoanAdvance = {

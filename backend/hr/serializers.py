@@ -846,9 +846,17 @@ class SalaryStructureSerializer(serializers.ModelSerializer):
 class SalaryComponentSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalaryComponent
-        fields = ("id", "salary_structure", "name", "type", "amount", "is_recurring")
-        read_only_fields = ("id",)
-
+        fields = (
+            "id",
+            "salary_structure",
+            "name",
+            "type",
+            "amount",
+            "is_recurring",
+            "created_at",
+        )
+        read_only_fields = ("id", "created_at")
+        
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         request = self.context.get("request")
