@@ -5,15 +5,8 @@ from decimal import Decimal
 
 from django.utils import timezone
 
-from hr.models import (
-    AttendanceRecord,
-    HRAction,
-    PayrollPeriod,
-    PolicyRule,
-    SalaryComponent,
-    SalaryStructure,
-)
-
+from hr.models import AttendanceRecord, HRAction, PayrollPeriod, PolicyRule, SalaryStructure
+from hr.services.actions import sync_hr_action_deduction_component
 
 def _resolve_payroll_period(
     *,
@@ -100,7 +93,7 @@ def create_hr_action_if_not_exists(
             period_end=period_end,
         )
         if action_type == HRAction.ActionType.DEDUCTION and period:
-            _create_deduction_component(action=action, period=period)
+            sync_hr_action_deduction_component(action)            
         return action
     
     if period_start and period_end:
@@ -124,44 +117,9 @@ def create_hr_action_if_not_exists(
             period_end=period_end,
         )
         if action_type == HRAction.ActionType.DEDUCTION and period:
-            _create_deduction_component(action=action, period=period)
+            sync_hr_action_deduction_component(action)
         return action
     return None
-
-
-def _create_deduction_component(*, action: HRAction, period: PayrollPeriod) -> None:
-    if action.value <= 0:
-        return
-    salary_structure = (
-        SalaryStructure.objects.filter(
-            company_id=action.company_id,
-            employee_id=action.employee_id,
-        )
-        .only("id")
-        .first()
-    )
-    if not salary_structure:
-        return
-    existing = SalaryComponent.objects.filter(
-        company_id=action.company_id,
-        salary_structure=salary_structure,
-        payroll_period=period,
-        name=f"HR action deduction: {action.rule.name} (#{action.id})",
-        amount=action.value,
-        type=SalaryComponent.ComponentType.DEDUCTION,
-    ).exists()
-    if existing:
-        return
-    SalaryComponent.objects.create(
-        company_id=action.company_id,
-        salary_structure=salary_structure,
-        payroll_period=period,
-        name=f"HR action deduction: {action.rule.name} (#{action.id})",
-        type=SalaryComponent.ComponentType.DEDUCTION,
-        amount=action.value,
-        is_recurring=False,
-    )
-
 def apply_late_over_minutes_rule(
     rule: PolicyRule,
     attendance_record: AttendanceRecord,

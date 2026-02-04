@@ -790,45 +790,9 @@ class HRActionManageSerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         action = super().update(instance, validated_data)
-        component_name = f"HR action deduction: {action.rule.name} (#{action.id})"
-        salary_structure = SalaryStructure.objects.filter(
-            company_id=action.company_id,
-            employee_id=action.employee_id,
-        ).first()
-        if not salary_structure:
-            return action
-        components_qs = SalaryComponent.objects.filter(
-            company_id=action.company_id,
-            salary_structure=salary_structure,
-            name=component_name,
-        )
-        if action.action_type != HRAction.ActionType.DEDUCTION or action.value <= 0:
-            components_qs.delete()
-            return action
-        period = None
-        if action.period_start and action.period_end:
-            expected_period_type = (
-                PayrollPeriod.PeriodType.MONTHLY
-                if salary_structure.salary_type == SalaryStructure.SalaryType.COMMISSION
-                else salary_structure.salary_type
-            )
-            period = PayrollPeriod.objects.filter(
-                company_id=action.company_id,
-                period_type=expected_period_type,
-                start_date=action.period_start,
-                end_date=action.period_end,
-            ).first()
-        if not period:
-            components_qs.delete()
-            return action
-        components_qs.update_or_create(
-            defaults={
-                "payroll_period": period,
-                "type": SalaryComponent.ComponentType.DEDUCTION,
-                "amount": action.value,
-                "is_recurring": False,
-            }
-        )
+        from hr.services.actions import sync_hr_action_deduction_component
+
+        sync_hr_action_deduction_component(action)
         return action
 
 class PayrollPeriodSerializer(serializers.ModelSerializer):
