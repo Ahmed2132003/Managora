@@ -1,3 +1,5 @@
+from importlib import import_module
+
 from django.apps import AppConfig
 
 
@@ -6,4 +8,4 @@ class HrConfig(AppConfig):
     name = "hr"
 
     def ready(self):
-        from . import signals  # noqa: F401
+        import_module("hr.signals")
