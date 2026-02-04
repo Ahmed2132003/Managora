@@ -165,7 +165,10 @@ def generate_period(company, year=None, month=None, actor=None, period=None):
                 )
                 earnings_total += basic_salary_amount
                                 
-            components = salary_structure.components.filter(is_recurring=True)
+            components = salary_structure.components.filter(
+                Q(is_recurring=True)
+                | Q(is_recurring=False, created_at__date__range=(start_date, end_date))
+            )            
             for component in components:
                 line_type = (
                     PayrollLine.LineType.EARNING

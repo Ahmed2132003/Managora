@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from core.models import Company
 from hr.models import (
@@ -178,4 +179,35 @@ class PayrollGeneratorTests(TestCase):
         run = PayrollRun.objects.get(period=period, employee=employee)
         self.assertFalse(
             run.lines.filter(code__startswith="LOAN-").exists()
+        )
+
+    def test_generate_period_includes_non_recurring_components_in_period_only(self):
+        employee = self._create_employee_with_structure("EMP-003")
+        salary_structure = employee.salary_structure
+
+        feb_component = SalaryComponent.objects.create(
+            company=self.company,
+            salary_structure=salary_structure,
+            name="One-off bonus",
+            type=SalaryComponent.ComponentType.EARNING,
+            amount=Decimal("100.00"),
+            is_recurring=False,
+        )
+        feb_created_at = timezone.make_aware(timezone.datetime(2026, 2, 10, 12, 0, 0))
+        SalaryComponent.objects.filter(id=feb_component.id).update(created_at=feb_created_at)
+
+        feb_period = PayrollPeriod.objects.create(company=self.company, year=2026, month=2)
+        generate_period(self.company, actor=self.actor, period=feb_period)
+
+        feb_run = PayrollRun.objects.get(period=feb_period, employee=employee)
+        self.assertTrue(
+            feb_run.lines.filter(code=f"COMP-{feb_component.id}").exists()
+        )
+
+        march_period = PayrollPeriod.objects.create(company=self.company, year=2026, month=3)
+        generate_period(self.company, actor=self.actor, period=march_period)
+
+        march_run = PayrollRun.objects.get(period=march_period, employee=employee)
+        self.assertFalse(
+            march_run.lines.filter(code=f"COMP-{feb_component.id}").exists()
         )
