@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.conf import settings
 from django.utils.dateparse import parse_date
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import filters, status, viewsets
+from rest_framework import filters, mixins, status, viewsets
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.generics import (
     CreateAPIView,
@@ -74,6 +74,7 @@ from hr.serializers import (
     EmployeeDocumentCreateSerializer,
     EmployeeDocumentSerializer,
     JobTitleSerializer,
+    HRActionManageSerializer,
     HRActionSerializer,
     LeaveBalanceSerializer,
     LeaveDecisionSerializer,
@@ -1073,7 +1074,11 @@ class PolicyRuleViewSet(viewsets.ModelViewSet):
     list=extend_schema(tags=["Policies"], summary="List HR actions"),
     retrieve=extend_schema(tags=["Policies"], summary="Retrieve HR action"),
 )
-class HRActionViewSet(viewsets.ReadOnlyModelViewSet):
+class HRActionViewSet(
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.ReadOnlyModelViewSet,
+):    
     serializer_class = HRActionSerializer
     permission_classes = [IsAuthenticated]
 
@@ -1081,6 +1086,11 @@ class HRActionViewSet(viewsets.ReadOnlyModelViewSet):
         permissions = [permission() for permission in self.permission_classes]
         permissions.append(HasAnyPermission(["attendance.*"]))
         return permissions
+
+    def get_serializer_class(self):
+        if self.action in {"update", "partial_update"}:
+            return HRActionManageSerializer
+        return HRActionSerializer
 
     def get_queryset(self):
         queryset = HRAction.objects.select_related("employee", "rule").filter(

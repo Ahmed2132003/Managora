@@ -3,8 +3,54 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 
-from hr.models import AttendanceRecord, HRAction, PolicyRule
+from django.utils import timezone
 
+from hr.models import (
+    AttendanceRecord,
+    HRAction,
+    PayrollPeriod,
+    PolicyRule,
+    SalaryComponent,
+    SalaryStructure,
+)
+
+
+def _resolve_payroll_period(
+    *,
+    company_id: int,
+    employee_id: int,
+    reference_date,
+) -> PayrollPeriod | None:
+    salary_structure = (
+        SalaryStructure.objects.filter(
+            company_id=company_id,
+            employee_id=employee_id,
+        )
+        .only("salary_type")
+        .first()
+    )
+    if not salary_structure:
+        return None
+    salary_type = salary_structure.salary_type
+    if salary_type == SalaryStructure.SalaryType.COMMISSION:
+        period_type = PayrollPeriod.PeriodType.MONTHLY
+    else:
+        period_type = salary_type
+    period_qs = PayrollPeriod.objects.filter(
+        company_id=company_id,
+        period_type=period_type,
+    )
+    if period_type == PayrollPeriod.PeriodType.MONTHLY:
+        period_qs = period_qs.filter(
+            year=reference_date.year,
+            month=reference_date.month,
+        )
+    else:
+        period_qs = period_qs.filter(
+            start_date__lte=reference_date,
+            end_date__gte=reference_date,
+        )
+    return period_qs.order_by("-start_date", "-id").first()
 
 def create_hr_action_if_not_exists(
     *,
@@ -18,15 +64,31 @@ def create_hr_action_if_not_exists(
 ) -> HRAction | None:
     action_type = rule.action_type
     value = rule.action_value if rule.action_value is not None else Decimal("0")
+    period = None
+    if action_type == HRAction.ActionType.DEDUCTION:
+        reference_date = (
+            attendance_record.date
+            if attendance_record
+            else period_end
+            or period_start
+            or timezone.localdate()
+        )
+        period = _resolve_payroll_period(
+            company_id=company_id,
+            employee_id=employee_id,
+            reference_date=reference_date,
+        )
+        if period:
+            period_start, period_end = period.start_date, period.end_date
     if attendance_record:
         if HRAction.objects.filter(
             company_id=company_id,
-            employee_id=employee_id,
+            employee_id=employee_id,            
             rule=rule,
             attendance_record=attendance_record,
         ).exists():
             return None
-        return HRAction.objects.create(
+        action = HRAction.objects.create(
             company_id=company_id,
             employee_id=employee_id,
             rule=rule,
@@ -34,8 +96,13 @@ def create_hr_action_if_not_exists(
             action_type=action_type,
             value=value,
             reason=reason,
+            period_start=period_start,
+            period_end=period_end,
         )
-
+        if action_type == HRAction.ActionType.DEDUCTION and period:
+            _create_deduction_component(action=action, period=period)
+        return action
+    
     if period_start and period_end:
         if HRAction.objects.filter(
             company_id=company_id,
@@ -45,7 +112,7 @@ def create_hr_action_if_not_exists(
             period_end=period_end,
         ).exists():
             return None
-        return HRAction.objects.create(
+        action = HRAction.objects.create(
             company_id=company_id,
             employee_id=employee_id,
             rule=rule,
@@ -56,8 +123,44 @@ def create_hr_action_if_not_exists(
             period_start=period_start,
             period_end=period_end,
         )
+        if action_type == HRAction.ActionType.DEDUCTION and period:
+            _create_deduction_component(action=action, period=period)
+        return action
     return None
 
+
+def _create_deduction_component(*, action: HRAction, period: PayrollPeriod) -> None:
+    if action.value <= 0:
+        return
+    salary_structure = (
+        SalaryStructure.objects.filter(
+            company_id=action.company_id,
+            employee_id=action.employee_id,
+        )
+        .only("id")
+        .first()
+    )
+    if not salary_structure:
+        return
+    existing = SalaryComponent.objects.filter(
+        company_id=action.company_id,
+        salary_structure=salary_structure,
+        payroll_period=period,
+        name=f"HR action deduction: {action.rule.name} (#{action.id})",
+        amount=action.value,
+        type=SalaryComponent.ComponentType.DEDUCTION,
+    ).exists()
+    if existing:
+        return
+    SalaryComponent.objects.create(
+        company_id=action.company_id,
+        salary_structure=salary_structure,
+        payroll_period=period,
+        name=f"HR action deduction: {action.rule.name} (#{action.id})",
+        type=SalaryComponent.ComponentType.DEDUCTION,
+        amount=action.value,
+        is_recurring=False,
+    )
 
 def apply_late_over_minutes_rule(
     rule: PolicyRule,

@@ -924,6 +924,14 @@ export type HRAction = {
   created_at: string;
 };
 
+export type HRActionUpdatePayload = Partial<{
+  action_type: HRAction["action_type"];
+  value: string | number;
+  reason: string;
+  period_start: string | null;
+  period_end: string | null;
+}>;
+
 export function useLeaveTypesQuery() {
   return useQuery({
     queryKey: ["leaves", "types"],
@@ -1112,6 +1120,17 @@ export function useHrActionsQuery(params?: { employeeId?: number }) {
   });
 }
 
+export function useUpdateHrActionMutation() {
+  return useMutation({
+    mutationFn: async (payload: { id: number; data: HRActionUpdatePayload }) => {
+      const response = await http.patch<HRAction>(
+        endpoints.hr.hrAction(payload.id),
+        payload.data
+      );
+      return response.data;
+    },
+  });
+}
 export function usePayrollPeriods() {
   return useQuery({
     queryKey: ["payroll", "periods"],

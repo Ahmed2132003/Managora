@@ -180,7 +180,7 @@ def generate_period(company, year=None, month=None, actor=None, period=None):
                         )
                     )
                 )
-            )                                                    
+            ).exclude(name__startswith="HR action deduction:")                                                                                                        
             for component in components:
                 line_type = (
                     PayrollLine.LineType.EARNING

@@ -51,6 +51,7 @@ export const endpoints = {
     commissionApprovalsInbox: "/api/commissions/approvals/inbox/",
     policies: "/api/policies/",    
     hrActions: "/api/actions/",
+    hrAction: (id: number) => `/api/actions/${id}/`,    
     payrollPeriods: "/api/payroll/periods/",
     payrollPeriodGenerate: (id: number) => `/api/payroll/periods/${id}/generate/`,
     payrollPeriodRuns: (id: number) => `/api/payroll/periods/${id}/runs/`,

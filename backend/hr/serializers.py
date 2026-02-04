@@ -740,6 +740,84 @@ class HRActionSerializer(serializers.ModelSerializer):
         )
 
 
+class HRActionManageSerializer(serializers.ModelSerializer):
+    employee = LeaveEmployeeSerializer(read_only=True)
+    rule = PolicyRuleSummarySerializer(read_only=True)
+
+    class Meta:
+        model = HRAction
+        fields = (
+            "id",
+            "employee",
+            "rule",
+            "action_type",
+            "value",
+            "reason",
+            "period_start",
+            "period_end",
+            "attendance_record",
+            "created_at",
+        )
+        read_only_fields = (
+            "id",
+            "employee",
+            "rule",
+            "attendance_record",
+            "created_at",
+        )
+
+    def validate(self, attrs):
+        period_start = attrs.get("period_start")
+        period_end = attrs.get("period_end")
+        if period_start and period_end and period_start > period_end:
+            raise serializers.ValidationError(
+                {"period_end": "Period end must be after the start date."}
+            )
+        return attrs
+
+    def update(self, instance, validated_data):
+        action = super().update(instance, validated_data)
+        component_name = f"HR action deduction: {action.rule.name} (#{action.id})"
+        salary_structure = SalaryStructure.objects.filter(
+            company_id=action.company_id,
+            employee_id=action.employee_id,
+        ).first()
+        if not salary_structure:
+            return action
+        components_qs = SalaryComponent.objects.filter(
+            company_id=action.company_id,
+            salary_structure=salary_structure,
+            name=component_name,
+        )
+        if action.action_type != HRAction.ActionType.DEDUCTION or action.value <= 0:
+            components_qs.delete()
+            return action
+        period = None
+        if action.period_start and action.period_end:
+            expected_period_type = (
+                PayrollPeriod.PeriodType.MONTHLY
+                if salary_structure.salary_type == SalaryStructure.SalaryType.COMMISSION
+                else salary_structure.salary_type
+            )
+            period = PayrollPeriod.objects.filter(
+                company_id=action.company_id,
+                period_type=expected_period_type,
+                start_date=action.period_start,
+                end_date=action.period_end,
+            ).first()
+        if not period:
+            components_qs.delete()
+            return action
+        components_qs.update_or_create(
+            defaults={
+                "payroll_period": period,
+                "type": SalaryComponent.ComponentType.DEDUCTION,
+                "amount": action.value,
+                "is_recurring": False,
+            }
+        )
+        return action
+
 class PayrollPeriodSerializer(serializers.ModelSerializer):
     class Meta:
         model = PayrollPeriod

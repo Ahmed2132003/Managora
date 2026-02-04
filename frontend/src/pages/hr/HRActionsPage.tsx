@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { isForbiddenError } from "../../shared/api/errors";
 import { clearTokens } from "../../shared/auth/tokens";
 import { hasPermission } from "../../shared/auth/useCan";
 import { useMe } from "../../shared/auth/useMe";
-import { useHrActionsQuery } from "../../shared/hr/hooks";
+import { HRAction, useHrActionsQuery, useUpdateHrActionMutation } from "../../shared/hr/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import "../DashboardPage.css";
 import "./HRActionsPage.css";
@@ -39,11 +39,23 @@ type Content = {
     value: string;
     reason: string;
     period: string;
+    manage: string;
+    edit: string;
     emptyTitle: string;
     emptySubtitle: string;
     loading: string;
   };
-  actionTypes: Record<string, string>;
+  modal: {
+    title: string;
+    actionType: string;
+    value: string;
+    reason: string;
+    periodStart: string;
+    periodEnd: string;
+    cancel: string;
+    save: string;
+  };
+  actionTypes: Record<string, string>;  
   userFallback: string;
   nav: {
     dashboard: string;
@@ -112,10 +124,22 @@ const contentMap: Record<Language, Content> = {
       value: "Value",
       reason: "Reason",
       period: "Period",
+      manage: "Manage",
+      edit: "Edit",
       emptyTitle: "No actions recorded yet",
       emptySubtitle: "New warnings and deductions will appear here.",
       loading: "Loading actions...",
     },
+    modal: {
+      title: "Edit action",
+      actionType: "Action type",
+      value: "Value",
+      reason: "Reason",
+      periodStart: "Period start",
+      periodEnd: "Period end",
+      cancel: "Cancel",
+      save: "Save changes",
+    },    
     actionTypes: {
       warning: "Warning",
       deduction: "Deduction",
@@ -186,10 +210,22 @@ const contentMap: Record<Language, Content> = {
       value: "القيمة",
       reason: "السبب",
       period: "الفترة",
+      manage: "إدارة",
+      edit: "تعديل",
       emptyTitle: "لا توجد إجراءات حتى الآن",
       emptySubtitle: "ستظهر التنبيهات والخصومات الجديدة هنا.",
       loading: "جاري تحميل الإجراءات...",
     },
+    modal: {
+      title: "تعديل الإجراء",
+      actionType: "نوع الإجراء",
+      value: "القيمة",
+      reason: "السبب",
+      periodStart: "بداية الفترة",
+      periodEnd: "نهاية الفترة",
+      cancel: "إلغاء",
+      save: "حفظ التعديلات",
+    },    
     actionTypes: {
       warning: "تنبيه",
       deduction: "خصم",
@@ -251,7 +287,17 @@ export function HRActionsPage() {
   const location = useLocation();
   const { data: meData, isLoading: isProfileLoading, isError } = useMe();
   const actionsQuery = useHrActionsQuery();
+  const updateActionMutation = useUpdateHrActionMutation();
   const [searchTerm, setSearchTerm] = useState("");
+  const [editingAction, setEditingAction] = useState<HRAction | null>(null);
+  const [formState, setFormState] = useState({
+    action_type: "warning" as HRAction["action_type"],
+    value: "",
+    reason: "",
+    period_start: "",
+    period_end: "",
+  });
+  const [errorMessage, setErrorMessage] = useState("");  
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
       typeof window !== "undefined"
@@ -313,6 +359,57 @@ export function HRActionsPage() {
       deductions: deductions.length,
     };
   }, [actions]);
+
+  useEffect(() => {
+    if (!editingAction) {
+      setFormState({
+        action_type: "warning",
+        value: "",
+        reason: "",
+        period_start: "",
+        period_end: "",
+      });
+      return;
+    }
+    setFormState({
+      action_type: editingAction.action_type,
+      value: editingAction.value ?? "",
+      reason: editingAction.reason ?? "",
+      period_start: editingAction.period_start ?? "",
+      period_end: editingAction.period_end ?? "",
+    });
+    setErrorMessage("");
+  }, [editingAction]);
+
+  function handleOpenEdit(action: HRAction) {
+    setEditingAction(action);
+  }
+
+  function handleCloseEdit() {
+    setEditingAction(null);
+    setErrorMessage("");
+  }
+
+  async function handleSubmitEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingAction) return;
+    try {
+      await updateActionMutation.mutateAsync({
+        id: editingAction.id,
+        data: {
+          action_type: formState.action_type,
+          value: formState.value,
+          reason: formState.reason,
+          period_start: formState.period_start || null,
+          period_end: formState.period_end || null,
+        },
+      });
+      await actionsQuery.refetch();
+      handleCloseEdit();
+    } catch (error) {
+      setErrorMessage(String(error));
+    }
+  }
 
   const navLinks = useMemo(
     () => [
@@ -657,9 +754,10 @@ export function HRActionsPage() {
                       <th>{content.table.value}</th>
                       <th>{content.table.reason}</th>
                       <th>{content.table.period}</th>
+                      <th>{content.table.manage}</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody>                    
                     {filteredActions.map((action) => (
                       <tr key={action.id}>
                         <td>
@@ -686,10 +784,19 @@ export function HRActionsPage() {
                             ? `${action.period_start} → ${action.period_end}`
                             : "-"}
                         </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => handleOpenEdit(action)}
+                          >
+                            {content.table.edit}
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table>                
               </div>
             )}
           </section>
@@ -697,6 +804,93 @@ export function HRActionsPage() {
       </div>
 
       <footer className="dashboard-footer">{content.subtitle}</footer>
+
+      {editingAction && (
+        <div className="hr-actions-modal" role="dialog" aria-modal="true">
+          <div className="hr-actions-modal__backdrop" onClick={handleCloseEdit} />
+          <div className="hr-actions-modal__content">
+            <div className="hr-actions-modal__header">
+              <h3>{content.modal.title}</h3>
+              <button type="button" className="ghost-button" onClick={handleCloseEdit}>
+                ✕
+              </button>
+            </div>
+            <form className="hr-actions-form" onSubmit={handleSubmitEdit}>
+              <label className="form-field">
+                {content.modal.actionType}
+                <select
+                  value={formState.action_type}
+                  onChange={(event) =>
+                    setFormState((prev) => ({
+                      ...prev,
+                      action_type: event.target.value as HRAction["action_type"],
+                    }))
+                  }
+                >
+                  <option value="warning">{content.actionTypes.warning}</option>
+                  <option value="deduction">{content.actionTypes.deduction}</option>
+                </select>
+              </label>
+              <label className="form-field">
+                {content.modal.value}
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formState.value}
+                  onChange={(event) =>
+                    setFormState((prev) => ({ ...prev, value: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="form-field">
+                {content.modal.reason}
+                <textarea
+                  rows={3}
+                  value={formState.reason}
+                  onChange={(event) =>
+                    setFormState((prev) => ({ ...prev, reason: event.target.value }))
+                  }
+                />
+              </label>
+              <div className="hr-actions-form__row">
+                <label className="form-field">
+                  {content.modal.periodStart}
+                  <input
+                    type="date"
+                    value={formState.period_start}
+                    onChange={(event) =>
+                      setFormState((prev) => ({ ...prev, period_start: event.target.value }))
+                    }
+                  />
+                </label>
+                <label className="form-field">
+                  {content.modal.periodEnd}
+                  <input
+                    type="date"
+                    value={formState.period_end}
+                    onChange={(event) =>
+                      setFormState((prev) => ({ ...prev, period_end: event.target.value }))
+                    }
+                  />
+                </label>
+              </div>
+              {errorMessage && <p className="form-error">{errorMessage}</p>}
+              <div className="hr-actions-form__actions">
+                <button type="button" className="ghost-button" onClick={handleCloseEdit}>
+                  {content.modal.cancel}
+                </button>
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={updateActionMutation.isPending}
+                >
+                  {content.modal.save}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
