@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button, Group, Modal, NumberInput, Stack, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
 import { z } from "zod";
 import axios, { AxiosError } from "axios";
@@ -726,7 +726,7 @@ export function EmployeeProfilePage() {
         department_id: employeeQuery.data.department ? String(employeeQuery.data.department.id) : null,
         job_title_id: employeeQuery.data.job_title ? String(employeeQuery.data.job_title.id) : null,
         manager_id: employeeQuery.data.manager ? String(employeeQuery.data.manager.id) : null,
-        user_id: employeeQuery.data.user ? String(employeeQuery.data.user.id) : "",
+        user_id: employeeQuery.data.user ? String(employeeQuery.data.user) : "",        
         shift_id: employeeQuery.data.shift ? String(employeeQuery.data.shift.id) : null,
       });
       return;
@@ -996,8 +996,16 @@ export function EmployeeProfilePage() {
   const departmentOptions = departmentsQuery.data ?? [];
   const jobTitleOptions = jobTitlesQuery.data ?? [];
   const shiftOptions = shiftsQuery.data ?? [];  
-  const salaryTypeValue = salaryForm.watch("salary_type");
-  const basicSalaryValue = Number(salaryForm.watch("basic_salary") || 0);
+  const salaryTypeValue = useWatch({
+    control: salaryForm.control,
+    name: "salary_type",
+  });
+  const basicSalaryValue = Number(
+    useWatch({
+      control: salaryForm.control,
+      name: "basic_salary",
+    }) || 0
+  );  
   const dailyRateValue = resolveDailyRate(salaryTypeValue, basicSalaryValue);
   const dailyRateLabel = dailyRateValue === null ? "—" : dailyRateValue.toFixed(2);
   const bonusTotal = adjustmentTotals.bonuses;

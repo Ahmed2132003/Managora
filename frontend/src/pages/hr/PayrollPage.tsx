@@ -603,7 +603,7 @@ export function PayrollPage() {
     adjustmentType,
     availableAdjustmentPeriods,
     editingComponentId,
-    selectedPeriod?.id,
+    selectedPeriod,    
   ]);
 
   const attendanceQuery = useAttendanceRecordsQuery(
