@@ -657,16 +657,15 @@ export function EmployeeProfilePage() {
     );
   }, [payrollPeriodsQuery.data, salaryStructure]);
 
-  useEffect(() => {
-    if (!availableAdjustmentPeriods.length) return;
+  const resolvedAdjustmentPeriodId = useMemo(() => {
+    if (!availableAdjustmentPeriods.length) return null;
     if (adjustmentPeriodId) {
       const exists = availableAdjustmentPeriods.some(
         (period) => period.id === adjustmentPeriodId
       );
-      if (!exists) setAdjustmentPeriodId(null);
-      return;
+      if (exists) return adjustmentPeriodId;
     }
-    setAdjustmentPeriodId(availableAdjustmentPeriods[0].id);
+    return availableAdjustmentPeriods[0].id;
   }, [adjustmentPeriodId, availableAdjustmentPeriods]);
 
   const createEmployeeMutation = useCreateEmployee();
@@ -1078,7 +1077,7 @@ export function EmployeeProfilePage() {
       return;
     }
 
-    if (!adjustmentPeriodId) {
+    if (!resolvedAdjustmentPeriodId) {      
       notifications.show({
         title: "Missing info",
         message: "يرجى اختيار فترة الرواتب.",
@@ -1093,7 +1092,7 @@ export function EmployeeProfilePage() {
     try {
       await createSalaryComponentMutation.mutateAsync({
         salary_structure: salaryStructure.id,
-        payroll_period: adjustmentPeriodId,
+        payroll_period: resolvedAdjustmentPeriodId,        
         name: adjustmentLabel,
         type: adjustmentType === "bonus" ? "earning" : "deduction",
         amount: adjustmentAmount,
