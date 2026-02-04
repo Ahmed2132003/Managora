@@ -378,10 +378,32 @@ export function HRActionsPage() {
     }
     return payrollPeriods.filter((period) => period.period_type === payrollPeriodType);
   }, [payrollPeriodType, payrollPeriods]);  
+  const derivedPayrollPeriodId = useMemo(() => {
+    if (!editingAction) {
+      return formState.payroll_period_id;
+    }
+    if (filteredPayrollPeriods.length === 0) {
+      return "";
+    }
+    if (
+      formState.payroll_period_id &&
+      filteredPayrollPeriods.some(
+        (period) => String(period.id) === formState.payroll_period_id
+      )
+    ) {
+      return formState.payroll_period_id;
+    }
+    const matched = filteredPayrollPeriods.find(
+      (period) =>
+        period.start_date === editingAction.period_start &&
+        period.end_date === editingAction.period_end
+    );
+    return String(matched?.id ?? filteredPayrollPeriods[0].id);
+  }, [editingAction, filteredPayrollPeriods, formState.payroll_period_id]);
   const filteredActions = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) {
-      return actions;
+      return actions;      
     }
     return actions.filter((action) => {
       return (
@@ -420,46 +442,14 @@ export function HRActionsPage() {
     setErrorMessage("");
     setFormState(defaultFormState);
   }
-
-  useEffect(() => {
-    if (!editingAction) {
-      return;
-    }
-    if (filteredPayrollPeriods.length === 0) {
-      setFormState((prev) => ({
-        ...prev,
-        payroll_period_id: "",
-      }));
-      return;
-    }
-    setFormState((prev) => {
-      const existing =
-        prev.payroll_period_id &&
-        filteredPayrollPeriods.some(
-          (period) => String(period.id) === prev.payroll_period_id
-        );
-      if (existing) {
-        return prev;
-      }
-      const matched = filteredPayrollPeriods.find(
-        (period) =>
-          period.start_date === editingAction.period_start &&
-          period.end_date === editingAction.period_end
-      );
-      return {
-        ...prev,
-        payroll_period_id: String(matched?.id ?? filteredPayrollPeriods[0].id),
-      };
-    });
-  }, [editingAction, filteredPayrollPeriods]);
-  
+    
   async function handleSubmitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingAction) return;
     const selectedPeriod =
       filteredPayrollPeriods.find(
-        (period) => String(period.id) === formState.payroll_period_id
-      ) ?? null;
+        (period) => String(period.id) === derivedPayrollPeriodId        
+      ) ?? null;  
     try {
       await updateActionMutation.mutateAsync({
         id: editingAction.id,
@@ -922,7 +912,7 @@ export function HRActionsPage() {
               <label className="form-field">
                 {content.modal.payrollPeriod}
                 <select
-                  value={formState.payroll_period_id}
+                  value={derivedPayrollPeriodId}                  
                   onChange={(event) =>
                     setFormState((prev) => ({
                       ...prev,
