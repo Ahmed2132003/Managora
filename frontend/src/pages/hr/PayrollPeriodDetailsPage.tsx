@@ -132,9 +132,10 @@ function buildRunSummary(
     .reduce((sum, line) => sum + parseAmount(line.amount), 0);
   const deductions = lines
     .filter(
-      (line) => line.type === "deduction" && line.code.toUpperCase().startsWith("COMP-")
+      (line) =>
+        line.type === "deduction" && !line.code.toUpperCase().startsWith("LOAN-")
     )
-    .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+    .reduce((sum, line) => sum + parseAmount(line.amount), 0);    
   const advances = lines
     .filter(
       (line) => line.type === "deduction" && line.code.toUpperCase().startsWith("LOAN-")

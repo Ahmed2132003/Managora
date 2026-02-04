@@ -767,14 +767,27 @@ class HRActionManageSerializer(serializers.ModelSerializer):
         )
 
     def validate(self, attrs):
-        period_start = attrs.get("period_start")
-        period_end = attrs.get("period_end")
+        instance = getattr(self, "instance", None)
+        period_start = attrs.get(
+            "period_start", instance.period_start if instance else None
+        )
+        period_end = attrs.get("period_end", instance.period_end if instance else None)
         if period_start and period_end and period_start > period_end:
             raise serializers.ValidationError(
                 {"period_end": "Period end must be after the start date."}
             )
+        if instance and period_start and period_end:
+            period_exists = PayrollPeriod.objects.filter(
+                company=instance.company,
+                start_date=period_start,
+                end_date=period_end,
+            ).exists()
+            if not period_exists:
+                raise serializers.ValidationError(
+                    {"period_start": "Selected period does not exist for this company."}
+                )
         return attrs
-
+    
     def update(self, instance, validated_data):
         action = super().update(instance, validated_data)
         component_name = f"HR action deduction: {action.rule.name} (#{action.id})"
