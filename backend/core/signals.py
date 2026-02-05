@@ -4,6 +4,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any
 
+from django.db.models.fields.files import FieldFile
 from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 from django.forms.models import model_to_dict
@@ -27,12 +28,13 @@ def _serialize_value(value: Any) -> Any:
         return value.isoformat()
     if isinstance(value, Decimal):
         return str(value)
+    if isinstance(value, FieldFile):
+        return value.name or ""
     if isinstance(value, dict):
         return {key: _serialize_value(val) for key, val in value.items()}
     if isinstance(value, list):
         return [_serialize_value(item) for item in value]
     return value
-
 
 def _serialize_instance(instance) -> dict[str, Any]:
     data = model_to_dict(instance)
