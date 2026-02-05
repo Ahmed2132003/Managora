@@ -100,24 +100,36 @@ def _build_run_summary(payroll_run, lines):
         if line.type == "earning"
         and (line.code or "").upper().startswith("COMM-")
     )
-    deductions = _parse_decimal(payroll_run.deductions_total)
+    deductions = sum(
+        _parse_decimal(line.amount)
+        for line in lines
+        if line.type == "deduction"
+        and not (line.code or "").upper().startswith("LOAN-")
+    )    
     advances = sum(
         _parse_decimal(line.amount)
         for line in lines
         if line.type == "deduction"
         and (line.code or "").upper().startswith("LOAN-")
     )
-    payable_total = _parse_decimal(payroll_run.net_total)
+    payable_total = (
+        _parse_decimal(present_days) * daily_rate
+        + bonuses
+        + commissions
+        - deductions
+        - advances
+    )
     return {
         "present_days": present_days,
         "absent_days": absent_days,
         "late_minutes": late_minutes,
         "bonuses": bonuses,
+        "commissions": commissions,
         "deductions": deductions,
         "advances": advances,
+        "daily_rate": daily_rate,
         "payable_total": payable_total,
     }
-
 
 def render_payslip_pdf(payroll_run, manager_name: str = "-", hr_name: str = "-"):
     buffer = BytesIO()
@@ -147,8 +159,8 @@ def render_payslip_pdf(payroll_run, manager_name: str = "-", hr_name: str = "-")
     all_lines = list(payroll_run.lines.all())
     basic_display = _get_basic_display_amount(all_lines, _parse_decimal(payroll_run.earnings_total))
     summary = _build_run_summary(payroll_run, all_lines) or {}
-    payable_total = _parse_decimal(payroll_run.net_total)
-    
+    payable_total = summary.get("payable_total", _parse_decimal(payroll_run.net_total))
+        
     pdf.setFont("Helvetica", 10)
     pdf.drawString(20 * mm, y, "Basic")
     pdf.setFont("Helvetica-Bold", 10)
