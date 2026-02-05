@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
@@ -452,11 +453,45 @@ export function CollectionsPage() {
     setFormError(null);
   };
 
+  const getPaymentErrorMessage = (error: unknown) => {
+    if (axios.isAxiosError(error)) {
+      const data = error.response?.data;
+      if (!data) {
+        return error.message;
+      }
+      if (typeof data === "string") {
+        return data;
+      }
+      if (typeof data.detail === "string") {
+        return data.detail;
+      }
+      if (Array.isArray(data)) {
+        return data.join(" ");
+      }
+      if (typeof data === "object") {
+        const messages = Object.values(data).flatMap((value) => {
+          if (Array.isArray(value)) {
+            return value.map((item) => String(item));
+          }
+          return [String(value)];
+        });
+        if (messages.length) {
+          return messages.join(" ");
+        }
+      }
+      return error.message;
+    }
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return content.modal.error;
+  };
+
   const submitPayment = useMutation({
     mutationFn: async () => {
       if (!invoiceId || !paymentDate || !amount || !cashAccountId) {
         throw new Error(content.modal.error);
-      }
+      }      
       const invoice = (invoicesQuery.data ?? []).find(
         (item) => item.id === Number(invoiceId)
       );
@@ -480,14 +515,9 @@ export function CollectionsPage() {
       setModalOpen(false);
     },
     onError: (error) => {
-      if (error instanceof Error) {
-        setFormError(error.message);
-      } else {
-        setFormError(content.modal.error);
-      }
+      setFormError(getPaymentErrorMessage(error));
     },
   });
-
   const handleOpenModal = (selectedInvoiceId?: number) => {
     setInvoiceId(selectedInvoiceId ? String(selectedInvoiceId) : null);
     setPaymentDate(new Date().toISOString().slice(0, 10));
