@@ -2,7 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
 from accounting.models import (
@@ -233,13 +233,26 @@ class InvoiceSerializer(serializers.ModelSerializer):
         request = self.context["request"]
         company = request.user.company
         customer = attrs.get("customer") or getattr(self.instance, "customer", None)
+        invoice_number = attrs.get("invoice_number") or getattr(
+            self.instance, "invoice_number", None
+        )
         if customer and customer.company_id != company.id:
             raise serializers.ValidationError("Customer must belong to the same company.")
+        if invoice_number:
+            existing_invoice = Invoice.objects.filter(
+                company=company, invoice_number=invoice_number
+            )
+            if self.instance:
+                existing_invoice = existing_invoice.exclude(pk=self.instance.pk)
+            if existing_invoice.exists():
+                raise serializers.ValidationError(
+                    {"invoice_number": "Invoice number already exists for this company."}
+                )
 
         if not self.instance and not attrs.get("lines"):
             raise serializers.ValidationError({"lines": "At least one line is required."})
         if "lines" in attrs and not attrs.get("lines"):
-            raise serializers.ValidationError({"lines": "At least one line is required."})
+            raise serializers.ValidationError({"lines": "At least one line is required."})        
         return attrs
 
     def _calculate_totals(self, lines_data, tax_amount):
@@ -277,17 +290,22 @@ class InvoiceSerializer(serializers.ModelSerializer):
         subtotal, total_amount = self._calculate_totals(lines_data, tax_amount)
         due_date = self._get_due_date(issue_date, customer)
 
-        invoice = Invoice.objects.create(
-            company=self.context["request"].user.company,
-            created_by=self.context["request"].user,
-            due_date=due_date,
-            subtotal=subtotal,
-            total_amount=total_amount,
-            **validated_data,
-        )
+        try:
+            invoice = Invoice.objects.create(
+                company=self.context["request"].user.company,
+                created_by=self.context["request"].user,
+                due_date=due_date,
+                subtotal=subtotal,
+                total_amount=total_amount,
+                **validated_data,
+            )
+        except IntegrityError as exc:
+            raise serializers.ValidationError(
+                {"invoice_number": "Invoice number already exists for this company."}
+            ) from exc
         self._create_lines(invoice, lines_data)
         return invoice
-
+    
     def update(self, instance, validated_data):
         lines_data = validated_data.pop("lines", None)
         tax_amount = validated_data.get("tax_amount", instance.tax_amount)
