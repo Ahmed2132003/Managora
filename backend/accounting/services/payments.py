@@ -1,27 +1,18 @@
 from decimal import Decimal
 
-from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
 
 from accounting.models import AccountMapping, Invoice, JournalEntry, Payment
+from accounting.services.mappings import ensure_mapping_account
 from accounting.services.journal import post_journal_entry
-
-
-def _get_mapping_account(company, key):
-    mapping = AccountMapping.objects.filter(company=company, key=key).select_related(
-        "account"
-    ).first()
-    if not mapping or not mapping.account_id:
-        raise ValidationError(f"Missing account mapping for {key}.")
-    return mapping.account
 
 
 def _update_invoice_status(invoice: Invoice):
     total_paid = (
         Payment.objects.filter(invoice=invoice)
-        .aggregate(total=Coalesce(Sum("amount"), Decimal("0")))
+        .aggregate(total=Coalesce(Sum("amount"), Decimal("0")))        
         .get("total")
         or Decimal("0")
     )
@@ -35,7 +26,7 @@ def _update_invoice_status(invoice: Invoice):
 
 
 def record_payment(payment: Payment):
-    receivable_account = _get_mapping_account(
+    receivable_account = ensure_mapping_account(        
         payment.company, AccountMapping.Key.ACCOUNTS_RECEIVABLE
     )
     memo = payment.notes or f"Payment {payment.id}"
