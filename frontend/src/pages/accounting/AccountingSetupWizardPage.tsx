@@ -51,9 +51,43 @@ type Content = {
     saveLabel: string;
     loading: string;
   };
+  manualSetup: {
+    title: string;
+    subtitle: string;
+    rolesLabel: string;
+    roles: {
+      manager: string;
+      hr: string;
+      accountant: string;
+    };
+    payrollAccountsTitle: string;
+    payrollAccountsDescription: string;
+    expenseAccountsTitle: string;
+    expenseAccountsDescription: string;
+    formTitle: string;
+    formSubtitle: string;
+    codeLabel: string;
+    codePlaceholder: string;
+    nameLabel: string;
+    namePlaceholder: string;
+    typeLabel: string;
+    createLabel: string;
+    validationTitle: string;
+    validationMessage: string;
+    successTitle: string;
+    successMessage: string;
+    errorTitle: string;
+    typeOptions: {
+      asset: string;
+      liability: string;
+      equity: string;
+      income: string;
+      expense: string;
+    };
+  };
   labels: {
     required: string;
-  };
+  };  
   userFallback: string;
   nav: {
     dashboard: string;
@@ -198,9 +232,45 @@ const contentMap: Record<Language, Content> = {
       saveLabel: "Finish setup",
       loading: "Loading mappings...",
     },
+    manualSetup: {
+      title: "Manual account setup",
+      subtitle: "Create accounts manually and control payroll and expense payment sources.",
+      rolesLabel: "Responsible roles",
+      roles: {
+        manager: "Manager",
+        hr: "HR",
+        accountant: "Accountant",
+      },
+      payrollAccountsTitle: "Payroll funding accounts",
+      payrollAccountsDescription:
+        "Define the accounts that salaries are paid from and link them to payroll mappings.",
+      expenseAccountsTitle: "Expense payment accounts",
+      expenseAccountsDescription:
+        "Define the accounts used to pay operational expenses and approvals.",
+      formTitle: "Create a new account",
+      formSubtitle: "Add accounts manually with code, name, and type.",
+      codeLabel: "Account code",
+      codePlaceholder: "e.g. 1010",
+      nameLabel: "Account name",
+      namePlaceholder: "e.g. Payroll Bank",
+      typeLabel: "Account type",
+      createLabel: "Create account",
+      validationTitle: "Missing details",
+      validationMessage: "Please enter both an account code and name.",
+      successTitle: "Account created",
+      successMessage: "The account is ready to use in mappings.",
+      errorTitle: "Account creation failed",
+      typeOptions: {
+        asset: "Asset",
+        liability: "Liability",
+        equity: "Equity",
+        income: "Income",
+        expense: "Expense",
+      },
+    },
     labels: {
       required: "Required",
-    },
+    },    
     userFallback: "Explorer",
     nav: {
       dashboard: "Dashboard",
@@ -279,9 +349,45 @@ const contentMap: Record<Language, Content> = {
       saveLabel: "إنهاء الإعداد",
       loading: "جاري تحميل الربط...",
     },
+    manualSetup: {
+      title: "إعداد الحسابات اليدوي",
+      subtitle: "أنشئ الحسابات يدويًا للتحكم في مصادر دفع الرواتب والمصروفات.",
+      rolesLabel: "الأدوار المسؤولة",
+      roles: {
+        manager: "المدير",
+        hr: "الموارد البشرية",
+        accountant: "المحاسب",
+      },
+      payrollAccountsTitle: "حسابات دفع الرواتب",
+      payrollAccountsDescription:
+        "حدد الحسابات التي تُصرف منها الرواتب وربطها بإعدادات المرتبات.",
+      expenseAccountsTitle: "حسابات دفع المصروفات",
+      expenseAccountsDescription:
+        "حدد الحسابات المستخدمة لدفع المصروفات التشغيلية والموافقات.",
+      formTitle: "إضافة حساب جديد",
+      formSubtitle: "أدخل كود الحساب والاسم والنوع لإضافته يدويًا.",
+      codeLabel: "كود الحساب",
+      codePlaceholder: "مثال: 1010",
+      nameLabel: "اسم الحساب",
+      namePlaceholder: "مثال: بنك الرواتب",
+      typeLabel: "نوع الحساب",
+      createLabel: "إنشاء الحساب",
+      validationTitle: "بيانات ناقصة",
+      validationMessage: "يرجى إدخال كود الحساب والاسم.",
+      successTitle: "تم إنشاء الحساب",
+      successMessage: "الحساب جاهز للاستخدام في الربط.",
+      errorTitle: "تعذر إنشاء الحساب",
+      typeOptions: {
+        asset: "أصل",
+        liability: "التزام",
+        equity: "حقوق الملكية",
+        income: "إيراد",
+        expense: "مصروف",
+      },
+    },
     labels: {
       required: "مطلوب",
-    },
+    },    
     userFallback: "ضيف",
     nav: {
       dashboard: "لوحة التحكم",
@@ -336,6 +442,12 @@ export function AccountingSetupWizardPage() {
   const [loadingMappings, setLoadingMappings] = useState(false);
   const [savingMappings, setSavingMappings] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [manualAccount, setManualAccount] = useState({
+    code: "",
+    name: "",
+    type: "ASSET",
+  });
+  const [creatingAccount, setCreatingAccount] = useState(false);  
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
       typeof window !== "undefined"
@@ -375,6 +487,17 @@ export function AccountingSetupWizardPage() {
     value: String(account.id),
     label: `${account.code} - ${account.name}`,
   }));
+
+  const accountTypeOptions = useMemo(
+    () => [
+      { value: "ASSET", label: content.manualSetup.typeOptions.asset },
+      { value: "LIABILITY", label: content.manualSetup.typeOptions.liability },
+      { value: "EQUITY", label: content.manualSetup.typeOptions.equity },
+      { value: "INCOME", label: content.manualSetup.typeOptions.income },
+      { value: "EXPENSE", label: content.manualSetup.typeOptions.expense },
+    ],
+    [content.manualSetup.typeOptions]
+  );
 
   const filteredTemplates = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -479,6 +602,45 @@ export function AccountingSetupWizardPage() {
       });
     } finally {
       setSavingMappings(false);
+    }
+  };
+
+  const handleCreateAccount = async () => {
+    const trimmedCode = manualAccount.code.trim();
+    const trimmedName = manualAccount.name.trim();
+    if (!trimmedCode || !trimmedName) {
+      notifications.show({
+        title: content.manualSetup.validationTitle,
+        message: content.manualSetup.validationMessage,
+        color: "red",
+      });
+      return;
+    }
+    setCreatingAccount(true);
+    try {
+      await http.post(endpoints.accounting.accounts, {
+        code: trimmedCode,
+        name: trimmedName,
+        type: manualAccount.type,
+      });
+      notifications.show({
+        title: content.manualSetup.successTitle,
+        message: content.manualSetup.successMessage,
+      });
+      setManualAccount({
+        code: "",
+        name: "",
+        type: "ASSET",
+      });
+      await loadMappings();
+    } catch (err) {
+      notifications.show({
+        title: content.manualSetup.errorTitle,
+        message: String(err),
+        color: "red",
+      });
+    } finally {
+      setCreatingAccount(false);
     }
   };
 
@@ -876,10 +1038,92 @@ export function AccountingSetupWizardPage() {
             )}
           </section>
 
+          <section className="panel accounting-setup-panel manual-setup-panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.manualSetup.title}</h2>
+                <p>{content.manualSetup.subtitle}</p>
+              </div>
+            </div>
+            <div className="manual-setup-grid">
+              <div className="manual-setup-card">
+                <span className="manual-setup-label">{content.manualSetup.rolesLabel}</span>
+                <div className="manual-setup-chips">
+                  <span className="pill">{content.manualSetup.roles.manager}</span>
+                  <span className="pill pill--accent">{content.manualSetup.roles.hr}</span>
+                  <span className="pill">{content.manualSetup.roles.accountant}</span>
+                </div>
+              </div>
+              <div className="manual-setup-card">
+                <h3>{content.manualSetup.payrollAccountsTitle}</h3>
+                <p>{content.manualSetup.payrollAccountsDescription}</p>
+              </div>
+              <div className="manual-setup-card">
+                <h3>{content.manualSetup.expenseAccountsTitle}</h3>
+                <p>{content.manualSetup.expenseAccountsDescription}</p>
+              </div>
+              <div className="manual-setup-card manual-setup-card--form">
+                <div>
+                  <h3>{content.manualSetup.formTitle}</h3>
+                  <p>{content.manualSetup.formSubtitle}</p>
+                </div>
+                <div className="manual-setup-form">
+                  <label className="filter-field">
+                    <span>{content.manualSetup.codeLabel}</span>
+                    <input
+                      type="text"
+                      placeholder={content.manualSetup.codePlaceholder}
+                      value={manualAccount.code}
+                      onChange={(event) =>
+                        setManualAccount((prev) => ({ ...prev, code: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="filter-field">
+                    <span>{content.manualSetup.nameLabel}</span>
+                    <input
+                      type="text"
+                      placeholder={content.manualSetup.namePlaceholder}
+                      value={manualAccount.name}
+                      onChange={(event) =>
+                        setManualAccount((prev) => ({ ...prev, name: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="filter-field">
+                    <span>{content.manualSetup.typeLabel}</span>
+                    <select
+                      value={manualAccount.type}
+                      onChange={(event) =>
+                        setManualAccount((prev) => ({ ...prev, type: event.target.value }))
+                      }
+                    >
+                      {accountTypeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="manual-setup-actions">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={handleCreateAccount}
+                    disabled={creatingAccount}
+                  >
+                    {creatingAccount ? "..." : content.manualSetup.createLabel}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section className="panel accounting-setup-panel">
             <div className="panel__header">
               <div>
-                <h2>{content.mappings.title}</h2>
+                <h2>{content.mappings.title}</h2>                
                 <p>{content.mappings.subtitle}</p>
               </div>
               <span className="pill">
