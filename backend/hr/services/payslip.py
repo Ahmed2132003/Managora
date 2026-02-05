@@ -15,7 +15,21 @@ def _format_amount(value: Decimal | None) -> str:
     return f"{value:.2f}"
 
 
-def _parse_decimal(value) -> Decimal:
+def _safe_text(value: str | None, fallback: str = "-") -> str:
+    if not value:
+        return fallback
+    return value if value.isascii() else fallback
+
+
+def _safe_line_label(line) -> str:
+    name = _safe_text(line.name, "")
+    if name:
+        return name
+    code = _safe_text(line.code, "")
+    return code or "Line"
+
+
+def _parse_decimal(value) -> Decimal:    
     if isinstance(value, Decimal):
         return value
     if value is None:
@@ -86,22 +100,14 @@ def _build_run_summary(payroll_run, lines):
         if line.type == "earning"
         and (line.code or "").upper().startswith("COMM-")
     )
-    deductions = sum(
-        _parse_decimal(line.amount)
-        for line in lines
-        if line.type == "deduction"
-        and (line.code or "").upper().startswith("COMP-")
-    )
+    deductions = _parse_decimal(payroll_run.deductions_total)
     advances = sum(
         _parse_decimal(line.amount)
         for line in lines
         if line.type == "deduction"
         and (line.code or "").upper().startswith("LOAN-")
     )
-    payable_total = (
-        Decimal(present_days) * daily_rate + bonuses + commissions - deductions - advances
-    )
-
+    payable_total = _parse_decimal(payroll_run.net_total)
     return {
         "present_days": present_days,
         "absent_days": absent_days,
@@ -118,15 +124,20 @@ def render_payslip_pdf(payroll_run, manager_name: str = "-", hr_name: str = "-")
     pdf = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
 
+    company_name = _safe_text(payroll_run.company.name, "Company")
+    employee_name = _safe_text(payroll_run.employee.full_name, payroll_run.employee.employee_code)
+    manager_display = _safe_text(manager_name)
+    hr_display = _safe_text(hr_name)
+
     y = height - 20 * mm
     pdf.setFont("Helvetica-Bold", 14)
-    pdf.drawString(20 * mm, y, payroll_run.company.name)
+    pdf.drawString(20 * mm, y, company_name)
     y -= 8 * mm
 
     pdf.setFont("Helvetica", 10)
-    pdf.drawString(20 * mm, y, f"Employee: {payroll_run.employee.full_name}")
+    pdf.drawString(20 * mm, y, f"Employee: {employee_name}")
     y -= 5 * mm
-    pdf.drawString(20 * mm, y, f"Employee Code: {payroll_run.employee.employee_code}")
+    pdf.drawString(20 * mm, y, f"Employee Code: {payroll_run.employee.employee_code}")    
     y -= 5 * mm
     period = payroll_run.period
     period_label = f"{period.start_date} to {period.end_date}"
@@ -136,8 +147,8 @@ def render_payslip_pdf(payroll_run, manager_name: str = "-", hr_name: str = "-")
     all_lines = list(payroll_run.lines.all())
     basic_display = _get_basic_display_amount(all_lines, _parse_decimal(payroll_run.earnings_total))
     summary = _build_run_summary(payroll_run, all_lines) or {}
-    payable_total = summary.get("payable_total", _parse_decimal(payroll_run.net_total))
-
+    payable_total = _parse_decimal(payroll_run.net_total)
+    
     pdf.setFont("Helvetica", 10)
     pdf.drawString(20 * mm, y, "Basic")
     pdf.setFont("Helvetica-Bold", 10)
@@ -181,7 +192,7 @@ def render_payslip_pdf(payroll_run, manager_name: str = "-", hr_name: str = "-")
     y -= 5 * mm
     pdf.setFont("Helvetica", 10)
     for line in all_lines:
-        pdf.drawString(22 * mm, y, line.name)
+        pdf.drawString(22 * mm, y, _safe_line_label(line))        
         pdf.drawString(110 * mm, y, str(line.type))
         pdf.drawRightString(width - 20 * mm, y, f"{line.amount:.2f}")
         y -= 5 * mm
@@ -199,12 +210,12 @@ def render_payslip_pdf(payroll_run, manager_name: str = "-", hr_name: str = "-")
     y -= 10 * mm
 
     pdf.setFont("Helvetica", 10)
-    pdf.drawString(20 * mm, y, f"Company: {payroll_run.company.name}")
+    pdf.drawString(20 * mm, y, f"Company: {company_name}")
     y -= 5 * mm
-    pdf.drawString(20 * mm, y, f"Manager: {manager_name}")
+    pdf.drawString(20 * mm, y, f"Manager: {manager_display}")
     y -= 5 * mm
-    pdf.drawString(20 * mm, y, f"HR: {hr_name}")
-
+    pdf.drawString(20 * mm, y, f"HR: {hr_display}")
+    
     pdf.save()
     buffer.seek(0)
     return buffer.getvalue()

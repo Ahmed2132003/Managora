@@ -19,8 +19,9 @@ import {
   useCreateLoanAdvance,
   useAttendanceRecordsQuery,
   useCommissionApprovalsInboxQuery,
+  useHrActionsQuery,
 } from "../../shared/hr/hooks";
-import type { PayrollPeriod, SalaryStructure, SalaryType } from "../../shared/hr/hooks";
+import type { HRAction, PayrollPeriod, SalaryStructure, SalaryType } from "../../shared/hr/hooks";
 import { DashboardShell } from "../DashboardShell";
 import "../DashboardPage.css";
 import "./PayrollPage.css";
@@ -109,10 +110,11 @@ type PageContent = {
     missingPeriod: string;
     listTitle: string;
     listEmpty: string;
+    hrActionLabel: string;
     columns: {
       name: string;
       type: string;
-      amount: string;
+      amount: string;      
       period: string;
       createdAt: string;
       actions: string;
@@ -212,9 +214,10 @@ const contentMap: Record<Language, PageContent> = {
       missingPeriod: "Please select a payroll period.",
       listTitle: "Recorded bonuses & deductions",
       listEmpty: "No bonuses or deductions yet.",
+      hrActionLabel: "HR action",
       columns: {
         name: "Label",
-        type: "Type",
+        type: "Type",        
         amount: "Amount",
         period: "Period",
         createdAt: "Created",
@@ -313,9 +316,10 @@ const contentMap: Record<Language, PageContent> = {
       missingPeriod: "يرجى اختيار فترة الرواتب.",
       listTitle: "المكافآت والخصومات المسجلة",
       listEmpty: "لا توجد مكافآت أو خصومات بعد.",
+      hrActionLabel: "إجراء موارد بشرية",
       columns: {
         name: "الوصف",
-        type: "النوع",
+        type: "النوع",        
         amount: "القيمة",
         period: "الفترة",
         createdAt: "التاريخ",
@@ -434,8 +438,29 @@ function isComponentInRange(
   return created >= start && created <= end;
 }
 
+function isHrActionInRange(action: HRAction, dateFrom: string, dateTo: string) {
+  const rangeStart = new Date(dateFrom);
+  const rangeEnd = new Date(dateTo);
+  if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) {
+    return false;
+  }
+  const periodStart = action.period_start ? new Date(action.period_start) : null;
+  const periodEnd = action.period_end ? new Date(action.period_end) : null;
+  if (periodStart && periodEnd) {
+    if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime())) {
+      return false;
+    }
+    return periodStart <= rangeEnd && periodEnd >= rangeStart;
+  }
+  const created = new Date(action.created_at);
+  if (Number.isNaN(created.getTime())) {
+    return false;
+  }
+  return created >= rangeStart && created <= rangeEnd;
+}
+
 export function PayrollPage() {  
-  const navigate = useNavigate();
+  const navigate = useNavigate();  
   const [month, setMonth] = useState<string | null>(null);
   const [year, setYear] = useState<string | null>(null);
   const [periodType, setPeriodType] = useState<PayrollPeriod["period_type"]>("monthly");
@@ -619,6 +644,9 @@ export function PayrollPage() {
     salaryStructureId: selectedSalaryStructure?.id ?? null,
     enabled: Boolean(selectedSalaryStructure?.id),
   });
+  const hrActionsQuery = useHrActionsQuery(
+    selectedEmployeeId ? { employeeId: selectedEmployeeId } : undefined
+  );
 
   const loanAdvancesQuery = useLoanAdvancesQuery({
     employeeId: selectedEmployeeId,
@@ -885,10 +913,15 @@ export function PayrollPage() {
     const bonuses = relevantComponents
       .filter((component) => component.type === "earning")
       .reduce((sum, component) => sum + Number(component.amount || 0), 0);
-    const deductions = relevantComponents
+    const componentDeductions = relevantComponents
       .filter((component) => component.type === "deduction")
-      .reduce((sum, component) => sum + Number(component.amount || 0), 0);      
-    const advances = (loanAdvancesQuery.data ?? []).reduce((sum, loan) => {
+      .reduce((sum, component) => sum + Number(component.amount || 0), 0);
+    const hrActionDeductions = (hrActionsQuery.data ?? [])
+      .filter((action) => action.action_type === "deduction")
+      .filter((action) => isHrActionInRange(action, periodRange.dateFrom, periodRange.dateTo))
+      .reduce((sum, action) => sum + Number(action.value || 0), 0);
+    const deductions = componentDeductions + hrActionDeductions;
+    const advances = (loanAdvancesQuery.data ?? []).reduce((sum, loan) => {      
       if (
         loan.type === "advance" &&
         (loan.start_date < periodRange.dateFrom || loan.start_date > periodRange.dateTo)
@@ -924,9 +957,10 @@ export function PayrollPage() {
   }, [
     attendanceQuery.data,
     commissionQuery.data,
+    hrActionsQuery.data,
     loanAdvancesQuery.data,
     periodRange.dateFrom,
-    periodRange.dateTo,
+    periodRange.dateTo,    
     periodRange.days,    
     salaryComponentsQuery.data,
     selectedPeriod?.id,
@@ -996,7 +1030,30 @@ export function PayrollPage() {
             </tr>
           );
         });
-        const employeeRows = (employeesQuery.data ?? []).map((employee) => {
+        const hrActionRows = (hrActionsQuery.data ?? [])
+          .filter((action) => action.action_type === "deduction")
+          .map((action) => {
+            const matchedPeriod = periods.find(
+              (period) =>
+                period.start_date === action.period_start &&
+                period.end_date === action.period_end
+            );
+            const periodLabel = matchedPeriod ? formatPeriodLabel(matchedPeriod) : "—";
+            return (
+              <tr key={`hr-action-${action.id}`}>
+                <td>
+                  {content.adjustments.hrActionLabel}: {action.rule.name}
+                </td>
+                <td>{content.adjustments.deductionType}</td>
+                <td>{Number(action.value || 0).toFixed(2)}</td>
+                <td>{periodLabel}</td>
+                <td>{action.created_at.slice(0, 10)}</td>
+                <td>—</td>
+              </tr>
+            );
+          });
+        const allAdjustmentRows = [...adjustmentRows, ...hrActionRows];
+        const employeeRows = (employeesQuery.data ?? []).map((employee) => {          
           const structure = salaryStructuresByEmployee.get(employee.id) ?? null;
           const salaryTypeLabel = structure
             ? salaryTypeOptions.find((option) => option.value === structure.salary_type)?.label ??
@@ -1456,7 +1513,7 @@ export function PayrollPage() {
                 </div>
                 {salaryComponentsQuery.isLoading ? (
                   <div className="payroll-state">Loading...</div>
-                ) : adjustmentRows.length === 0 ? (
+                ) : allAdjustmentRows.length === 0 ? (                  
                   <div className="payroll-state">{content.adjustments.listEmpty}</div>
                 ) : (
                   <table className="payroll-table">
@@ -1470,7 +1527,7 @@ export function PayrollPage() {
                         <th>{content.adjustments.columns.actions}</th>
                       </tr>
                     </thead>
-                    <tbody>{adjustmentRows}</tbody>
+                    <tbody>{allAdjustmentRows}</tbody>                    
                   </table>
                 )}
               </div>
