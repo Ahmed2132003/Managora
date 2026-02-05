@@ -213,5 +213,8 @@ class PermissionByActionMixin:
         permissions = [permission() for permission in self.permission_classes]
         permission_code = self.permission_map.get(getattr(self, "action", None))
         if permission_code:
-            permissions.append(HasPermission(permission_code))
+            if isinstance(permission_code, (list, tuple, set)):
+                permissions.append(HasAnyPermission(permission_code))
+            else:
+                permissions.append(HasPermission(permission_code))
         return permissions

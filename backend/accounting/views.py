@@ -481,9 +481,9 @@ class PaymentViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
     permission_map = {
-        "list": "payments.*",
-        "retrieve": "payments.*",
-        "create": "payments.*",
+        "list": ["payments.*", "accounting.*"],
+        "retrieve": ["payments.*", "accounting.*"],
+        "create": ["payments.*", "accounting.*"],        
     }
 
     def get_queryset(self):
