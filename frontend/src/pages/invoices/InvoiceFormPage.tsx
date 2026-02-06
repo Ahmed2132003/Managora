@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { isForbiddenError } from "../../shared/api/errors";
@@ -21,25 +21,52 @@ const createEmptyLine = () => ({
 
 const toDateString = (value: Date) => value.toISOString().slice(0, 10);
 
-export function InvoiceFormPage() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+type InvoiceLineItem = {
+  description: string;
+  quantity: number;
+  unit_price: number;
+};
 
-  const customersQuery = useCustomers({});
-  const createInvoice = useCreateInvoice();
-  const issueInvoice = useIssueInvoice();
-  const updateInvoice = useUpdateInvoice();
-  const invoiceQuery = useInvoice(id);
-  const isEditMode = Boolean(id);
-  const hasInitializedForm = useRef(false);
+type InvoiceFormValues = {
+  invoiceNumber: string;
+  customerId: string | null;
+  issueDate: string;
+  taxAmount: number | string;
+  notes: string;
+  lines: InvoiceLineItem[];
+};
 
-  const [invoiceNumber, setInvoiceNumber] = useState("");
-  const [customerId, setCustomerId] = useState<string | null>(null);
-  const [issueDate, setIssueDate] = useState("");
-  const [taxAmount, setTaxAmount] = useState<number | string>("");
-  const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState([createEmptyLine()]);
+type InvoiceFormContentProps = {
+  initialFormValues: InvoiceFormValues;
+  isEditMode: boolean;
+  invoiceQuery: ReturnType<typeof useInvoice>;
+  customersQuery: ReturnType<typeof useCustomers>;
+  createInvoice: ReturnType<typeof useCreateInvoice>;
+  issueInvoice: ReturnType<typeof useIssueInvoice>;
+  updateInvoice: ReturnType<typeof useUpdateInvoice>;
+  navigate: ReturnType<typeof useNavigate>;
+  queryClient: ReturnType<typeof useQueryClient>;
+};
+
+function InvoiceFormContent({
+  initialFormValues,
+  isEditMode,
+  invoiceQuery,
+  customersQuery,
+  createInvoice,
+  issueInvoice,
+  updateInvoice,
+  navigate,
+  queryClient,
+}: InvoiceFormContentProps) {
+  const [invoiceNumber, setInvoiceNumber] = useState(initialFormValues.invoiceNumber);
+  const [customerId, setCustomerId] = useState<string | null>(
+    initialFormValues.customerId
+  );
+  const [issueDate, setIssueDate] = useState(initialFormValues.issueDate);
+  const [taxAmount, setTaxAmount] = useState<number | string>(initialFormValues.taxAmount);
+  const [notes, setNotes] = useState(initialFormValues.notes);
+  const [lines, setLines] = useState(initialFormValues.lines);
 
   const customerOptions = useMemo(
     () =>
@@ -75,27 +102,6 @@ export function InvoiceFormPage() {
       (!isEditMode || invoiceQuery.data?.status === "draft")
   );
 
-  useEffect(() => {
-    if (!isEditMode || !invoiceQuery.data || hasInitializedForm.current) {
-      return;
-    }
-    const invoice = invoiceQuery.data;
-    setInvoiceNumber(invoice.invoice_number);
-    setCustomerId(String(invoice.customer));
-    setIssueDate(invoice.issue_date);
-    setTaxAmount(invoice.tax_amount ?? "");
-    setNotes(invoice.notes ?? "");
-    setLines(
-      invoice.lines.length
-        ? invoice.lines.map((line) => ({
-            description: line.description,
-            quantity: Number(line.quantity),
-            unit_price: Number(line.unit_price),
-          }))
-        : [createEmptyLine()]
-    );
-    hasInitializedForm.current = true;
-  }, [invoiceQuery.data, isEditMode]);
 
   const dueDatePreview = useMemo(() => {
     if (!issueDate || !selectedCustomer) {
@@ -191,7 +197,7 @@ export function InvoiceFormPage() {
 
   return (
     <DashboardShell
-      copy={copy}      
+      copy={copy}           
       className="invoice-form-page"
       actions={({ language }) => (
         <button
@@ -442,5 +448,64 @@ export function InvoiceFormPage() {
         </>
       )}
     </DashboardShell>
+  );
+}
+
+export function InvoiceFormPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const customersQuery = useCustomers({});
+  const createInvoice = useCreateInvoice();
+  const issueInvoice = useIssueInvoice();
+  const updateInvoice = useUpdateInvoice();
+  const invoiceQuery = useInvoice(id);
+  const isEditMode = Boolean(id);
+
+  const initialFormValues = useMemo(() => {
+    if (!isEditMode || !invoiceQuery.data) {
+      return {
+        invoiceNumber: "",
+        customerId: null as string | null,
+        issueDate: "",
+        taxAmount: "" as number | string,
+        notes: "",
+        lines: [createEmptyLine()],
+      };
+    }
+
+    const invoice = invoiceQuery.data;
+    return {
+      invoiceNumber: invoice.invoice_number,
+      customerId: String(invoice.customer),
+      issueDate: invoice.issue_date,
+      taxAmount: invoice.tax_amount ?? "",
+      notes: invoice.notes ?? "",
+      lines: invoice.lines.length
+        ? invoice.lines.map((line) => ({
+            description: line.description,
+            quantity: Number(line.quantity),
+            unit_price: Number(line.unit_price),
+          }))
+        : [createEmptyLine()],
+    };
+  }, [invoiceQuery.data, isEditMode]);
+
+  const formKey = isEditMode ? String(invoiceQuery.data?.id ?? "loading") : "new";
+
+  return (
+    <InvoiceFormContent
+      key={formKey}
+      initialFormValues={initialFormValues}
+      isEditMode={isEditMode}
+      invoiceQuery={invoiceQuery}
+      customersQuery={customersQuery}
+      createInvoice={createInvoice}
+      issueInvoice={issueInvoice}
+      updateInvoice={updateInvoice}
+      navigate={navigate}
+      queryClient={queryClient}
+    />
   );
 }
