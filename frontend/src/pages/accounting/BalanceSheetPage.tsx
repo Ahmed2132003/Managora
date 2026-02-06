@@ -158,7 +158,7 @@ export function BalanceSheetPage() {
     noDataText: string
   ) => {
     return (
-      <section className="panel balance-sheet-section">        
+      <section className="panel balance-sheet-section">
         <div className="panel__header">
           <div>
             <h2>{title}</h2>
@@ -166,79 +166,73 @@ export function BalanceSheetPage() {
           </div>
         </div>
 
-        <div className="table">
-          <div className="table__header">
-            <div className="table__cell">{tableLabels.account}</div>
-            <div className="table__cell">{tableLabels.name}</div>
-            <div className="table__cell table__cell--right">
-              {tableLabels.balance}
-            </div>
-          </div>
-
+        <div className="table-wrapper">
           {rows.length === 0 ? (
-            <div className="table__row">
-              <div className="table__cell helper-text" style={{ gridColumn: "1 / -1" }}>
-                {noDataText}
-              </div>
-            </div>
+            <p className="helper-text">{noDataText}</p>
           ) : (
-            rows.map((row) => (
-              <div className="table__row" key={`${title}-${row.code}-${row.name}`}>
-                <div className="table__cell">{row.code}</div>
-                <div className="table__cell">{row.name}</div>
-                <div className="table__cell table__cell--right">
-                  {formatAbsAmount(row.balance)}
-                </div>
-              </div>
-            ))
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>{tableLabels.account}</th>
+                  <th>{tableLabels.name}</th>
+                  <th style={{ textAlign: "end" }}>{tableLabels.balance}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={`${title}-${row.code}-${row.name}`}>
+                    <td>{row.code}</td>
+                    <td>{row.name}</td>
+                    <td style={{ textAlign: "end" }}>
+                      {formatAbsAmount(row.balance)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </section>
     );
   };
-
   if (balanceSheetQuery.error && isForbiddenError(balanceSheetQuery.error)) {
     return (
-      <DashboardShell copy={headerCopy}>        
+      <DashboardShell copy={headerCopy} className="balance-sheet-page">
         {() => <AccessDenied />}
       </DashboardShell>
     );
   }
 
   return (
-    <DashboardShell copy={headerCopy}>      
+    <DashboardShell copy={headerCopy} className="balance-sheet-page">
       {({ language, isArabic }) => {
         const lang = language === "ar" || isArabic ? "ar" : "en";
         const labels = pageContent[lang];
 
         return (
           <>
-            <div className="page-header">
-              <div>
-                <h1 className="page-title">{labels.title}</h1>
-                <p className="page-subtitle">{labels.subtitle}</p>
-              </div>
-            </div>
-
             <section className="panel balance-sheet-filters">
               <div className="panel__header">
                 <div>
                   <h2>{labels.filtersTitle}</h2>
                 </div>
-                <div className="balance-sheet-filters__actions">
+                <div className="panel-actions panel-actions--right">
                   {canExport && balanceSheetQuery.data ? (
-                    <button className="button" type="button" onClick={handleExportCsv}>
+                    <button
+                      className="action-button action-button--ghost"
+                      type="button"
+                      onClick={handleExportCsv}
+                    >
                       {labels.exportLabel}
                     </button>
                   ) : null}
                 </div>
               </div>
 
-              <div className="balance-sheet-filters__form">
+              <div className="filters-grid">
                 <label className="field">
-                  <span className="field__label">{labels.asOfLabel}</span>
+                  <span>{labels.asOfLabel}</span>
                   <input
-                    className="field__input"
                     type="date"
                     value={asOf}
                     onChange={(e) => setAsOf(e.target.value)}
@@ -246,13 +240,12 @@ export function BalanceSheetPage() {
                 </label>
               </div>
             </section>
-
             {balanceSheetQuery.isLoading ? (
               <section className="panel">
                 <p className="helper-text">{labels.loading}</p>
               </section>
             ) : balanceSheetQuery.data ? (
-              <div className="balance-sheet-grid">
+              <div className="grid-panels balance-sheet-grid">                
                 {renderSection(
                   labels.assets,
                   balanceSheetQuery.data.assets,
