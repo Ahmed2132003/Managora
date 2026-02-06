@@ -90,3 +90,12 @@ export function useIssueInvoice() {
     },
   });
 }
+
+export function useDeleteInvoice() {
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await http.delete(endpoints.invoice(id));
+      return id;
+    },
+  });
+}

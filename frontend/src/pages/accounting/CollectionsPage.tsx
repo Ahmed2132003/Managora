@@ -7,7 +7,7 @@ import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
 import { useAccounts, useCreatePayment } from "../../shared/accounting/hooks";
 import { useCustomers } from "../../shared/customers/hooks";
-import { useInvoices } from "../../shared/invoices/hooks";
+import { useDeleteInvoice, useInvoices } from "../../shared/invoices/hooks";
 import "../DashboardPage.css";
 
 type Language = "en" | "ar";
@@ -56,8 +56,11 @@ type Content = {
     empty: string;
     loading: string;
     record: string;
+    edit: string;
+    delete: string;
+    confirmDelete: string;
     overdue: string;
-  };
+  };  
   modal: {
     title: string;
     subtitle: string;
@@ -158,8 +161,11 @@ const contentMap: Record<Language, Content> = {
       empty: "No open invoices found.",
       loading: "Loading invoices...",
       record: "Record Payment",
+      edit: "Edit",
+      delete: "Delete",
+      confirmDelete: "Delete this invoice?",
       overdue: "overdue",
-    },
+    },    
     modal: {
       title: "Record payment",
       subtitle: "Log payment details and close the balance.",
@@ -258,8 +264,11 @@ const contentMap: Record<Language, Content> = {
       empty: "لا توجد فواتير مفتوحة.",
       loading: "جاري تحميل الفواتير...",
       record: "تسجيل تحصيل",
+      edit: "تعديل",
+      delete: "حذف",
+      confirmDelete: "هل تريد حذف هذه الفاتورة؟",
       overdue: "متأخر",
-    },
+    },    
     modal: {
       title: "تسجيل تحصيل",
       subtitle: "قم بتسجيل تفاصيل السداد.",
@@ -326,6 +335,7 @@ export function CollectionsPage() {
   const customersQuery = useCustomers({});
   const accountsQuery = useAccounts();
   const createPayment = useCreatePayment();
+  const deleteInvoice = useDeleteInvoice();
 
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
@@ -361,6 +371,16 @@ export function CollectionsPage() {
   );
   const userName =
     data?.user.first_name || data?.user.username || content.userFallback;
+  const canManageInvoices = useMemo(() => {
+    if (data?.user.is_superuser) {
+      return true;
+    }
+    const roles = data?.roles ?? [];
+    return roles.some((role) => {
+      const roleName = role.slug || role.name;
+      return ["manager", "accountant"].includes(roleName.toLowerCase());
+    });
+  }, [data?.roles, data?.user.is_superuser]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -523,6 +543,18 @@ export function CollectionsPage() {
     setPaymentDate(new Date().toISOString().slice(0, 10));
     setModalOpen(true);
     setFormError(null);
+  };
+
+  const handleDeleteInvoice = async (selectedInvoiceId: number) => {
+    if (!window.confirm(content.table.confirmDelete)) {
+      return;
+    }
+    try {
+      await deleteInvoice.mutateAsync(selectedInvoiceId);
+      await queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    } catch (error) {
+      window.alert(getPaymentErrorMessage(error));
+    }
   };
 
   const navLinks = useMemo(
@@ -917,17 +949,38 @@ export function CollectionsPage() {
                             )}
                           </td>
                           <td>
-                            <button
-                              type="button"
-                              className="table-action"
-                              onClick={() => handleOpenModal(invoice.id)}
-                            >
-                              {content.table.record}
-                            </button>
+                            <div className="table-actions">
+                              <button
+                                type="button"
+                                className="table-action"
+                                onClick={() => handleOpenModal(invoice.id)}
+                              >
+                                {content.table.record}
+                              </button>
+                              {canManageInvoices && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="table-action"
+                                    onClick={() => navigate(`/invoices/${invoice.id}/edit`)}
+                                  >
+                                    {content.table.edit}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="table-action table-action--danger"
+                                    onClick={() => handleDeleteInvoice(invoice.id)}
+                                    disabled={deleteInvoice.isPending}
+                                  >
+                                    {content.table.delete}
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
-                    })}
+                    })}                    
                   </tbody>
                 </table>
               )}

@@ -672,6 +672,17 @@
   justify-content: center;
 }
 
+.table-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.table-action--danger {
+  background: rgba(255, 85, 85, 0.15);
+  color: #ff5555;
+}
+
 .table-action:disabled {
   opacity: 0.6;
   cursor: not-allowed;

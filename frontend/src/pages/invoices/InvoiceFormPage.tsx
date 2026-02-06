@@ -1,9 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { isForbiddenError } from "../../shared/api/errors";
 import { useCustomers } from "../../shared/customers/hooks";
-import { useCreateInvoice, useIssueInvoice } from "../../shared/invoices/hooks";
+import {
+  useCreateInvoice,
+  useInvoice,
+  useIssueInvoice,
+  useUpdateInvoice,
+} from "../../shared/invoices/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { DashboardShell } from "../DashboardShell";
 import "./InvoiceFormPage.css";
@@ -17,12 +22,17 @@ const createEmptyLine = () => ({
 const toDateString = (value: Date) => value.toISOString().slice(0, 10);
 
 export function InvoiceFormPage() {
+  const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const customersQuery = useCustomers({});
   const createInvoice = useCreateInvoice();
   const issueInvoice = useIssueInvoice();
+  const updateInvoice = useUpdateInvoice();
+  const invoiceQuery = useInvoice(id);
+  const isEditMode = Boolean(id);
+  const hasInitializedForm = useRef(false);
 
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [customerId, setCustomerId] = useState<string | null>(null);
@@ -57,7 +67,35 @@ export function InvoiceFormPage() {
   const taxValue = taxAmount === "" ? 0 : Number(taxAmount);
   const totalAmount = subtotal + taxValue;
   const hasLines = lines.length > 0;
-  const canIssue = Boolean(invoiceNumber && customerId && issueDate && hasLines);
+  const canIssue = Boolean(
+    invoiceNumber &&
+      customerId &&
+      issueDate &&
+      hasLines &&
+      (!isEditMode || invoiceQuery.data?.status === "draft")
+  );
+
+  useEffect(() => {
+    if (!isEditMode || !invoiceQuery.data || hasInitializedForm.current) {
+      return;
+    }
+    const invoice = invoiceQuery.data;
+    setInvoiceNumber(invoice.invoice_number);
+    setCustomerId(String(invoice.customer));
+    setIssueDate(invoice.issue_date);
+    setTaxAmount(invoice.tax_amount ?? "");
+    setNotes(invoice.notes ?? "");
+    setLines(
+      invoice.lines.length
+        ? invoice.lines.map((line) => ({
+            description: line.description,
+            quantity: Number(line.quantity),
+            unit_price: Number(line.unit_price),
+          }))
+        : [createEmptyLine()]
+    );
+    hasInitializedForm.current = true;
+  }, [invoiceQuery.data, isEditMode]);
 
   const dueDatePreview = useMemo(() => {
     if (!issueDate || !selectedCustomer) {
@@ -105,38 +143,55 @@ export function InvoiceFormPage() {
         })),
       };
 
+      if (isEditMode && invoiceQuery.data) {
+        const invoice = await updateInvoice.mutateAsync({
+          id: invoiceQuery.data.id,
+          payload,
+        });
+        if (action === "issue" && invoiceQuery.data.status === "draft") {
+          return await issueInvoice.mutateAsync(invoice.id);
+        }
+        return invoice;
+      }
+
       const invoice = await createInvoice.mutateAsync(payload);
       if (action === "issue") {
         return await issueInvoice.mutateAsync(invoice.id);
       }
       return invoice;
-    },
+    },    
     onSuccess: async (invoice) => {
       await queryClient.invalidateQueries({ queryKey: ["invoices"] });
       navigate(`/invoices/${invoice.id}`);
     },
   });
 
-  if (isForbiddenError(customersQuery.error)) {
+  if (isForbiddenError(customersQuery.error) || isForbiddenError(invoiceQuery.error)) {
     return <AccessDenied />;
   }
 
+  const copy = {
+    en: {
+      title: isEditMode ? "Edit Invoice" : "New Invoice",
+      subtitle: isEditMode
+        ? "Update details before issuing or saving the invoice."
+        : "Draft, review, and issue a customer invoice.",
+      helper: "Fill the required fields and preview totals instantly.",
+      tags: isEditMode ? ["Billing", "Edit"] : ["Billing", "Draft"],
+    },
+    ar: {
+      title: isEditMode ? "تعديل فاتورة" : "فاتورة جديدة",
+      subtitle: isEditMode
+        ? "قم بتحديث تفاصيل الفاتورة قبل الإصدار أو الحفظ."
+        : "قم بإعداد ومراجعة وإصدار فاتورة للعميل.",
+      helper: "املأ الحقول المطلوبة وتحقق من الإجمالي مباشرة.",
+      tags: isEditMode ? ["الفوترة", "تعديل"] : ["الفوترة", "مسودة"],
+    },
+  };
+
   return (
     <DashboardShell
-      copy={{
-        en: {
-          title: "New Invoice",
-          subtitle: "Draft, review, and issue a customer invoice.",
-          helper: "Fill the required fields and preview totals instantly.",
-          tags: ["Billing", "Draft"],
-        },
-        ar: {
-          title: "فاتورة جديدة",
-          subtitle: "قم بإعداد ومراجعة وإصدار فاتورة للعميل.",
-          helper: "املأ الحقول المطلوبة وتحقق من الإجمالي مباشرة.",
-          tags: ["الفوترة", "مسودة"],
-        },
-      }}
+      copy={copy}      
       className="invoice-form-page"
       actions={({ language }) => (
         <button
@@ -153,7 +208,15 @@ export function InvoiceFormPage() {
           <section className="panel">
             <div className="panel__header">
               <div>
-                <h2>{language === "ar" ? "تفاصيل الفاتورة" : "Invoice Details"}</h2>
+              <h2>
+                {language === "ar"
+                  ? isEditMode
+                    ? "تحديث الفاتورة"
+                    : "تفاصيل الفاتورة"
+                  : isEditMode
+                    ? "Update Invoice"
+                    : "Invoice Details"}
+              </h2>                
                 <p className="helper-text">
                   {language === "ar"
                     ? "أدخل بيانات الفاتورة الأساسية قبل إضافة البنود."
@@ -347,8 +410,14 @@ export function InvoiceFormPage() {
                 onClick={() => submitMutation.mutate("draft")}
                 disabled={submitMutation.isPending}
               >
-                {language === "ar" ? "حفظ كمسودة" : "Save Draft"}
-              </button>
+                {language === "ar"
+                  ? isEditMode
+                    ? "حفظ التغييرات"
+                    : "حفظ كمسودة"
+                  : isEditMode
+                    ? "Save Changes"
+                    : "Save Draft"}
+              </button>              
               <button
                 type="button"
                 className={`action-button${!canIssue ? " action-button--disabled" : ""}`}
