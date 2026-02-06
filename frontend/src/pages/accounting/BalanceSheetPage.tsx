@@ -23,9 +23,7 @@ export function BalanceSheetPage() {
     return Number.isNaN(numeric) ? 0 : numeric;
   };
   const formatAbsAmount = (value: string | number) =>
-    formatAmount(Math.abs(parseAmount(value)));
-  const formatSignedAmount = (value: string | number) =>
-    formatAmount(parseAmount(value));
+    formatAmount(Math.abs(parseAmount(value)));  
   const getNetAssetsTotal = (assetsTotal: string | number, liabilitiesTotal: string | number) => {
     const assetsValue = parseAmount(assetsTotal);
     const liabilitiesValue = Math.abs(parseAmount(liabilitiesTotal));
@@ -115,7 +113,7 @@ export function BalanceSheetPage() {
       assets: "الأصول",
       liabilities: "الالتزامات",
       equity: "حقوق الملكية",
-      netAssets: "صافي الأصول (الأصول - الالتزامات)",
+      netAssets: "صافي الأصول",      
       table: {
         account: "الحساب",
         name: "الاسم",
@@ -277,7 +275,7 @@ export function BalanceSheetPage() {
                     <div>
                       <span>{labels.netAssets}</span>
                       <strong>
-                        {formatSignedAmount(
+                        {formatAbsAmount(                          
                           getNetAssetsTotal(
                             balanceSheetQuery.data.totals.assets_total,
                             balanceSheetQuery.data.totals.liabilities_total
