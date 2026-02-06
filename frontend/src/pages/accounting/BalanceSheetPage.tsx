@@ -24,6 +24,8 @@ export function BalanceSheetPage() {
   };
   const formatAbsAmount = (value: string | number) =>
     formatAmount(Math.abs(parseAmount(value)));
+  const formatSignedAmount = (value: string | number) =>
+    formatAmount(parseAmount(value));  
   const headerCopy = useMemo(
     () => ({
       en: {
@@ -270,7 +272,7 @@ export function BalanceSheetPage() {
                     <div>
                       <span>{labels.netAssets}</span>
                       <strong>
-                        {formatAbsAmount(
+                        {formatSignedAmount(                          
                           parseAmount(balanceSheetQuery.data.totals.assets_total) -
                             parseAmount(balanceSheetQuery.data.totals.liabilities_total)
                         )}

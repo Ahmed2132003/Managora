@@ -33,6 +33,23 @@ export type JournalEntry = {
   lines: JournalLine[];
 };
 
+export type JournalEntryLinePayload = {
+  account: number;
+  cost_center?: number | null;
+  description?: string;
+  debit: string;
+  credit: string;
+};
+
+export type JournalEntryPayload = {
+  date: string;
+  reference_type: string;
+  reference_id?: string | null;
+  memo?: string;
+  status?: string;
+  lines: JournalEntryLinePayload[];
+};
+
 export type JournalEntryFilters = {
   dateFrom?: string;
   dateTo?: string;
@@ -73,6 +90,38 @@ export function useJournalEntries(filters: JournalEntryFilters) {
       const url = `${endpoints.accounting.journalEntries}?${params.toString()}`;
       const response = await http.get<JournalEntry[]>(url);
       return response.data;
+    },
+  });
+}
+
+export function useCreateJournalEntry() {
+  return useMutation({
+    mutationFn: async (payload: JournalEntryPayload) => {
+      const response = await http.post<JournalEntry>(
+        endpoints.accounting.journalEntries,
+        payload
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useUpdateJournalEntry() {
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: JournalEntryPayload }) => {
+      const response = await http.put<JournalEntry>(
+        endpoints.accounting.journalEntry(id),
+        payload
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useDeleteJournalEntry() {
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await http.delete(endpoints.accounting.journalEntry(id));
     },
   });
 }

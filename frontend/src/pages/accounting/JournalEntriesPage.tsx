@@ -1,10 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
 import { isForbiddenError } from "../../shared/api/errors";
-import { useJournalEntries } from "../../shared/accounting/hooks";
+import {
+  type JournalEntry,
+  type JournalEntryLinePayload,
+  useAccounts,
+  useCostCenters,
+  useCreateJournalEntry,
+  useDeleteJournalEntry,
+  useJournalEntries,
+  useUpdateJournalEntry,
+} from "../../shared/accounting/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import "../DashboardPage.css";
 
@@ -50,9 +60,37 @@ type Content = {
     status: string;
     actions: string;
     view: string;
+    edit: string;
+    remove: string;
     empty: string;
     loading: string;
   };
+  modal: {
+    titleCreate: string;
+    titleEdit: string;
+    subtitle: string;
+    date: string;
+    referenceType: string;
+    memo: string;
+    linesTitle: string;
+    account: string;
+    costCenter: string;
+    description: string;
+    debit: string;
+    credit: string;
+    addLine: string;
+    removeLine: string;
+    totalDebit: string;
+    totalCredit: string;
+    cancel: string;
+    save: string;
+    saving: string;
+    confirmDelete: string;
+    errorRequired: string;
+    errorLines: string;
+    errorBalance: string;
+    errorBoth: string;
+  };  
   referenceOptions: Array<{ value: string; label: string }>;
   nav: {
     dashboard: string;
@@ -134,9 +172,37 @@ const contentMap: Record<Language, Content> = {
       status: "Status",
       actions: "Actions",
       view: "View",
+      edit: "Edit",
+      remove: "Delete",
       empty: "No journal entries yet.",
       loading: "Loading journal entries...",
     },
+    modal: {
+      titleCreate: "New journal entry",
+      titleEdit: "Edit journal entry",
+      subtitle: "Add the entry header and line items.",
+      date: "Entry date",
+      referenceType: "Reference type",
+      memo: "Memo",
+      linesTitle: "Entry lines",
+      account: "Account",
+      costCenter: "Cost center",
+      description: "Description",
+      debit: "Debit",
+      credit: "Credit",
+      addLine: "Add line",
+      removeLine: "Remove",
+      totalDebit: "Total debit",
+      totalCredit: "Total credit",
+      cancel: "Cancel",
+      save: "Save entry",
+      saving: "Saving...",
+      confirmDelete: "Delete this journal entry?",
+      errorRequired: "Please fill the required header fields.",
+      errorLines: "Please add valid line items with accounts and amounts.",
+      errorBalance: "Debits and credits must be equal.",
+      errorBoth: "Each line should have either debit or credit, not both.",
+    },    
     referenceOptions: [
       { value: "manual", label: "Manual" },
       { value: "payroll", label: "Payroll" },
@@ -221,9 +287,37 @@ const contentMap: Record<Language, Content> = {
       status: "الحالة",
       actions: "إجراءات",
       view: "عرض",
+      edit: "تعديل",
+      remove: "حذف",
       empty: "لا توجد قيود بعد.",
       loading: "جاري تحميل القيود...",
     },
+    modal: {
+      titleCreate: "قيد يومية جديد",
+      titleEdit: "تعديل قيد اليومية",
+      subtitle: "أضف بيانات القيد وبنود القيد.",
+      date: "تاريخ القيد",
+      referenceType: "نوع المرجع",
+      memo: "البيان",
+      linesTitle: "بنود القيد",
+      account: "الحساب",
+      costCenter: "مركز التكلفة",
+      description: "الوصف",
+      debit: "مدين",
+      credit: "دائن",
+      addLine: "إضافة بند",
+      removeLine: "حذف",
+      totalDebit: "إجمالي المدين",
+      totalCredit: "إجمالي الدائن",
+      cancel: "إلغاء",
+      save: "حفظ القيد",
+      saving: "جارٍ الحفظ...",
+      confirmDelete: "هل تريد حذف قيد اليومية؟",
+      errorRequired: "يرجى إدخال بيانات القيد الأساسية.",
+      errorLines: "يرجى إدخال بنود صحيحة مع الحساب والمبالغ.",
+      errorBalance: "يجب أن يتساوى إجمالي المدين مع إجمالي الدائن.",
+      errorBoth: "يجب تحديد مدين أو دائن فقط في كل بند.",
+    },    
     referenceOptions: [
       { value: "manual", label: "يدوي" },
       { value: "payroll", label: "الرواتب" },
@@ -274,8 +368,9 @@ const contentMap: Record<Language, Content> = {
 export function JournalEntriesPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const { data, isLoading, isError } = useMe();
-  const [language, setLanguage] = useState<Language>(() => {
+  const [language, setLanguage] = useState<Language>(() => {    
     const stored =
       typeof window !== "undefined"
         ? window.localStorage.getItem("managora-language")
@@ -293,8 +388,25 @@ export function JournalEntriesPage() {
   const [dateTo, setDateTo] = useState("");
   const [referenceType, setReferenceType] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formDate, setFormDate] = useState("");
+  const [formReferenceType, setFormReferenceType] = useState("");
+  const [formMemo, setFormMemo] = useState("");
+  const lineIdRef = useRef(0);
+  const [formLines, setFormLines] = useState<
+    Array<{
+      id: number;
+      accountId: string;
+      costCenterId: string;
+      description: string;
+      debit: string;
+      credit: string;
+    }>
+  >([]);
   const content = useMemo(() => contentMap[language], [language]);
-  const isArabic = language === "ar";
+  const isArabic = language === "ar";  
   const userPermissions = useMemo(
     () => data?.permissions ?? [],
     [data?.permissions]
@@ -514,6 +626,29 @@ export function JournalEntriesPage() {
   }, [navLinks, userPermissions]);
 
   const entriesQuery = useJournalEntries(filters);
+  const accountsQuery = useAccounts();
+  const costCentersQuery = useCostCenters();
+  const createEntry = useCreateJournalEntry();
+  const updateEntry = useUpdateJournalEntry();
+  const deleteEntry = useDeleteJournalEntry();
+
+  const accountOptions = useMemo(
+    () =>
+      (accountsQuery.data ?? []).map((account) => ({
+        value: String(account.id),
+        label: `${account.code} - ${account.name}`,
+      })),
+    [accountsQuery.data]
+  );
+
+  const costCenterOptions = useMemo(
+    () =>
+      (costCentersQuery.data ?? []).map((center) => ({
+        value: String(center.id),
+        label: `${center.code} - ${center.name}`,
+      })),
+    [costCentersQuery.data]
+  );
 
   if (isForbiddenError(entriesQuery.error)) {
     return <AccessDenied />;
@@ -524,7 +659,170 @@ export function JournalEntriesPage() {
     entriesQuery.data?.filter((entry) => entry.status === "posted").length ?? 0;
   const draftEntries =
     entriesQuery.data?.filter((entry) => entry.status === "draft").length ?? 0;
-    
+
+  const nextLineId = () => {
+    lineIdRef.current += 1;
+    return lineIdRef.current;
+  };
+
+  const resetForm = () => {
+    setFormError(null);
+    setFormDate("");
+    setFormReferenceType("");
+    setFormMemo("");
+    setFormLines([
+      {
+        id: nextLineId(),
+        accountId: "",
+        costCenterId: "",
+        description: "",
+        debit: "",
+        credit: "",
+      },
+    ]);
+  };
+
+  const openCreateModal = () => {
+    setEditingEntry(null);
+    resetForm();
+    setModalOpen(true);
+  };
+
+  const openEditModal = (entry: JournalEntry) => {
+    setEditingEntry(entry);
+    setFormError(null);
+    setFormDate(entry.date);
+    setFormReferenceType(entry.reference_type);
+    setFormMemo(entry.memo || "");
+    setFormLines(
+      entry.lines.map((line) => ({
+        id: nextLineId(),
+        accountId: String(line.account.id),
+        costCenterId: line.cost_center ? String(line.cost_center.id) : "",
+        description: line.description || "",
+        debit: line.debit ?? "",
+        credit: line.credit ?? "",
+      }))
+    );
+    setModalOpen(true);
+  };
+
+  const updateLine = (
+    id: number,
+    field: "accountId" | "costCenterId" | "description" | "debit" | "credit",
+    value: string
+  ) => {
+    setFormLines((prev) =>
+      prev.map((line) => (line.id === id ? { ...line, [field]: value } : line))
+    );
+  };
+
+  const removeLine = (id: number) => {
+    setFormLines((prev) => prev.filter((line) => line.id !== id));
+  };
+
+  const parseNumber = (value: string) => {
+    const numeric = Number(value.replace(/,/g, ""));
+    return Number.isNaN(numeric) ? 0 : numeric;
+  };
+
+  const totals = useMemo(() => {
+    return formLines.reduce(
+      (acc, line) => {
+        acc.debit += parseNumber(line.debit || "0");
+        acc.credit += parseNumber(line.credit || "0");
+        return acc;
+      },
+      { debit: 0, credit: 0 }
+    );
+  }, [formLines]);
+
+  const buildPayload = () => {
+    if (!formDate || !formReferenceType) {
+      setFormError(content.modal.errorRequired);
+      return null;
+    }
+
+    const payloadLines: JournalEntryLinePayload[] = [];
+
+    for (const line of formLines) {
+      if (!line.accountId && !line.debit && !line.credit && !line.description) {
+        continue;
+      }
+      if (!line.accountId) {
+        setFormError(content.modal.errorLines);
+        return null;
+      }
+      const debitValue = parseNumber(line.debit || "0");
+      const creditValue = parseNumber(line.credit || "0");
+      if (debitValue > 0 && creditValue > 0) {
+        setFormError(content.modal.errorBoth);
+        return null;
+      }
+      if (debitValue === 0 && creditValue === 0) {
+        setFormError(content.modal.errorLines);
+        return null;
+      }
+      payloadLines.push({
+        account: Number(line.accountId),
+        cost_center: line.costCenterId ? Number(line.costCenterId) : null,
+        description: line.description,
+        debit: debitValue.toFixed(2),
+        credit: creditValue.toFixed(2),
+      });
+    }
+
+    if (payloadLines.length === 0) {
+      setFormError(content.modal.errorLines);
+      return null;
+    }
+
+    const debitTotal = payloadLines.reduce(
+      (sum, line) => sum + parseNumber(line.debit),
+      0
+    );
+    const creditTotal = payloadLines.reduce(
+      (sum, line) => sum + parseNumber(line.credit),
+      0
+    );
+
+    if (debitTotal !== creditTotal) {
+      setFormError(content.modal.errorBalance);
+      return null;
+    }
+
+    return {
+      date: formDate,
+      reference_type: formReferenceType,
+      memo: formMemo,
+      status: editingEntry?.status ?? "draft",
+      lines: payloadLines,
+    };
+  };
+
+  const handleSubmit = async () => {
+    setFormError(null);
+    const payload = buildPayload();
+    if (!payload) {
+      return;
+    }
+    if (editingEntry) {
+      await updateEntry.mutateAsync({ id: editingEntry.id, payload });
+    } else {
+      await createEntry.mutateAsync(payload);
+    }
+    await queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
+    setModalOpen(false);
+  };
+
+  const handleDelete = async (entryId: number) => {
+    if (!window.confirm(content.modal.confirmDelete)) {
+      return;
+    }
+    await deleteEntry.mutateAsync(entryId);
+    await queryClient.invalidateQueries({ queryKey: ["journal-entries"] });
+  };
+
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });
@@ -713,13 +1011,13 @@ export function JournalEntriesPage() {
                 <p>{content.tableSubtitle}</p>
               </div>
               <div className="panel-actions">
-                <Link
-                  to="/accounting/journal-entries/new"
-                  className="action-button action-button--disabled"
-                  aria-disabled="true"
+                <button
+                  type="button"
+                  className="action-button"
+                  onClick={openCreateModal}                  
                 >
                   + {isArabic ? "قيد جديد" : "New Entry"}
-                </Link>
+                </button>                
               </div>
             </div>
             <div className="table-wrapper">
@@ -746,12 +1044,28 @@ export function JournalEntriesPage() {
                           <span className="status-pill">{entry.status}</span>
                         </td>
                         <td>
-                          <Link
-                            to={`/accounting/journal-entries/${entry.id}`}
-                            className="table-action"
-                          >
-                            {content.table.view}
-                          </Link>
+                          <div className="table-actions">
+                            <Link
+                              to={`/accounting/journal-entries/${entry.id}`}
+                              className="table-action"
+                            >
+                              {content.table.view}
+                            </Link>
+                            <button
+                              type="button"
+                              className="table-action"
+                              onClick={() => openEditModal(entry)}
+                            >
+                              {content.table.edit}
+                            </button>
+                            <button
+                              type="button"
+                              className="table-action table-action--danger"
+                              onClick={() => handleDelete(entry.id)}
+                            >
+                              {content.table.remove}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -766,6 +1080,229 @@ export function JournalEntriesPage() {
       </div>
 
       <footer className="dashboard-footer">{content.footer}</footer>
+
+      {modalOpen && (
+        <div className="dashboard-modal" role="dialog" aria-modal="true">
+          <div
+            className="dashboard-modal__backdrop"
+            onClick={() => setModalOpen(false)}
+          />
+          <div className="dashboard-modal__content">
+            <div className="dashboard-modal__header">
+              <div>
+                <h2>
+                  {editingEntry
+                    ? content.modal.titleEdit
+                    : content.modal.titleCreate}
+                </h2>
+                <p>{content.modal.subtitle}</p>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setModalOpen(false)}
+                aria-label={content.modal.cancel}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="dashboard-modal__body">
+              <div className="filters-grid">
+                <label className="field">
+                  <span>{content.modal.date}</span>
+                  <input
+                    type="date"
+                    value={formDate}
+                    onChange={(event) => setFormDate(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>{content.modal.referenceType}</span>
+                  <select
+                    value={formReferenceType}
+                    onChange={(event) => setFormReferenceType(event.target.value)}
+                  >
+                    <option value="">{content.filters.referenceAll}</option>
+                    {content.referenceOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field field--full">
+                  <span>{content.modal.memo}</span>
+                  <input
+                    type="text"
+                    value={formMemo}
+                    onChange={(event) => setFormMemo(event.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="panel__header">
+                <div>
+                  <h3>{content.modal.linesTitle}</h3>
+                </div>
+                <button
+                  type="button"
+                  className="action-button"
+                  onClick={() =>
+                    setFormLines((prev) => [
+                      ...prev,
+                      {
+                        id: nextLineId(),
+                        accountId: "",
+                        costCenterId: "",
+                        description: "",
+                        debit: "",
+                        credit: "",
+                      },
+                    ])
+                  }
+                >
+                  + {content.modal.addLine}
+                </button>
+              </div>
+
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>{content.modal.account}</th>
+                      <th>{content.modal.costCenter}</th>
+                      <th>{content.modal.description}</th>
+                      <th>{content.modal.debit}</th>
+                      <th>{content.modal.credit}</th>
+                      <th>{content.table.actions}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {formLines.map((line) => (
+                      <tr key={line.id}>
+                        <td>
+                          <select
+                            value={line.accountId}
+                            onChange={(event) =>
+                              updateLine(line.id, "accountId", event.target.value)
+                            }
+                          >
+                            <option value="">
+                              {isArabic ? "اختر الحساب" : "Select account"}
+                            </option>
+                            {accountOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <select
+                            value={line.costCenterId}
+                            onChange={(event) =>
+                              updateLine(
+                                line.id,
+                                "costCenterId",
+                                event.target.value
+                              )
+                            }
+                          >
+                            <option value="">
+                              {isArabic ? "بدون" : "None"}
+                            </option>
+                            {costCenterOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            value={line.description}
+                            onChange={(event) =>
+                              updateLine(
+                                line.id,
+                                "description",
+                                event.target.value
+                              )
+                            }
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={line.debit}
+                            onChange={(event) =>
+                              updateLine(line.id, "debit", event.target.value)
+                            }
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={line.credit}
+                            onChange={(event) =>
+                              updateLine(line.id, "credit", event.target.value)
+                            }
+                          />
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="table-action table-action--danger"
+                            onClick={() => removeLine(line.id)}
+                            disabled={formLines.length === 1}
+                          >
+                            {content.modal.removeLine}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="panel__header">
+                <div>
+                  <p className="helper-text">
+                    {content.modal.totalDebit}: {totals.debit.toFixed(2)} •{" "}
+                    {content.modal.totalCredit}: {totals.credit.toFixed(2)}
+                  </p>
+                  {formError && (
+                    <p className="helper-text helper-text--error">{formError}</p>
+                  )}
+                </div>
+                <div className="panel-actions">
+                  <button
+                    type="button"
+                    className="action-button action-button--ghost"
+                    onClick={() => setModalOpen(false)}
+                  >
+                    {content.modal.cancel}
+                  </button>
+                  <button
+                    type="button"
+                    className="action-button"
+                    onClick={handleSubmit}
+                    disabled={createEntry.isPending || updateEntry.isPending}
+                  >
+                    {createEntry.isPending || updateEntry.isPending
+                      ? content.modal.saving
+                      : content.modal.save}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
