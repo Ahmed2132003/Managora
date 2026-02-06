@@ -10,7 +10,14 @@ import {
   useExpenses,
   useUploadExpenseAttachment,
 } from "../../shared/accounting/hooks";
-import { usePayrollPeriods, usePeriodRuns } from "../../shared/hr/hooks";
+import { endpoints } from "../../shared/api/endpoints";
+import { http } from "../../shared/api/http";
+import {
+  usePayrollPeriods,
+  usePeriodRuns,
+  type AttendanceRecord,
+  type PayrollRunDetail,
+} from "../../shared/hr/hooks";
 import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
@@ -21,7 +28,118 @@ type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
 type ExpenseType = "salary" | "advertising" | "other";
 
-type Content = {
+function parseAmount(value: unknown) {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+function resolveDailyRateByPeriod(
+  periodType: "monthly" | "weekly" | "daily" | undefined,
+  basicSalary: number
+) {
+  if (!basicSalary) return null;
+  if (periodType === "daily") return basicSalary;
+  if (periodType === "weekly") return basicSalary / 7;
+  return basicSalary / 30;
+}
+
+function getPeriodRange(period?: { start_date?: string | null; end_date?: string | null }) {
+  const dateFrom = period?.start_date ?? null;
+  const dateTo = period?.end_date ?? null;
+  if (!dateFrom || !dateTo) {
+    return null;
+  }
+  const start = new Date(dateFrom);
+  const end = new Date(dateTo);
+  const days = Math.max(
+    Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+    1
+  );
+  return { dateFrom, dateTo, days };
+}
+
+type PeriodRange = ReturnType<typeof getPeriodRange>;
+
+type RunSummary = {
+  presentDays: number;
+  absentDays: number;
+  lateMinutes: number;
+  bonuses: number;
+  commissions: number;
+  deductions: number;
+  advances: number;
+  dailyRate: number;
+};
+
+function buildRunSummary(
+  run: PayrollRunDetail | null | undefined,
+  attendanceRecords: AttendanceRecord[],
+  periodRange: PeriodRange
+): RunSummary | null {
+  if (!run || !periodRange) {
+    return null;
+  }
+
+  const records = attendanceRecords ?? [];
+  const presentDays = records.filter((record) => record.status !== "absent").length;
+  const absentDays = Math.max(periodRange.days - presentDays, 0);
+  const lateMinutes = records.reduce((sum, record) => sum + (record.late_minutes ?? 0), 0);
+  const lines = run.lines ?? [];
+  const basicLine = lines.find((line) => line.code.toUpperCase() === "BASIC");
+  const basicAmount = basicLine ? parseAmount(basicLine.amount) : 0;
+  const metaRate = basicLine?.meta?.rate;
+  const dailyRate = metaRate
+    ? parseAmount(metaRate)
+    : resolveDailyRateByPeriod(run.period.period_type, basicAmount);
+  const bonuses = lines
+    .filter(
+      (line) =>
+        line.type === "earning" &&
+        line.code.toUpperCase() !== "BASIC" &&
+        !line.code.toUpperCase().startsWith("COMM-")
+    )
+    .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+  const commissions = lines
+    .filter((line) => line.type === "earning" && line.code.toUpperCase().startsWith("COMM-"))
+    .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+  const deductions = lines
+    .filter(
+      (line) =>
+        line.type === "deduction" && !line.code.toUpperCase().startsWith("LOAN-")
+    )
+    .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+  const advances = lines
+    .filter((line) => line.type === "deduction" && line.code.toUpperCase().startsWith("LOAN-"))
+    .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+
+  return {
+    presentDays,
+    absentDays,
+    lateMinutes,
+    bonuses,
+    commissions,
+    deductions,
+    advances,
+    dailyRate: dailyRate ?? 0,
+  };
+}
+
+function calculatePayableTotal(summary: RunSummary | null) {
+  if (!summary) return null;
+  return (
+    summary.presentDays * summary.dailyRate +
+    summary.bonuses +
+    summary.commissions -
+    summary.deductions -
+    summary.advances
+  );
+}
+
+type Content = {  
   brand: string;
   subtitle: string;
   welcome: string;
@@ -451,6 +569,7 @@ export function ExpensesPage() {
   const payrollRunsQuery = usePeriodRuns(
     payrollPeriodId ? Number(payrollPeriodId) : null
   );
+  const [runPayables, setRunPayables] = useState<Record<number, number>>({});
 
   const createExpense = useCreateExpense();
   const uploadAttachment = useUploadExpenseAttachment();
@@ -473,7 +592,88 @@ export function ExpensesPage() {
     setAttachments(undefined);
   };
 
-  const payrollPeriodOptions = useMemo(
+  const selectedPayrollPeriod = useMemo(
+    () =>
+      payrollPeriodId
+        ? payrollPeriodsQuery.data?.find((period) => String(period.id) === payrollPeriodId) ??
+          null
+        : null,
+    [payrollPeriodId, payrollPeriodsQuery.data]
+  );
+
+  const payrollPeriodRange = useMemo(
+    () => (selectedPayrollPeriod ? getPeriodRange(selectedPayrollPeriod) : null),
+    [selectedPayrollPeriod]
+  );
+
+  useEffect(() => {
+    setRunPayables({});
+  }, [payrollPeriodId]);
+
+  useEffect(() => {
+    if (!payrollRunsQuery.data || !payrollPeriodRange) {
+      return;
+    }
+
+    const missingRuns = payrollRunsQuery.data.filter((run) => runPayables[run.id] == null);
+    if (missingRuns.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    async function loadPayables() {
+      const results = await Promise.all(
+        missingRuns.map(async (run) => {
+          try {
+            const [runDetailsResponse, attendanceResponse] = await Promise.all([
+              http.get<PayrollRunDetail>(endpoints.hr.payrollRun(run.id)),
+              http.get<AttendanceRecord[]>(endpoints.hr.attendanceRecords, {
+                params: {
+                  date_from: payrollPeriodRange.dateFrom,
+                  date_to: payrollPeriodRange.dateTo,
+                  employee_id: run.employee.id,
+                },
+              }),
+            ]);
+            const summary = buildRunSummary(
+              runDetailsResponse.data,
+              attendanceResponse.data ?? [],
+              payrollPeriodRange
+            );
+            const calculated = calculatePayableTotal(summary);
+            return {
+              id: run.id,
+              payable:
+                calculated ?? parseAmount(runDetailsResponse.data.net_total ?? run.net_total),
+            };
+          } catch {
+            return { id: run.id, payable: parseAmount(run.net_total) };
+          }
+        })
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      setRunPayables((prev) => {
+        const next = { ...prev };
+        results.forEach((result) => {
+          if (result) {
+            next[result.id] = result.payable;
+          }
+        });
+        return next;
+      });
+    }
+
+    loadPayables();
+    return () => {
+      cancelled = true;
+    };
+  }, [payrollPeriodRange, payrollRunsQuery.data, runPayables]);
+
+  const payrollPeriodOptions = useMemo(    
     () =>
       (payrollPeriodsQuery.data ?? []).map((period) => ({
         value: String(period.id),
@@ -483,15 +683,16 @@ export function ExpensesPage() {
   );
 
   const payrollPeriodTotal = useMemo(() => {
-    if (!payrollRunsQuery.data) {
+    if (!payrollRunsQuery.data || !payrollPeriodRange) {
       return null;
     }
-    return payrollRunsQuery.data.reduce((total, run) => {
-      const netTotal = Number(run.net_total);
-      return total + (Number.isNaN(netTotal) ? 0 : netTotal);
-    }, 0);
-  }, [payrollRunsQuery.data]);
-
+    const runTotals = payrollRunsQuery.data.map((run) => runPayables[run.id]);
+    if (runTotals.some((total) => total == null)) {
+      return null;
+    }
+    return runTotals.reduce((total, runTotal) => total + (runTotal ?? 0), 0);
+  }, [payrollPeriodRange, payrollRunsQuery.data, runPayables]);
+  
   const salaryAmount = useMemo(() => {
     if (expenseType !== "salary") {
       return "";
