@@ -422,7 +422,8 @@ export function ExpensesPage() {
     setExpenseType(value);
     if (value !== "salary") {
       setPayrollPeriodId(null);
-    }
+      setFormAmount("");
+    }    
     if (value !== "other") {
       setOtherExpenseName("");
       setOtherExpenseReason("");
@@ -491,26 +492,21 @@ export function ExpensesPage() {
     }, 0);
   }, [payrollRunsQuery.data]);
 
-  useEffect(() => {
+  const salaryAmount = useMemo(() => {
     if (expenseType !== "salary") {
-      setFormAmount("");
-      return;
+      return "";
     }
     if (!payrollPeriodId || payrollRunsQuery.isLoading) {
-      setFormAmount("");
-      return;
+      return "";
     }
     if (payrollPeriodTotal === null) {
-      return;
+      return "";
     }
-    setFormAmount(payrollPeriodTotal.toFixed(2));
-  }, [
-    expenseType,
-    payrollPeriodId,
-    payrollPeriodTotal,
-    payrollRunsQuery.isLoading,
-  ]);
+    return payrollPeriodTotal.toFixed(2);
+  }, [expenseType, payrollPeriodId, payrollPeriodTotal, payrollRunsQuery.isLoading]);
 
+  const displayedAmount = expenseType === "salary" ? salaryAmount : formAmount;
+  
   const selectedPayrollPeriodLabel =
     payrollPeriodOptions.find((option) => option.value === payrollPeriodId)?.label ||
     "";
@@ -563,9 +559,12 @@ export function ExpensesPage() {
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      if (!formDate || !formAmount || !expenseAccount || !paidFromAccount) {
+      const effectiveAmount =
+        expenseType === "salary" ? salaryAmount : String(formAmount);
+
+      if (!formDate || !effectiveAmount || !expenseAccount || !paidFromAccount) {
         throw new Error("Please fill required fields.");
-      }
+      }      
       if (!expenseType) {
         throw new Error(content.form.expenseTypeRequired);
       }
@@ -589,7 +588,7 @@ export function ExpensesPage() {
 
       const expense = await createExpense.mutateAsync({
         date: formDate,
-        amount: String(formAmount),
+        amount: effectiveAmount,        
         expense_account: Number(expenseAccount),
         paid_from_account: Number(paidFromAccount),
         cost_center: costCenter ? Number(costCenter) : null,
@@ -1135,7 +1134,7 @@ export function ExpensesPage() {
                   <input
                     type="number"
                     min={0}
-                    value={formAmount}
+                    value={displayedAmount}                    
                     onChange={(event) => setFormAmount(event.target.value)}
                     required
                   />
