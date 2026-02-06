@@ -25,7 +25,12 @@ export function BalanceSheetPage() {
   const formatAbsAmount = (value: string | number) =>
     formatAmount(Math.abs(parseAmount(value)));
   const formatSignedAmount = (value: string | number) =>
-    formatAmount(parseAmount(value));  
+    formatAmount(parseAmount(value));
+  const getNetAssetsTotal = (assetsTotal: string | number, liabilitiesTotal: string | number) => {
+    const assetsValue = parseAmount(assetsTotal);
+    const liabilitiesValue = Math.abs(parseAmount(liabilitiesTotal));
+    return assetsValue - liabilitiesValue;
+  };  
   const headerCopy = useMemo(
     () => ({
       en: {
@@ -273,12 +278,12 @@ export function BalanceSheetPage() {
                       <span>{labels.netAssets}</span>
                       <strong>
                         {formatSignedAmount(
-                          parseAmount(balanceSheetQuery.data.totals.assets_total) -
-                            Math.abs(
-                              parseAmount(balanceSheetQuery.data.totals.liabilities_total)
-                            )
+                          getNetAssetsTotal(
+                            balanceSheetQuery.data.totals.assets_total,
+                            balanceSheetQuery.data.totals.liabilities_total
+                          )                            
                         )}
-                      </strong>                      
+                      </strong>                                        
                     </div>
                   </div>
                 </section>
