@@ -72,9 +72,25 @@ export function BalanceSheetPage() {
     downloadCsv(`balance-sheet-${asOf || "as-of"}.csv`, headers, rows);
   };
 
+  const headerCopy = {
+    en: {
+      title: "Balance sheet",
+      subtitle:
+        "A snapshot of the company’s financial position as of the selected date.",
+      helper: "Review assets, liabilities, and equity at a glance.",
+      tags: ["Accounting", "Reporting"],
+    },
+    ar: {
+      title: "الميزانية العمومية",
+      subtitle: "لقطة لحظية للوضع المالي حتى التاريخ المحدد.",
+      helper: "راجع الأصول والالتزامات وحقوق الملكية بسرعة.",
+      tags: ["المحاسبة", "التقارير"],
+    },
+  };
+
   const pageContent = useMemo(
     () => ({
-      en: {
+      en: {        
         exportLabel: "Export CSV",
         filtersTitle: "Report filters",
         asOfLabel: "As of",
@@ -183,14 +199,14 @@ export function BalanceSheetPage() {
 
   if (balanceSheetQuery.error && isForbiddenError(balanceSheetQuery.error)) {
     return (
-      <DashboardShell>
+      <DashboardShell copy={headerCopy}>        
         {() => <AccessDenied />}
       </DashboardShell>
     );
   }
 
   return (
-    <DashboardShell>
+    <DashboardShell copy={headerCopy}>      
       {({ language, isArabic }) => {
         const lang = language === "ar" || isArabic ? "ar" : "en";
         const labels = pageContent[lang];
