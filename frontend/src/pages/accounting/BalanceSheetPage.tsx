@@ -272,11 +272,13 @@ export function BalanceSheetPage() {
                     <div>
                       <span>{labels.netAssets}</span>
                       <strong>
-                        {formatSignedAmount(                          
+                        {formatSignedAmount(
                           parseAmount(balanceSheetQuery.data.totals.assets_total) -
-                            parseAmount(balanceSheetQuery.data.totals.liabilities_total)
+                            Math.abs(
+                              parseAmount(balanceSheetQuery.data.totals.liabilities_total)
+                            )
                         )}
-                      </strong>
+                      </strong>                      
                     </div>
                   </div>
                 </section>
