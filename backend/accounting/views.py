@@ -423,9 +423,8 @@ class ExpenseViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         ):
             raise PermissionError("You do not have permission to approve expenses.")
         expense = serializer.save(company=self.request.user.company, created_by=self.request.user)
-        if expense.status == Expense.Status.APPROVED:
-            ensure_expense_journal_entry(expense)
-
+        ensure_expense_journal_entry(expense)
+        
     def perform_update(self, serializer):
         expense = self.get_object()
         if expense.status == Expense.Status.APPROVED:
@@ -436,9 +435,8 @@ class ExpenseViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         ):
             raise PermissionError("You do not have permission to approve expenses.")
         expense = serializer.save()
-        if expense.status == Expense.Status.APPROVED:
-            ensure_expense_journal_entry(expense)
-
+        ensure_expense_journal_entry(expense)
+        
     def handle_exception(self, exc):
         if isinstance(exc, PermissionError):
             return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
