@@ -188,8 +188,9 @@ const contentMap: Record<Language, Content> = {
       otherDetailsRequired: "Please complete the other expense details.",
       attachments: "Attachments",
       cancel: "Cancel",
-      save: "Save Draft",      
-    },
+      save: "Save Draft",
+      error: "Something went wrong. Please try again.",
+    },    
     table: {
       date: "Date",
       vendor: "Vendor",
@@ -293,11 +294,12 @@ const contentMap: Record<Language, Content> = {
       recipients: "المستفيدون",
       expenseTypeRequired: "يرجى اختيار نوع المصروف.",
       payrollPeriodRequired: "يرجى اختيار فترة الرواتب.",
-      otherDetailsRequired: "يرجى إدخال بيانات المصروف الأخرى كاملة.",
-      attachments: "مرفقات",
-      cancel: "إلغاء",
-      save: "حفظ كمسودة",      
-    },
+      otherDetailsRequired: "Please complete the other expense details.",
+      attachments: "Attachments",
+      cancel: "Cancel",
+      save: "Save Draft",
+      error: "Something went wrong. Please try again.",
+    },    
     table: {
       date: "التاريخ",
       vendor: "المورد",
@@ -416,17 +418,18 @@ export function ExpensesPage() {
     window.localStorage.setItem("managora-theme", theme);
   }, [theme]);
 
-  useEffect(() => {
-    if (expenseType !== "salary") {
+  const handleExpenseTypeChange = (value: ExpenseType) => {
+    setExpenseType(value);
+    if (value !== "salary") {
       setPayrollPeriodId(null);
     }
-    if (expenseType !== "other") {
+    if (value !== "other") {
       setOtherExpenseName("");
       setOtherExpenseReason("");
       setOtherExpenseBeneficiary("");
       setOtherExpenseRecipients("");
     }
-  }, [expenseType]);
+  };
 
   const activeVendor = searchTerm.trim();  
   const filters = useMemo(
@@ -1074,7 +1077,7 @@ export function ExpensesPage() {
                   <select
                     value={expenseType}
                     onChange={(event) =>
-                      setExpenseType(event.target.value as ExpenseType)
+                      handleExpenseTypeChange(event.target.value as ExpenseType)                      
                     }
                     required
                   >
