@@ -252,10 +252,11 @@ class JournalEntryViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         "list": "accounting.journal.view",
         "retrieve": "accounting.journal.view",
         "create": "accounting.journal.post",
+        "destroy": "accounting.journal.post",
         "post_entry": "accounting.journal.post",
     }
-    http_method_names = ["get", "post", "head", "options"]
-
+    http_method_names = ["get", "post", "delete", "head", "options"]
+    
     def get_queryset(self):
         queryset = (
             JournalEntry.objects.filter(company=self.request.user.company)
@@ -292,6 +293,11 @@ class JournalEntryViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         entry = serializer.save()
         output = JournalEntrySerializer(entry, context={"request": request})
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request, *args, **kwargs):
+        entry = self.get_object()
+        entry.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"], url_path="post")
     def post_entry(self, request, *args, **kwargs):

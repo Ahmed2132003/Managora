@@ -142,3 +142,17 @@ class JournalEntryApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_delete_journal_entry_removes_entry(self):
+        self.auth("accountant")
+        entry = JournalEntry.objects.create(
+            company=self.company_a,
+            date="2024-01-05",
+            memo="Delete me",
+            created_by=self.accountant,
+            status=JournalEntry.Status.DRAFT,
+        )
+        url = reverse("journal-entry-detail", kwargs={"pk": entry.id})
+        res = self.client.delete(url)
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(JournalEntry.objects.filter(id=entry.id).exists())
