@@ -590,6 +590,7 @@ export function ExpensesPage() {
     setOtherExpenseBeneficiary("");
     setOtherExpenseRecipients("");
     setAttachments(undefined);
+    setRunPayables({});
   };
 
   const selectedPayrollPeriod = useMemo(
@@ -607,10 +608,6 @@ export function ExpensesPage() {
   );
 
   useEffect(() => {
-    setRunPayables({});
-  }, [payrollPeriodId]);
-
-  useEffect(() => {
     if (!payrollRunsQuery.data || !payrollPeriodRange) {
       return;
     }
@@ -620,17 +617,18 @@ export function ExpensesPage() {
       return;
     }
 
+    const periodRange = payrollPeriodRange;
     let cancelled = false;
     async function loadPayables() {
       const results = await Promise.all(
         missingRuns.map(async (run) => {
-          try {
+          try {            
             const [runDetailsResponse, attendanceResponse] = await Promise.all([
               http.get<PayrollRunDetail>(endpoints.hr.payrollRun(run.id)),
               http.get<AttendanceRecord[]>(endpoints.hr.attendanceRecords, {
                 params: {
-                  date_from: payrollPeriodRange.dateFrom,
-                  date_to: payrollPeriodRange.dateTo,
+                  date_from: periodRange.dateFrom,
+                  date_to: periodRange.dateTo,                  
                   employee_id: run.employee.id,
                 },
               }),
@@ -638,7 +636,7 @@ export function ExpensesPage() {
             const summary = buildRunSummary(
               runDetailsResponse.data,
               attendanceResponse.data ?? [],
-              payrollPeriodRange
+              periodRange              
             );
             const calculated = calculatePayableTotal(summary);
             return {
@@ -692,7 +690,7 @@ export function ExpensesPage() {
     }
     return runTotals.reduce((total, runTotal) => total + (runTotal ?? 0), 0);
   }, [payrollPeriodRange, payrollRunsQuery.data, runPayables]);
-  
+
   const salaryAmount = useMemo(() => {
     if (expenseType !== "salary") {
       return "";
@@ -1353,9 +1351,11 @@ export function ExpensesPage() {
                     <span>{content.form.salaryPeriod}</span>
                     <select
                       value={payrollPeriodId ?? ""}
-                      onChange={(event) =>
-                        setPayrollPeriodId(event.target.value || null)
-                      }
+                      onChange={(event) => {
+                        const nextPayrollPeriodId = event.target.value || null;
+                        setPayrollPeriodId(nextPayrollPeriodId);
+                        setRunPayables({});
+                      }}                      
                       required
                       disabled={payrollPeriodsQuery.isLoading}
                     >
