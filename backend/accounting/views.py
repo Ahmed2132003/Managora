@@ -638,17 +638,40 @@ class TrialBalanceView(APIView):
             .order_by("account__code")
         )
 
-        data = [
-            {
-                "account_id": row["account_id"],
-                "code": row["account__code"],
-                "name": row["account__name"],
-                "type": row["account__type"],
-                "debit": _format_amount(row["debit"]),
-                "credit": _format_amount(row["credit"]),
-            }
-            for row in lines
-        ]
+        data = []
+        for row in lines:
+            debit_total = row["debit"] or Decimal("0")
+            credit_total = row["credit"] or Decimal("0")
+
+            # Trial Balance should show BALANCE (net), not totals
+            net = debit_total - credit_total
+
+            debit_balance = Decimal("0")
+            credit_balance = Decimal("0")
+
+            if net > 0:
+                debit_balance = net
+            elif net < 0:
+                credit_balance = -net
+
+            data.append(
+                {
+                    "account_id": row["account_id"],
+                    "code": row["account__code"],
+                    "name": row["account__name"],
+                    "type": row["account__type"],
+
+                    # ✅ balances (what the page should display)
+                    "debit": _format_amount(debit_balance),
+                    "credit": _format_amount(credit_balance),
+
+                    # ✅ optional: totals (useful for audits / later UI)
+                    "debit_total": _format_amount(debit_total),
+                    "credit_total": _format_amount(credit_total),
+                    "net": _format_amount(net),
+                }
+            )
+
         return Response(data, status=status.HTTP_200_OK)
 
 
