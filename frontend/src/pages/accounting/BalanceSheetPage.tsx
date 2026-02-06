@@ -11,17 +11,30 @@ export function BalanceSheetPage() {
   const [asOf, setAsOf] = useState("");
   const balanceSheetQuery = useBalanceSheet(asOf || undefined);
   const canExport = useCan("export.accounting");
+  const parseAmount = (value: string | number) => {
+    if (typeof value === "number") {
+      return value;
+    }
+    const trimmed = value.trim();
+    const normalized = trimmed.endsWith("-")
+      ? `-${trimmed.slice(0, -1)}`
+      : trimmed;
+    const numeric = Number(normalized.replace(/,/g, ""));
+    return Number.isNaN(numeric) ? 0 : numeric;
+  };
+  const formatAbsAmount = (value: string | number) =>
+    formatAmount(Math.abs(parseAmount(value)));
   const headerCopy = useMemo(
     () => ({
       en: {
         title: "Balance Sheet",
-        subtitle: "A structured view of assets, liabilities, and equity.",
+        subtitle: "A full view of assets, liabilities, and equity with clear totals.",
         helper: "Filter by reporting date and export your report instantly.",
         tags: ["Accounting", "Reports"],
       },
       ar: {
         title: "الميزانية العمومية",
-        subtitle: "عرض منظم للأصول والالتزامات وحقوق الملكية.",
+        subtitle: "عرض كامل وواضح للأصول والالتزامات وحقوق الملكية مع إجماليات مفهومة.",
         helper: "اختر تاريخ التقرير وصدّر الملف مباشرة.",
         tags: ["المحاسبة", "التقارير"],
       },
@@ -69,15 +82,18 @@ export function BalanceSheetPage() {
       loading: "Loading balance sheet...",
       empty: "Select a date to view the balance sheet.",
       totalsTitle: "Totals",
-      sectionHelper: "Account-level breakdown",
+      assetsHelper: "Assets include cash, receivables, inventory, and owned resources.",
+      liabilitiesHelper: "Liabilities cover payables and approved obligations due.",
+      equityHelper: "Equity represents capital plus retained earnings after expenses.",
       assets: "Assets",
       liabilities: "Liabilities",
       equity: "Equity",
+      netAssets: "Net assets (assets - liabilities)",
       table: {
         account: "Account",
         name: "Name",
         balance: "Balance",
-      },
+      },      
     },
     ar: {
       exportLabel: "تصدير CSV",
@@ -86,15 +102,18 @@ export function BalanceSheetPage() {
       loading: "جاري تحميل الميزانية العمومية...",
       empty: "اختر تاريخًا لعرض الميزانية العمومية.",
       totalsTitle: "الإجمالي",
-      sectionHelper: "تفاصيل بحسب كل حساب",
+      assetsHelper: "الأصول تشمل النقدية، الإيرادات المتحققة، الذمم، والمخزون.",
+      liabilitiesHelper: "الالتزامات تشمل المصروفات/المدفوعات المستحقة والديون المعتمدة.",
+      equityHelper: "حقوق الملكية = رأس المال + الأرباح المحتجزة (الإيرادات بعد المصروفات).",
       assets: "الأصول",
       liabilities: "الالتزامات",
       equity: "حقوق الملكية",
+      netAssets: "صافي الأصول (الأصول - الالتزامات)",
       table: {
         account: "الحساب",
         name: "الاسم",
         balance: "الرصيد",
-      },
+      },      
     },
   } as const;
 
@@ -126,7 +145,7 @@ export function BalanceSheetPage() {
                 <tr key={`${row.code}-${index}`}>
                   <td>{row.code}</td>
                   <td>{row.name}</td>
-                  <td>{formatAmount(row.balance)}</td>
+                  <td>{formatAbsAmount(row.balance)}</td>                  
                 </tr>
               ))}
             </tbody>
@@ -194,19 +213,19 @@ export function BalanceSheetPage() {
                   labels.assets,
                   balanceSheetQuery.data.assets,
                   labels.table,
-                  labels.sectionHelper
+                  labels.assetsHelper
                 )}
                 {renderSection(
                   labels.liabilities,
                   balanceSheetQuery.data.liabilities,
                   labels.table,
-                  labels.sectionHelper
+                  labels.liabilitiesHelper
                 )}
                 {renderSection(
                   labels.equity,
                   balanceSheetQuery.data.equity,
                   labels.table,
-                  labels.sectionHelper
+                  labels.equityHelper
                 )}
                 <section className="panel balance-sheet-totals">
                   <div className="panel__header">
@@ -214,7 +233,7 @@ export function BalanceSheetPage() {
                       <h2>{labels.totalsTitle}</h2>
                       <p className="helper-text">
                         {language === "ar"
-                          ? "موازنة الأصول مع الالتزامات وحقوق الملكية."
+                          ? "الأصول = الالتزامات + حقوق الملكية، مع إظهار صافي الأصول."
                           : "Assets balance against liabilities and equity."}
                       </p>
                     </div>
@@ -223,7 +242,19 @@ export function BalanceSheetPage() {
                     <div>
                       <span>{labels.assets}</span>
                       <strong>
-                        {formatAmount(balanceSheetQuery.data.totals.assets_total)}
+                        {formatAbsAmount(balanceSheetQuery.data.totals.assets_total)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>{labels.liabilities}</span>
+                      <strong>
+                        {formatAbsAmount(balanceSheetQuery.data.totals.liabilities_total)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>{labels.equity}</span>
+                      <strong>
+                        {formatAbsAmount(balanceSheetQuery.data.totals.equity_total)}
                       </strong>
                     </div>
                     <div>
@@ -231,14 +262,23 @@ export function BalanceSheetPage() {
                         {labels.liabilities} + {labels.equity}
                       </span>
                       <strong>
-                        {formatAmount(
+                        {formatAbsAmount(
                           balanceSheetQuery.data.totals.liabilities_equity_total
+                        )}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>{labels.netAssets}</span>
+                      <strong>
+                        {formatAbsAmount(
+                          parseAmount(balanceSheetQuery.data.totals.assets_total) -
+                            parseAmount(balanceSheetQuery.data.totals.liabilities_total)
                         )}
                       </strong>
                     </div>
                   </div>
                 </section>
-              </div>
+              </div>              
             ) : (
               <section className="panel">
                 <p className="helper-text">{labels.empty}</p>

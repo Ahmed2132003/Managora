@@ -317,14 +317,17 @@ export function ProfitLossPage() {
     return [...pnlQuery.data.income_accounts, ...pnlQuery.data.expense_accounts];
   }, [pnlQuery.data]);
 
-  const incomeTotal = useMemo(
-    () => Number(pnlQuery.data?.income_total ?? 0),
-    
-    [pnlQuery.data?.income_total]
-  );
+  const incomeTotal = useMemo(() => {
+    const total = Number(pnlQuery.data?.income_total ?? 0);
+    return Math.abs(total);
+  }, [pnlQuery.data?.income_total]);
+  const expenseTotal = useMemo(() => {
+    const total = Number(pnlQuery.data?.expense_total ?? 0);
+    return Math.abs(total);
+  }, [pnlQuery.data?.expense_total]);
   const netProfit = useMemo(
-    () => Number(pnlQuery.data?.net_profit ?? 0),
-    [pnlQuery.data?.net_profit]
+    () => incomeTotal - expenseTotal,
+    [expenseTotal, incomeTotal]
   );
 
   const filteredRows = useMemo(() => {
@@ -669,15 +672,15 @@ export function ProfitLossPage() {
               {[
                 {
                   label: content.stats.income,
-                  value: formatAmount(pnlQuery.data?.income_total ?? 0),
+                  value: formatAmount(incomeTotal),                  
                 },
                 {
                   label: content.stats.expenses,
-                  value: formatAmount(pnlQuery.data?.expense_total ?? 0),
+                  value: formatAmount(expenseTotal),                  
                 },
                 {
                   label: content.stats.net,
-                  value: formatAmount(pnlQuery.data?.net_profit ?? 0),
+                  value: formatAmount(netProfit),                  
                 },
                 {
                   label: content.stats.margin,
