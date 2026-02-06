@@ -650,14 +650,10 @@ export function JournalEntriesPage() {
     [costCentersQuery.data]
   );
 
-  if (isForbiddenError(entriesQuery.error)) {
-    return <AccessDenied />;
-  }
-
   const totalEntries = entriesQuery.data?.length ?? 0;
   const postedEntries =
     entriesQuery.data?.filter((entry) => entry.status === "posted").length ?? 0;
-  const draftEntries =
+  const draftEntries =  
     entriesQuery.data?.filter((entry) => entry.status === "draft").length ?? 0;
 
   const nextLineId = () => {
@@ -737,7 +733,11 @@ export function JournalEntriesPage() {
     );
   }, [formLines]);
 
-  const buildPayload = () => {
+  if (isForbiddenError(entriesQuery.error)) {
+    return <AccessDenied />;
+  }
+
+  const buildPayload = () => {    
     if (!formDate || !formReferenceType) {
       setFormError(content.modal.errorRequired);
       return null;
