@@ -158,7 +158,7 @@ export function BalanceSheetPage() {
     noDataText: string
   ) => {
     return (
-      <section className="panel">
+      <section className="panel balance-sheet-section">        
         <div className="panel__header">
           <div>
             <h2>{title}</h2>

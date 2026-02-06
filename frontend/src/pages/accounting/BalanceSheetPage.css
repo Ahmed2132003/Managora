@@ -24,17 +24,22 @@
 }
 
 .balance-sheet-totals__values div {
-  padding: 16px;
+  padding: 14px;
   border-radius: 16px;
   background: var(--bg-alt);
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+}
+
+.balance-sheet-totals__values span {
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 .balance-sheet-totals__values strong {
-  font-size: 1.3rem;
+  font-size: 1rem;
 }
 
 @media (max-width: 720px) {
