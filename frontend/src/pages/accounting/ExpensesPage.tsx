@@ -10,6 +10,7 @@ import {
   useExpenses,
   useUploadExpenseAttachment,
 } from "../../shared/accounting/hooks";
+import { usePayrollPeriods } from "../../shared/hr/hooks";
 import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
@@ -18,6 +19,7 @@ import "../DashboardPage.css";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
+type ExpenseType = "salary" | "advertising" | "other";
 
 type Content = {
   brand: string;
@@ -61,10 +63,22 @@ type Content = {
     paidFromAccount: string;
     costCenter: string;
     notes: string;
+    expenseType: string;
+    salaryPeriod: string;
+    salaryPeriodPlaceholder: string;
+    advertisingLabel: string;
+    otherLabel: string;
+    expenseName: string;
+    reason: string;
+    beneficiary: string;
+    recipients: string;
+    expenseTypeRequired: string;
+    payrollPeriodRequired: string;
+    otherDetailsRequired: string;
     attachments: string;
     cancel: string;
     save: string;
-    error: string;
+    error: string;    
   };
   table: {
     date: string;
@@ -160,10 +174,21 @@ const contentMap: Record<Language, Content> = {
       paidFromAccount: "Paid from account",
       costCenter: "Cost center",
       notes: "Notes",
+      expenseType: "Expense type",
+      salaryPeriod: "Payroll period",
+      salaryPeriodPlaceholder: "Select payroll period",
+      advertisingLabel: "Advertising expense",
+      otherLabel: "Other expense",
+      expenseName: "Expense name",
+      reason: "Reason",
+      beneficiary: "Beneficiary",
+      recipients: "Recipients",
+      expenseTypeRequired: "Please select an expense type.",
+      payrollPeriodRequired: "Please select a payroll period.",
+      otherDetailsRequired: "Please complete the other expense details.",
       attachments: "Attachments",
       cancel: "Cancel",
-      save: "Save Draft",
-      error: "Failed to create expense.",
+      save: "Save Draft",      
     },
     table: {
       date: "Date",
@@ -257,10 +282,21 @@ const contentMap: Record<Language, Content> = {
       paidFromAccount: "حساب السداد",
       costCenter: "مركز التكلفة",
       notes: "ملاحظات",
+      expenseType: "نوع المصروف",
+      salaryPeriod: "فترة الرواتب",
+      salaryPeriodPlaceholder: "اختر فترة الرواتب",
+      advertisingLabel: "مصروف إعلانات",
+      otherLabel: "مصروفات أخرى",
+      expenseName: "اسم المصروف",
+      reason: "سبب المصروف",
+      beneficiary: "الصالح لصالح",
+      recipients: "المستفيدون",
+      expenseTypeRequired: "يرجى اختيار نوع المصروف.",
+      payrollPeriodRequired: "يرجى اختيار فترة الرواتب.",
+      otherDetailsRequired: "يرجى إدخال بيانات المصروف الأخرى كاملة.",
       attachments: "مرفقات",
       cancel: "إلغاء",
-      save: "حفظ كمسودة",
-      error: "تعذر إضافة المصروف.",
+      save: "حفظ كمسودة",      
     },
     table: {
       date: "التاريخ",
@@ -355,6 +391,13 @@ export function ExpensesPage() {
   const [costCenter, setCostCenter] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [formVendor, setFormVendor] = useState("");
+  const [expenseType, setExpenseType] = useState<ExpenseType>("other");
+  const [payrollPeriodId, setPayrollPeriodId] = useState<string | null>(null);
+  const [otherExpenseName, setOtherExpenseName] = useState("");
+  const [otherExpenseReason, setOtherExpenseReason] = useState("");
+  const [otherExpenseBeneficiary, setOtherExpenseBeneficiary] = useState("");
+  const [otherExpenseRecipients, setOtherExpenseRecipients] = useState("");
+
 
   // ✅ FIX: FileInput expects File[] | undefined
   const [attachments, setAttachments] = useState<File[] | undefined>(undefined);
@@ -373,6 +416,18 @@ export function ExpensesPage() {
     window.localStorage.setItem("managora-theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    if (expenseType !== "salary") {
+      setPayrollPeriodId(null);
+    }
+    if (expenseType !== "other") {
+      setOtherExpenseName("");
+      setOtherExpenseReason("");
+      setOtherExpenseBeneficiary("");
+      setOtherExpenseRecipients("");
+    }
+  }, [expenseType]);
+
   const activeVendor = searchTerm.trim();  
   const filters = useMemo(
     () => ({
@@ -388,6 +443,7 @@ export function ExpensesPage() {
   const expensesQuery = useExpenses(filters);
   const accountsQuery = useAccounts();
   const costCentersQuery = useCostCenters();
+  const payrollPeriodsQuery = usePayrollPeriods();
 
   const createExpense = useCreateExpense();
   const uploadAttachment = useUploadExpenseAttachment();
@@ -401,14 +457,99 @@ export function ExpensesPage() {
     setCostCenter(null);
     setNotes("");
     setFormVendor("");
+    setExpenseType("other");
+    setPayrollPeriodId(null);
+    setOtherExpenseName("");
+    setOtherExpenseReason("");
+    setOtherExpenseBeneficiary("");
+    setOtherExpenseRecipients("");
     setAttachments(undefined);
   };
+
+  const payrollPeriodOptions = useMemo(
+    () =>
+      (payrollPeriodsQuery.data ?? []).map((period) => ({
+        value: String(period.id),
+        label: `${period.start_date} → ${period.end_date}`,
+      })),
+    [payrollPeriodsQuery.data]
+  );
+
+  const selectedPayrollPeriodLabel =
+    payrollPeriodOptions.find((option) => option.value === payrollPeriodId)?.label ||
+    "";
+
+  const expenseDetails = useMemo(() => {
+    const detailLines: string[] = [];
+    if (expenseType === "salary" && selectedPayrollPeriodLabel) {
+      detailLines.push(
+        isArabic
+          ? `فترة الرواتب: ${selectedPayrollPeriodLabel}`
+          : `Payroll period: ${selectedPayrollPeriodLabel}`
+      );
+    }
+    if (expenseType === "other") {
+      if (otherExpenseReason) {
+        detailLines.push(
+          isArabic
+            ? `سبب المصروف: ${otherExpenseReason}`
+            : `Reason: ${otherExpenseReason}`
+        );
+      }
+      if (otherExpenseBeneficiary) {
+        detailLines.push(
+          isArabic
+            ? `الصالح لصالح: ${otherExpenseBeneficiary}`
+            : `Beneficiary: ${otherExpenseBeneficiary}`
+        );
+      }
+      if (otherExpenseRecipients) {
+        detailLines.push(
+          isArabic
+            ? `المستفيدون: ${otherExpenseRecipients}`
+            : `Recipients: ${otherExpenseRecipients}`
+        );
+      }
+    }
+    if (notes) {
+      detailLines.push(notes);
+    }
+    return detailLines.join(" | ");
+  }, [
+    expenseType,
+    isArabic,
+    notes,
+    otherExpenseBeneficiary,
+    otherExpenseReason,
+    otherExpenseRecipients,
+    selectedPayrollPeriodLabel,
+  ]);
 
   const submitMutation = useMutation({
     mutationFn: async () => {
       if (!formDate || !formAmount || !expenseAccount || !paidFromAccount) {
         throw new Error("Please fill required fields.");
       }
+      if (!expenseType) {
+        throw new Error(content.form.expenseTypeRequired);
+      }
+      if (expenseType === "salary" && !payrollPeriodId) {
+        throw new Error(content.form.payrollPeriodRequired);
+      }
+      if (
+        expenseType === "other" &&
+        (!otherExpenseName ||
+          !otherExpenseReason ||
+          !otherExpenseBeneficiary ||
+          !otherExpenseRecipients)
+      ) {
+        throw new Error(content.form.otherDetailsRequired);
+      }
+
+      const resolvedVendorName =
+        expenseType === "other"
+          ? otherExpenseName
+          : formVendor || (expenseType === "salary" ? selectedPayrollPeriodLabel : "");
 
       const expense = await createExpense.mutateAsync({
         date: formDate,
@@ -416,8 +557,9 @@ export function ExpensesPage() {
         expense_account: Number(expenseAccount),
         paid_from_account: Number(paidFromAccount),
         cost_center: costCenter ? Number(costCenter) : null,
-        notes,
-        vendor_name: formVendor,
+        notes: expenseDetails,
+        vendor_name: resolvedVendorName,
+        category: expenseType,
         status: "draft",
       });
 
@@ -928,9 +1070,25 @@ export function ExpensesPage() {
             <div className="dashboard-modal__body">
               <div className="filters-grid">
                 <label className="field">
+                  <span>{content.form.expenseType}</span>
+                  <select
+                    value={expenseType}
+                    onChange={(event) =>
+                      setExpenseType(event.target.value as ExpenseType)
+                    }
+                    required
+                  >
+                    <option value="salary">
+                      {isArabic ? "مصروف رواتب" : "Payroll expense"}
+                    </option>
+                    <option value="advertising">{content.form.advertisingLabel}</option>
+                    <option value="other">{content.form.otherLabel}</option>
+                  </select>
+                </label>
+                <label className="field">
                   <span>{content.form.date}</span>
                   <input
-                    type="date"
+                    type="date"                    
                     value={formDate}
                     onChange={(event) => setFormDate(event.target.value)}
                     required
@@ -954,9 +1112,77 @@ export function ExpensesPage() {
                     onChange={(event) => setFormVendor(event.target.value)}
                   />
                 </label>
+                {expenseType === "salary" && (
+                  <label className="field">
+                    <span>{content.form.salaryPeriod}</span>
+                    <select
+                      value={payrollPeriodId ?? ""}
+                      onChange={(event) =>
+                        setPayrollPeriodId(event.target.value || null)
+                      }
+                      required
+                      disabled={payrollPeriodsQuery.isLoading}
+                    >
+                      <option value="">
+                        {content.form.salaryPeriodPlaceholder}
+                      </option>
+                      {payrollPeriodOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {expenseType === "other" && (
+                  <>
+                    <label className="field">
+                      <span>{content.form.expenseName}</span>
+                      <input
+                        type="text"
+                        value={otherExpenseName}
+                        onChange={(event) => setOtherExpenseName(event.target.value)}
+                        required
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{content.form.reason}</span>
+                      <input
+                        type="text"
+                        value={otherExpenseReason}
+                        onChange={(event) =>
+                          setOtherExpenseReason(event.target.value)
+                        }
+                        required
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{content.form.beneficiary}</span>
+                      <input
+                        type="text"
+                        value={otherExpenseBeneficiary}
+                        onChange={(event) =>
+                          setOtherExpenseBeneficiary(event.target.value)
+                        }
+                        required
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{content.form.recipients}</span>
+                      <input
+                        type="text"
+                        value={otherExpenseRecipients}
+                        onChange={(event) =>
+                          setOtherExpenseRecipients(event.target.value)
+                        }
+                        required
+                      />
+                    </label>
+                  </>
+                )}
                 <label className="field">
                   <span>{content.form.expenseAccount}</span>
-                  <select
+                  <select                  
                     value={expenseAccount ?? ""}
                     onChange={(event) =>
                       setExpenseAccount(event.target.value || null)
