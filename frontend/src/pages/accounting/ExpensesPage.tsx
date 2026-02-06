@@ -10,7 +10,7 @@ import {
   useExpenses,
   useUploadExpenseAttachment,
 } from "../../shared/accounting/hooks";
-import { usePayrollPeriods } from "../../shared/hr/hooks";
+import { usePayrollPeriods, usePeriodRuns } from "../../shared/hr/hooks";
 import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
@@ -447,6 +447,9 @@ export function ExpensesPage() {
   const accountsQuery = useAccounts();
   const costCentersQuery = useCostCenters();
   const payrollPeriodsQuery = usePayrollPeriods();
+  const payrollRunsQuery = usePeriodRuns(
+    payrollPeriodId ? Number(payrollPeriodId) : null
+  );
 
   const createExpense = useCreateExpense();
   const uploadAttachment = useUploadExpenseAttachment();
@@ -477,6 +480,36 @@ export function ExpensesPage() {
       })),
     [payrollPeriodsQuery.data]
   );
+
+  const payrollPeriodTotal = useMemo(() => {
+    if (!payrollRunsQuery.data) {
+      return null;
+    }
+    return payrollRunsQuery.data.reduce((total, run) => {
+      const netTotal = Number(run.net_total);
+      return total + (Number.isNaN(netTotal) ? 0 : netTotal);
+    }, 0);
+  }, [payrollRunsQuery.data]);
+
+  useEffect(() => {
+    if (expenseType !== "salary") {
+      setFormAmount("");
+      return;
+    }
+    if (!payrollPeriodId || payrollRunsQuery.isLoading) {
+      setFormAmount("");
+      return;
+    }
+    if (payrollPeriodTotal === null) {
+      return;
+    }
+    setFormAmount(payrollPeriodTotal.toFixed(2));
+  }, [
+    expenseType,
+    payrollPeriodId,
+    payrollPeriodTotal,
+    payrollRunsQuery.isLoading,
+  ]);
 
   const selectedPayrollPeriodLabel =
     payrollPeriodOptions.find((option) => option.value === payrollPeriodId)?.label ||
