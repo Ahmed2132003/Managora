@@ -342,7 +342,7 @@ export function CEODashboardPage() {
   const [customStart, setCustomStart] = useState<string>("");
   const [customEnd, setCustomEnd] = useState<string>("");
   const content = useMemo(() => contentMap[language], [language]);
-  const userPermissions = data?.permissions ?? [];
+  const userPermissions = useMemo(() => data?.permissions ?? [], [data?.permissions]);  
   const userName =
     data?.user.first_name || data?.user.username || content.userFallback;
   const isArabic = language === "ar";
