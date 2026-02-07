@@ -3,10 +3,14 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
-import { useAnalyticsSummary, useAnalyticsBreakdown } from "../../shared/analytics/insights.ts";
-import { useAlerts } from "../../shared/analytics/hooks";
-import { useCashForecast } from "../../shared/analytics/forecast";
-import { useAgingReport } from "../../shared/accounting/hooks";
+import {
+  useAccountMappings,
+  useAccounts,
+  useExpenses,
+  useGeneralLedger,
+  useProfitLoss,
+} from "../../shared/accounting/hooks";
+import { useCustomers } from "../../shared/customers/hooks";
 import { buildRangeSelection } from "../../shared/analytics/range.ts";
 import type { RangeOption } from "../../shared/analytics/range.ts";
 import { formatCurrency } from "../../shared/analytics/format.ts";
@@ -154,8 +158,8 @@ const contentMap: Record<Language, Content> = {
         expenseCategorySubtitle: "Top 6 categories",
         cashForecast: "Cash forecast",
         cashForecastSubtitle: "In, out, and net",
-        vendors: "Top vendors",
-        vendorsEmpty: "No vendor data available.",
+        vendors: "Top customers",
+        vendorsEmpty: "No customer data available.",        
       },
       expenseAlertOpen: "Open",
       expenseAlertOk: "OK",
@@ -240,8 +244,8 @@ const contentMap: Record<Language, Content> = {
         expenseCategorySubtitle: "أعلى 6 فئات",
         cashForecast: "توقع السيولة",
         cashForecastSubtitle: "الداخل والخارج والصافي",
-        vendors: "أعلى الموردين",
-        vendorsEmpty: "لسه مفيش داتا.",
+        vendors: "أعلى العملاء",
+        vendorsEmpty: "لسه مفيش عملاء.",        
       },
       expenseAlertOpen: "مفتوح",
       expenseAlertOk: "جيد",
@@ -335,54 +339,166 @@ export function FinanceDashboardPage() {
     [range, customStart, customEnd]
   );
 
-  const summaryQuery = useAnalyticsSummary(selection.rangeParam);
-  const alertsQuery = useAlerts({ status: "open", range: selection.rangeParam });
-  const forecastQuery = useCashForecast();
-  const agingQuery = useAgingReport();
-  const expensesByCategoryQuery = useAnalyticsBreakdown(
-    "expense_by_category_daily",
-    "expense_category",
-    selection.end,
-    6
+  const accountsQuery = useAccounts();
+  const accountMappingsQuery = useAccountMappings();
+  const expensesQuery = useExpenses({
+    dateFrom: selection.start,
+    dateTo: selection.end,
+  });
+  const customersQuery = useCustomers({});
+  const pnlQuery = useProfitLoss(selection.start, selection.end);
+
+  const cashAccountId = useMemo(() => {
+    const mapping = accountMappingsQuery.data?.find(
+      (item) => item.key === "EXPENSE_DEFAULT_CASH"
+    );
+    if (mapping?.account) {
+      return mapping.account;
+    }
+    const accounts = accountsQuery.data ?? [];
+    const cashAccount = accounts.find((account) => {
+      const name = account.name.toLowerCase();
+      return name.includes("cash") || name.includes("صندوق") || name.includes("نقد");
+    });
+    return cashAccount?.id;
+  }, [accountMappingsQuery.data, accountsQuery.data]);
+
+  const receivablesAccountId = useMemo(() => {
+    const mapping = accountMappingsQuery.data?.find(
+      (item) => item.key === "ACCOUNTS_RECEIVABLE"
+    );
+    if (mapping?.account) {
+      return mapping.account;
+    }
+    const accounts = accountsQuery.data ?? [];
+    const receivablesAccount = accounts.find((account) => {
+      const name = account.name.toLowerCase();
+      return (
+        name.includes("receivable") ||
+        name.includes("ذمم") ||
+        name.includes("مدينة")
+      );
+    });
+    return receivablesAccount?.id;
+  }, [accountMappingsQuery.data, accountsQuery.data]);
+
+  const cashLedgerQuery = useGeneralLedger(
+    cashAccountId,
+    selection.start,
+    selection.end
   );
-  const vendorsQuery = useAnalyticsBreakdown(
-    "expense_by_vendor_daily",
-    "vendor",
-    selection.end,
-    5
+  const receivablesLedgerQuery = useGeneralLedger(
+    receivablesAccountId,
+    selection.start,
+    selection.end
   );
 
-  const expenseSpikeAlert = useMemo(() => {
-    return (alertsQuery.data ?? []).find((alert) => alert.rule_key === "expense_spike");
-  }, [alertsQuery.data]);
-
-  const arTotal = useMemo(() => {
-    if (!agingQuery.data?.length) {
+  const cashBalance = useMemo(() => {
+    const lines = cashLedgerQuery.data?.lines ?? [];
+    if (lines.length === 0) {
       return null;
     }
-    const total = agingQuery.data.reduce((sum, row) => sum + Number(row.total_due ?? 0), 0);
-    return formatCurrency(String(total));
-  }, [agingQuery.data]);
+    const balance = lines.reduce(
+      (acc, line) => Number(line.running_balance || acc),
+      0
+    );
+    return formatCurrency(String(balance));
+  }, [cashLedgerQuery.data?.lines]);
+
+  const receivablesBalance = useMemo(() => {
+    const lines = receivablesLedgerQuery.data?.lines ?? [];
+    if (lines.length === 0) {
+      return null;
+    }
+    const balance = lines.reduce(
+      (acc, line) => Number(line.running_balance || acc),
+      0
+    );
+    return formatCurrency(String(balance));
+  }, [receivablesLedgerQuery.data?.lines]);
+
+  const pnlTotals = useMemo(() => {
+    const incomeTotal = Math.abs(Number(pnlQuery.data?.income_total ?? 0));
+    const expenseTotal = Math.abs(Number(pnlQuery.data?.expense_total ?? 0));
+    return {
+      incomeTotal,
+      expenseTotal,
+      netProfit: incomeTotal - expenseTotal,
+    };
+  }, [pnlQuery.data?.income_total, pnlQuery.data?.expense_total]);
+
+  const forecastNetValue = useMemo(() => {
+    if (!pnlQuery.data) {
+      return "-";
+    }
+    return formatCurrency(String(pnlTotals.netProfit));
+  }, [pnlQuery.data, pnlTotals.netProfit]);
 
   const forecastChartData = useMemo(() => {
-    return (forecastQuery.data ?? []).map((snapshot) => ({
-      horizon: `${snapshot.horizon_days} ${isArabic ? "يوم" : "days"}`,
-      inflows: Number(snapshot.expected_inflows),
-      outflows: Number(snapshot.expected_outflows),
-      net: Number(snapshot.net_expected),
-    }));
-  }, [forecastQuery.data, isArabic]);
+    if (!pnlQuery.data) {
+      return [];
+    }
+    return [
+      {
+        horizon: isArabic ? "الفترة الحالية" : "Selected range",
+        inflows: pnlTotals.incomeTotal,
+        outflows: pnlTotals.expenseTotal,
+        net: pnlTotals.netProfit,
+      },
+    ];
+  }, [isArabic, pnlQuery.data, pnlTotals]);
+
+  const expenseCategoryLabels = useMemo(
+    () => ({
+      salary: isArabic ? "الرواتب" : "Salary",
+      advertising: isArabic ? "الإعلانات" : "Advertising",
+      other: isArabic ? "أخرى" : "Other",
+    }),
+    [isArabic]
+  );
 
   const expenseCategoryData = useMemo(() => {
-    return (expensesByCategoryQuery.data?.items ?? []).map((item) => ({
-      name: item.dimension_id,
-      amount: Number(item.amount ?? 0),
-    }));
-  }, [expensesByCategoryQuery.data]);
+    const expenses = expensesQuery.data ?? [];
+    const totals = expenses.reduce<Record<string, number>>((acc, expense) => {
+      const key = expense.category || "other";
+      acc[key] = (acc[key] ?? 0) + Number(expense.amount ?? 0);
+      return acc;
+    }, {});
+    return Object.entries(totals)
+      .map(([key, amount]) => ({
+        name: expenseCategoryLabels[key as keyof typeof expenseCategoryLabels] ?? key,
+        amount,
+      }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 6);
+  }, [expensesQuery.data, expenseCategoryLabels]);
 
-  const forecast30 = useMemo(() => {
-    return (forecastQuery.data ?? []).find((snapshot) => snapshot.horizon_days === 30);
-  }, [forecastQuery.data]);
+  const expenseSpikeSummary = useMemo(() => {
+    const expenses = expensesQuery.data ?? [];
+    if (expenses.length === 0) {
+      return content.page.expenseAlertEmpty;
+    }
+    const amounts = expenses.map((expense) => Number(expense.amount ?? 0));
+    const total = amounts.reduce((sum, amount) => sum + amount, 0);
+    const average = total / amounts.length;
+    const maxAmount = Math.max(...amounts);
+    if (average > 0 && maxAmount >= average * 1.5) {
+      return `${content.page.expenseAlertOpen} • ${formatCurrency(String(maxAmount))}`;
+    }
+    return content.page.expenseAlertOk;
+  }, [content.page.expenseAlertEmpty, content.page.expenseAlertOk, content.page.expenseAlertOpen, expensesQuery.data]);
+
+  const topCustomers = useMemo(() => {
+    const customers = customersQuery.data ?? [];
+    return customers
+      .filter((customer) => customer.is_active)
+      .map((customer) => ({
+        ...customer,
+        credit: Number(customer.credit_limit ?? 0),
+      }))
+      .sort((a, b) => b.credit - a.credit)
+      .slice(0, 5);
+  }, [customersQuery.data]);
 
   const showCustomHint = range === "custom" && (!selection.start || !selection.end);
 
@@ -412,26 +528,26 @@ export function FinanceDashboardPage() {
     results.push(
       {
         label: content.page.stats.cashBalance,
-        description: formatCurrency(summaryQuery.data?.cash_balance_latest ?? null),
+        description: cashBalance ?? "-",        
       },
       {
         label: content.page.stats.receivables,
-        description: arTotal ?? "-",
+        description: receivablesBalance ?? "-",        
       },
       {
         label: content.page.stats.expenseAlert,
-        description: expenseSpikeAlert ? expenseSpikeAlert.title : content.page.expenseAlertEmpty,
+        description: expenseSpikeSummary,        
       },
       {
         label: content.page.stats.forecastNet,
-        description: formatCurrency(forecast30?.net_expected ?? null),
+        description: forecastNetValue,        
       }
     );
 
-    vendorsQuery.data?.items?.forEach((vendor) => {
+    topCustomers.forEach((customer) => {      
       results.push({
-        label: vendor.dimension_id,
-        description: formatCurrency(vendor.amount ?? null),
+        label: customer.name,
+        description: formatCurrency(String(customer.credit)),        
       });
     });
 
@@ -442,14 +558,14 @@ export function FinanceDashboardPage() {
       );
     });
   }, [
-    arTotal,
+    cashBalance,    
     content.page.expenseAlertEmpty,
+    expenseSpikeSummary,
     content.page.stats,
-    expenseSpikeAlert,
-    forecast30?.net_expected,
+    forecastNetValue,
+    receivablesBalance,
     searchTerm,
-    summaryQuery.data,
-    vendorsQuery.data?.items,
+    topCustomers,    
   ]);
 
   function handleLogout() {
@@ -749,19 +865,23 @@ export function FinanceDashboardPage() {
               {[
                 {
                   label: content.page.stats.cashBalance,
-                  value: formatCurrency(summaryQuery.data?.cash_balance_latest ?? null),
+                  value: cashBalance ?? "-",
+                  isLoading: cashLedgerQuery.isLoading,
                 },
                 {
                   label: content.page.stats.receivables,
-                  value: arTotal ?? "-",
+                  value: receivablesBalance ?? "-",
+                  isLoading: receivablesLedgerQuery.isLoading,
                 },
                 {
                   label: content.page.stats.expenseAlert,
-                  value: expenseSpikeAlert ? expenseSpikeAlert.title : content.page.expenseAlertEmpty,
+                  value: expenseSpikeSummary,
+                  isLoading: expensesQuery.isLoading,
                 },
                 {
                   label: content.page.stats.forecastNet,
-                  value: formatCurrency(forecast30?.net_expected ?? null),
+                  value: forecastNetValue,
+                  isLoading: pnlQuery.isLoading,
                 },
               ].map((stat) => (
                 <div key={stat.label} className="stat-card">
@@ -769,10 +889,10 @@ export function FinanceDashboardPage() {
                     <span>{stat.label}</span>
                     <span className="stat-card__change">{rangeLabel}</span>
                   </div>
-                  <strong>{summaryQuery.isLoading ? content.loadingLabel : stat.value}</strong>
+                  <strong>{stat.isLoading ? content.loadingLabel : stat.value}</strong>
                   <div className="stat-card__spark" aria-hidden="true" />
                 </div>
-              ))}
+              ))}              
             </div>
           </section>
 
@@ -862,7 +982,7 @@ export function FinanceDashboardPage() {
                 </div>
                 <span className="pill">{rangeLabel}</span>
               </div>
-              {expensesByCategoryQuery.isLoading ? (
+              {expensesQuery.isLoading ? (                
                 <span className="helper-text">{content.loadingLabel}</span>
               ) : expenseCategoryData.length ? (
                 <div style={{ width: "100%", height: 240 }}>
@@ -888,7 +1008,7 @@ export function FinanceDashboardPage() {
                 </div>
                 <span className="pill">{rangeLabel}</span>
               </div>
-              {forecastQuery.isLoading ? (
+              {pnlQuery.isLoading ? (                
                 <span className="helper-text">{content.loadingLabel}</span>
               ) : forecastChartData.length ? (
                 <div style={{ width: "100%", height: 240 }}>
@@ -931,25 +1051,25 @@ export function FinanceDashboardPage() {
               <div className="panel__header">
                 <div>
                   <h2>{content.page.charts.vendors}</h2>
-                  <p>{isArabic ? "قائمة بالموردين الأكثر إنفاقًا" : "Highest spend vendors"}</p>
+                  <p>{isArabic ? "قائمة بأعلى العملاء حسب حد الائتمان" : "Top customers by credit limit"}</p>                  
                 </div>
               </div>
-              {vendorsQuery.isLoading ? (
+              {customersQuery.isLoading ? (                
                 <span className="helper-text">{content.loadingLabel}</span>
-              ) : vendorsQuery.data?.items?.length ? (
+              ) : topCustomers.length ? (                
                 <div className="table-wrapper">
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>{isArabic ? "المورد" : "Vendor"}</th>
-                        <th>{isArabic ? "الإجمالي" : "Total"}</th>
+                        <th>{isArabic ? "العميل" : "Customer"}</th>
+                        <th>{isArabic ? "حد الائتمان" : "Credit limit"}</th>                        
                       </tr>
                     </thead>
                     <tbody>
-                      {vendorsQuery.data.items.map((item) => (
-                        <tr key={item.dimension_id}>
-                          <td>{item.dimension_id}</td>
-                          <td>{formatCurrency(item.amount ?? null)}</td>
+                      {topCustomers.map((customer) => (                        
+                        <tr key={customer.id}>
+                          <td>{customer.name}</td>
+                          <td>{formatCurrency(String(customer.credit))}</td>                          
                         </tr>
                       ))}
                     </tbody>

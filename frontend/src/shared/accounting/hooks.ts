@@ -64,6 +64,17 @@ export type Account = {
   type: string;
 };
 
+export type AccountMapping = {
+  id: number;
+  key: string;
+  account: number | null;
+  account_name?: string;
+  account_code?: string;
+  required: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type CostCenter = {
   id: number;
   code: string;
@@ -143,6 +154,16 @@ export function useAccounts() {
     queryKey: ["accounts"],
     queryFn: async () => {
       const response = await http.get<Account[]>(endpoints.accounting.accounts);
+      return response.data;
+    },
+  });
+}
+
+export function useAccountMappings() {
+  return useQuery({
+    queryKey: ["account-mappings"],
+    queryFn: async () => {
+      const response = await http.get<AccountMapping[]>(endpoints.accounting.mappings);
       return response.data;
     },
   });
