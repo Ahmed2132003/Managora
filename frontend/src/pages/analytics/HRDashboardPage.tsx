@@ -144,8 +144,8 @@ const contentMap: Record<Language, Content> = {
       charts: {
         absenceTrend: "Absence trend",
         latenessTrend: "Lateness trend",
-        breakdownTitle: "Top late departments",
-        breakdownEmpty: "No departments yet.",
+        breakdownTitle: "Top absence departments",
+        breakdownEmpty: "No absence data yet.",        
       },
     },
     nav: {
@@ -224,8 +224,8 @@ const contentMap: Record<Language, Content> = {
       charts: {
         absenceTrend: "اتجاه الغياب",
         latenessTrend: "اتجاه التأخير",
-        breakdownTitle: "أكثر الأقسام تأخيرًا",
-        breakdownEmpty: "لسه مفيش داتا.",
+        breakdownTitle: "أكثر الأقسام غيابًا",
+        breakdownEmpty: "لسه مفيش داتا للغياب.",        
       },
     },
     nav: {
@@ -342,7 +342,7 @@ export function HRDashboardPage() {
   const summaryQuery = useAnalyticsSummary(selection.rangeParam);
   const kpisQuery = useAnalyticsKpis(kpiKeys, selection.start, selection.end);
   const breakdownQuery = useAnalyticsBreakdown(
-    "lateness_by_department_daily",
+    "absence_by_department_daily",    
     "department",
     selection.end,
     5
@@ -893,7 +893,7 @@ export function HRDashboardPage() {
               <div className="panel__header">
                 <div>
                   <h2>{content.page.charts.breakdownTitle}</h2>
-                  <p>{isArabic ? "أعلى الأقسام تأخيرًا" : "Highest lateness"}</p>
+                  <p>{isArabic ? "أعلى الأقسام غيابًا" : "Highest absences"}</p>                  
                 </div>
               </div>
               {breakdownQuery.isLoading ? (

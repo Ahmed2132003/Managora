@@ -1,9 +1,10 @@
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -11,7 +12,7 @@ from accounting.models import Account, Expense
 from analytics.models import KPIDefinition, KPIFactDaily
 from analytics.tasks import build_analytics_range, build_kpis_daily
 from core.models import Company, Permission, Role, RolePermission, UserRole
-from hr.models import AttendanceRecord, Employee
+from hr.models import AttendanceRecord, Employee, Shift
 
 User = get_user_model()
 
@@ -127,6 +128,44 @@ class AnalyticsTaskTests(APITestCase):
         )
         self.assertEqual(facts.count(), 2)
 
+    def test_build_kpis_daily_tracks_overtime_hours(self):
+        target_date = date(2024, 2, 2)
+        shift = Shift.objects.create(
+            company=self.company,
+            name="Day Shift",
+            start_time=time(9, 0),
+            end_time=time(17, 0),
+            grace_minutes=0,
+        )
+        employee = Employee.objects.create(
+            company=self.company,
+            employee_code="EMP-2",
+            full_name="Employee Two",
+            hire_date="2023-01-01",
+            status=Employee.Status.ACTIVE,
+            shift=shift,
+        )
+        check_out_time = timezone.make_aware(
+            datetime.combine(target_date, time(18, 30))
+        )
+        AttendanceRecord.objects.create(
+            company=self.company,
+            employee=employee,
+            date=target_date,
+            method=AttendanceRecord.Method.MANUAL,
+            status=AttendanceRecord.Status.PRESENT,
+            check_out_time=check_out_time,
+        )
+
+        build_kpis_daily(self.company.id, target_date)
+
+        overtime_fact = KPIFactDaily.objects.get(
+            company=self.company,
+            date=target_date,
+            kpi_key="overtime_hours_daily",
+        )
+        self.assertEqual(overtime_fact.value, Decimal("1.5"))
+        
 
 class AnalyticsPermissionsTests(APITestCase):
     def setUp(self):

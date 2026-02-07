@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from celery import shared_task
 from django.db import transaction
-from django.db.models import Avg, Sum
+from django.db.models import Avg, Count, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -41,9 +41,23 @@ KPI_CATALOG = {
         "name": "Daily Lateness Rate",
         "category": KPIDefinition.Category.HR,
         "unit": KPIDefinition.Unit.PERCENT,
-        "description": "Late records divided by present records.",
-        "formula_hint": "late / present",
+        "description": "Late records divided by active employees.",
+        "formula_hint": "late / active",
     },
+    "overtime_hours_daily": {
+        "name": "Daily Overtime Hours",
+        "category": KPIDefinition.Category.HR,
+        "unit": KPIDefinition.Unit.HOURS,
+        "description": "Total overtime hours recorded by employees.",
+        "formula_hint": "Sum overtime minutes / 60",
+    },
+    "absence_by_department_daily": {
+        "name": "Absence by Department",
+        "category": KPIDefinition.Category.HR,
+        "unit": KPIDefinition.Unit.COUNT,
+        "description": "Absent employees grouped by department.",
+        "formula_hint": "Count absences by department",
+    },    
     "expense_by_category_daily": {
         "name": "Expense by Category",
         "category": KPIDefinition.Category.OPS,
@@ -154,6 +168,25 @@ def _get_fact_value(company: Company, kpi_key: str, day: date) -> Decimal | None
     return fact.value if fact else None
 
 
+def _shift_end_datetime(record_date: date, shift, now_local: datetime) -> datetime:
+    tz = now_local.tzinfo or timezone.get_current_timezone()
+    expected_end = timezone.make_aware(datetime.combine(record_date, shift.end_time), tz)
+    if shift.end_time <= shift.start_time and now_local.time() >= shift.start_time:
+        expected_end += timedelta(days=1)
+    if shift.end_time <= shift.start_time and now_local.time() < shift.end_time:
+        expected_end += timedelta(days=1)
+    return expected_end
+
+
+def _calculate_overtime_minutes(record: AttendanceRecord) -> int:
+    if not record.check_out_time or not record.employee_id or not record.employee.shift_id:
+        return 0
+    now_local = timezone.localtime(record.check_out_time)
+    expected_end = _shift_end_datetime(record.date, record.employee.shift, now_local)
+    if now_local <= expected_end:
+        return 0
+    return int((now_local - expected_end).total_seconds() // 60)
+
 def _rolling_average(company: Company, kpi_key: str, day: date, window_days: int) -> Decimal | None:
     if window_days <= 0:
         return None
@@ -241,16 +274,19 @@ def build_kpis_daily(company_id: int, target_date: str | date) -> dict[str, str]
         company=company,
         date=day,
         status=AttendanceRecord.Status.ABSENT,
+        employee__status=Employee.Status.ACTIVE,
     ).count()
     late_count = AttendanceRecord.objects.filter(
         company=company,
         date=day,
         status=AttendanceRecord.Status.LATE,
+        employee__status=Employee.Status.ACTIVE,
     ).count()
     present_count = AttendanceRecord.objects.filter(
         company=company,
         date=day,
         status=AttendanceRecord.Status.PRESENT,
+        employee__status=Employee.Status.ACTIVE,
     ).count()
 
     absence_rate = (
@@ -259,14 +295,23 @@ def build_kpis_daily(company_id: int, target_date: str | date) -> dict[str, str]
         else Decimal("0")
     )
     lateness_rate = (
-        Decimal(late_count) / Decimal(present_count)
-        if present_count
+        Decimal(late_count) / Decimal(active_employees)
+        if active_employees
         else Decimal("0")
     )
+    overtime_minutes_total = 0
+    for record in AttendanceRecord.objects.filter(
+        company=company,
+        date=day,
+        employee__status=Employee.Status.ACTIVE,
+    ).select_related("employee", "employee__shift"):
+        overtime_minutes_total += _calculate_overtime_minutes(record)
+    overtime_hours_total = Decimal(overtime_minutes_total) / Decimal("60")
 
     results["absence_rate_daily"] = absence_rate
     results["lateness_rate_daily"] = lateness_rate
-
+    results["overtime_hours_daily"] = overtime_hours_total
+    
     for kpi_key, value in results.items():
         _ensure_kpi_definition(company, kpi_key)
         KPIFactDaily.objects.update_or_create(
@@ -346,6 +391,32 @@ def build_kpi_contributions_daily(company_id: int, target_date: str | date) -> i
             )
         )
 
+    absences = (
+        AttendanceRecord.objects.filter(
+            company=company,
+            date=day,
+            status=AttendanceRecord.Status.ABSENT,
+            employee__status=Employee.Status.ACTIVE,
+            employee__department__isnull=False,
+        )
+        .values("employee__department__name")
+        .annotate(total=Count("id"))
+        .order_by("-total")[:10]
+    )
+    if absences:
+        _ensure_kpi_definition(company, "absence_by_department_daily")
+    for item in absences:
+        contributions.append(
+            KPIContributionDaily(
+                company=company,
+                date=day,
+                kpi_key="absence_by_department_daily",
+                dimension="department",
+                dimension_id=item["employee__department__name"],
+                amount=Decimal(item["total"]),
+            )
+        )
+
     if not contributions:
         return 0
 
@@ -353,10 +424,14 @@ def build_kpi_contributions_daily(company_id: int, target_date: str | date) -> i
         KPIContributionDaily.objects.filter(
             company=company,
             date=day,
-            kpi_key__in=["expense_by_category_daily", "top_vendors_daily"],
+            kpi_key__in=[
+                "expense_by_category_daily",
+                "top_vendors_daily",
+                "absence_by_department_daily",
+            ],
         ).delete()
         KPIContributionDaily.objects.bulk_create(contributions)
-
+        
     return len(contributions)
 
 
