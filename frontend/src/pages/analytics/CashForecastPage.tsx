@@ -4,7 +4,7 @@ import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
 import { useCashForecast } from "../../shared/analytics/forecast";
-import { formatCurrency, formatNumber, formatPercent } from "../../shared/analytics/format.ts";
+import { formatCurrency, formatPercent } from "../../shared/analytics/format.ts";
 import {
   Bar,
   BarChart,
@@ -292,7 +292,7 @@ export function CashForecastPage() {
   });
   const [searchTerm, setSearchTerm] = useState("");
   const content = useMemo(() => contentMap[language], [language]);
-  const userPermissions = data?.permissions ?? [];
+  const userPermissions = useMemo(() => data?.permissions ?? [], [data?.permissions]);  
   const userName =
     data?.user.first_name || data?.user.username || content.userFallback;
   const isArabic = language === "ar";
