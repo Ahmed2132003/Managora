@@ -4,7 +4,7 @@ import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
 import { useCashForecast } from "../../shared/analytics/forecast";
-import { formatCurrency, formatNumber } from "../../shared/analytics/format.ts";
+import { formatCurrency, formatNumber, formatPercent } from "../../shared/analytics/format.ts";
 import {
   Bar,
   BarChart,
@@ -38,13 +38,16 @@ type Content = {
   page: {
     title: string;
     subtitle: string;
+    asOfLabel: string;
+    asOfFallback: string;
+    horizonsLabel: string;
     stats: {
       net30: string;
-      inflows30: string;
-      outflows30: string;
+      collections30: string;
+      invoices30: string;
       topCustomer: string;
     };
-    chartTitle: string;
+    chartTitle: string;    
     chartSubtitle: string;
     customersTitle: string;
     customersEmpty: string;
@@ -120,13 +123,16 @@ const contentMap: Record<Language, Content> = {
     page: {
       title: "Cash Forecast 30/60/90",
       subtitle: "A simple projection based on invoices, recurring expenses, and payroll.",
+      asOfLabel: "As of",
+      asOfFallback: "Not available",
+      horizonsLabel: "Forecast horizons",
       stats: {
         net30: "Net expected (30d)",
-        inflows30: "Expected inflows (30d)",
-        outflows30: "Expected outflows (30d)",
+        collections30: "Expected collections (30d)",
+        invoices30: "Invoices due (30d)",
         topCustomer: "Top customer (30d)",
       },
-      chartTitle: "Forecasted inflows vs outflows",
+      chartTitle: "Forecasted inflows vs outflows",      
       chartSubtitle: "Stacked comparison per horizon",
       customersTitle: "Top customers expected to pay (30d)",
       customersEmpty: "No invoices due within 30 days.",
@@ -200,13 +206,16 @@ const contentMap: Record<Language, Content> = {
     page: {
       title: "توقع السيولة 30/60/90",
       subtitle: "توقع بسيط يعتمد على الفواتير المستحقة والمصاريف المتكررة والرواتب القادمة.",
+      asOfLabel: "حتى تاريخ",
+      asOfFallback: "غير متاح",
+      horizonsLabel: "فترات التوقع",
       stats: {
         net30: "صافي متوقع (30 يوم)",
-        inflows30: "تدفقات داخلة (30 يوم)",
-        outflows30: "تدفقات خارجة (30 يوم)",
+        collections30: "تحصيلات متوقعة (30 يوم)",
+        invoices30: "فواتير مستحقة (30 يوم)",
         topCustomer: "أعلى عميل (30 يوم)",
       },
-      chartTitle: "التدفقات المتوقعة",
+      chartTitle: "التدفقات المتوقعة",      
       chartSubtitle: "مقارنة التدفقات الداخلة والخارجة",
       customersTitle: "أكبر العملاء المتوقع تحصيلهم (30 يوم)",
       customersEmpty: "لا توجد فواتير مستحقة خلال 30 يوم.",
@@ -322,7 +331,53 @@ export function CashForecastPage() {
   );
 
   const snapshot30 = snapshots.find((snapshot) => snapshot.horizon_days === 30);
-  const topCustomer = snapshot30?.details.inflows_by_bucket.top_customers[0];
+  const sortedCustomers = useMemo(() => {
+    if (!snapshot30) {
+      return [];
+    }
+    return [...snapshot30.details.inflows_by_bucket.top_customers].sort(
+      (a, b) => Number(b.amount) - Number(a.amount)
+    );
+  }, [snapshot30]);
+
+  const sortedCategories = useMemo(() => {
+    if (!snapshot30) {
+      return [];
+    }
+    return [...snapshot30.details.outflows_by_bucket.top_categories].sort(
+      (a, b) => Number(b.amount) - Number(a.amount)
+    );
+  }, [snapshot30]);
+
+  const topCustomer = sortedCustomers[0];
+
+  const asOfDate = useMemo(() => {
+    if (!snapshot30?.as_of_date) {
+      return null;
+    }
+    const parsed = new Date(snapshot30.as_of_date);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, [snapshot30]);
+
+  const formattedAsOf = useMemo(() => {
+    if (!asOfDate) {
+      return content.page.asOfFallback;
+    }
+    return new Intl.DateTimeFormat(isArabic ? "ar" : "en", {
+      dateStyle: "medium",
+    }).format(asOfDate);
+  }, [asOfDate, content.page.asOfFallback, isArabic]);
+
+  const normalizedCollectionRate = useMemo(() => {
+    if (!snapshot30) {
+      return null;
+    }
+    const value = Number(snapshot30.details.assumptions.collection_rate);
+    if (Number.isNaN(value)) {
+      return null;
+    }
+    return value > 1 ? String(value / 100) : String(value);
+  }, [snapshot30]);
 
   const searchResults = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -339,12 +394,12 @@ export function CashForecastPage() {
           description: formatCurrency(snapshot30.net_expected),
         },
         {
-          label: content.page.stats.inflows30,
-          description: formatCurrency(snapshot30.expected_inflows),
+          label: content.page.stats.collections30,
+          description: formatCurrency(snapshot30.details.inflows_by_bucket.expected_collected),          
         },
         {
-          label: content.page.stats.outflows30,
-          description: formatCurrency(snapshot30.expected_outflows),
+          label: content.page.stats.collections30,
+          description: formatCurrency(snapshot30.details.inflows_by_bucket.expected_collected),          
         },
         {
           label: `${content.page.stats.topCustomer} • ${topCustomer?.customer ?? "-"}`,
@@ -353,14 +408,14 @@ export function CashForecastPage() {
       );
     }
 
-    snapshot30?.details.inflows_by_bucket.top_customers.forEach((item) => {
+    sortedCustomers.forEach((item) => {      
       results.push({
         label: item.customer,
         description: formatCurrency(item.amount),
       });
     });
 
-    snapshot30?.details.outflows_by_bucket.top_categories.forEach((item) => {
+    sortedCategories.forEach((item) => {      
       results.push({
         label: item.category,
         description: formatCurrency(item.amount),
@@ -373,7 +428,15 @@ export function CashForecastPage() {
         item.description.toLowerCase().includes(query)
       );
     });
-  }, [content.page.stats, searchTerm, snapshot30, topCustomer?.amount, topCustomer?.customer]);
+  }, [
+    content.page.stats,
+    searchTerm,
+    snapshot30,
+    sortedCustomers,
+    sortedCategories,
+    topCustomer?.amount,
+    topCustomer?.customer,
+  ]);
 
   function handleLogout() {
     clearTokens();
@@ -659,6 +722,14 @@ export function CashForecastPage() {
             <div className="hero-panel__intro">
               <h1>{content.page.title}</h1>
               <p>{content.page.subtitle}</p>
+              <div className="hero-tags">
+                <span className="pill">
+                  {content.page.asOfLabel}: {formattedAsOf}
+                </span>
+                <span className="pill">
+                  {content.page.horizonsLabel}: {snapshots.length || 0}
+                </span>
+              </div>
             </div>
             <div className="hero-panel__stats">
               {[
@@ -667,17 +738,21 @@ export function CashForecastPage() {
                   value: formatCurrency(snapshot30?.net_expected ?? null),
                 },
                 {
-                  label: content.page.stats.inflows30,
-                  value: formatCurrency(snapshot30?.expected_inflows ?? null),
+                  label: content.page.stats.collections30,
+                  value: formatCurrency(
+                    snapshot30?.details.inflows_by_bucket.expected_collected ?? null
+                  ),
                 },
                 {
-                  label: content.page.stats.outflows30,
-                  value: formatCurrency(snapshot30?.expected_outflows ?? null),
+                  label: content.page.stats.invoices30,
+                  value: formatCurrency(
+                    snapshot30?.details.inflows_by_bucket.invoices_due ?? null
+                  ),
                 },
                 {
                   label: `${content.page.stats.topCustomer} • ${topCustomer?.customer ?? "-"}`,
                   value: formatCurrency(topCustomer?.amount ?? null),
-                },
+                },                
               ].map((stat) => (
                 <div key={stat.label} className="stat-card">
                   <div className="stat-card__top">
@@ -767,25 +842,33 @@ export function CashForecastPage() {
                       <p>{isArabic ? "فواتير مستحقة خلال 30 يوم" : "Invoices due within 30 days"}</p>
                     </div>
                   </div>
-                  {snapshot30?.details.inflows_by_bucket.top_customers.length ? (
+                  {sortedCustomers.length ? (
                     <div className="table-wrapper">
                       <table className="data-table">
                         <thead>
                           <tr>
                             <th>{isArabic ? "العميل" : "Customer"}</th>
                             <th>{isArabic ? "قيمة متوقعة" : "Expected"}</th>
+                            <th>{isArabic ? "نسبة من الإجمالي" : "Share"}</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {snapshot30.details.inflows_by_bucket.top_customers.map((item) => (
+                          {sortedCustomers.map((item) => (
                             <tr key={item.customer}>
                               <td>{item.customer}</td>
                               <td>{formatCurrency(item.amount)}</td>
+                              <td>
+                                {formatPercent(
+                                  snapshot30?.expected_inflows
+                                    ? String(Number(item.amount) / Number(snapshot30.expected_inflows))
+                                    : null
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </div>                    
                   ) : (
                     <span className="helper-text">{content.page.customersEmpty}</span>
                   )}
@@ -798,25 +881,33 @@ export function CashForecastPage() {
                       <p>{isArabic ? "مصروفات متكررة" : "Recurring expenses"}</p>
                     </div>
                   </div>
-                  {snapshot30?.details.outflows_by_bucket.top_categories.length ? (
+                  {sortedCategories.length ? (
                     <div className="table-wrapper">
                       <table className="data-table">
                         <thead>
                           <tr>
                             <th>{isArabic ? "الفئة" : "Category"}</th>
                             <th>{isArabic ? "قيمة متوقعة" : "Expected"}</th>
+                            <th>{isArabic ? "نسبة من الإجمالي" : "Share"}</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {snapshot30.details.outflows_by_bucket.top_categories.map((item) => (
+                          {sortedCategories.map((item) => (
                             <tr key={item.category}>
                               <td>{item.category}</td>
                               <td>{formatCurrency(item.amount)}</td>
+                              <td>
+                                {formatPercent(
+                                  snapshot30?.expected_outflows
+                                    ? String(Number(item.amount) / Number(snapshot30.expected_outflows))
+                                    : null
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                    </div>
+                    </div>                    
                   ) : (
                     <span className="helper-text">{content.page.categoriesEmpty}</span>
                   )}
@@ -832,8 +923,9 @@ export function CashForecastPage() {
                   {snapshot30 ? (
                     <div className="assistant-chat">
                       <div className="assistant-message">
-                        {content.page.assumptions.collectionRate}: {formatNumber(snapshot30.details.assumptions.collection_rate)}
-                      </div>
+                        {content.page.assumptions.collectionRate}:{" "}
+                        {formatPercent(normalizedCollectionRate)}
+                      </div>                      
                       <div className="assistant-message">
                         {content.page.assumptions.recurringExpense}: {" "}
                         {formatCurrency(snapshot30.details.assumptions.recurring_expense_est)}

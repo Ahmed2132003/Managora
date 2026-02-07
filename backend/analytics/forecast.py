@@ -65,11 +65,13 @@ def _collection_rate(company: Company, as_of_date: date) -> Decimal:
         ).aggregate(total=Sum("amount"))
     )["total"] or Decimal("0")
 
+    if invoices_due > 0 and payments_total == 0:
+        return Decimal("1")
+
     rate = _safe_divide(payments_total, invoices_due)
     if rate > Decimal("1"):
         return Decimal("1")
     return rate
-
 
 def _recurring_monthly_expense(company: Company, as_of_date: date) -> Decimal:
     window_start = as_of_date - timedelta(days=90)
@@ -131,12 +133,15 @@ def build_cash_forecast(company_id: int, as_of_date: date | str | None = None):
         )
         expected_inflows = invoices_total * collection_rate
 
+ 
         top_customers = []
         for row in (
             invoices_due_qs.values("customer__name")
+            .exclude(customer__name__isnull=True)
+            .exclude(customer__name="")
             .annotate(total=Sum("total_amount"))
             .order_by("-total")[:5]
-        ):
+        ):            
             top_customers.append(
                 {
                     "customer": row["customer__name"],
