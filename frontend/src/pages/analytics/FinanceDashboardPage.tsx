@@ -348,24 +348,9 @@ export function FinanceDashboardPage() {
   const customersQuery = useCustomers({});
   const pnlQuery = useProfitLoss(selection.start, selection.end);
 
-  const cashAccountId = useMemo(() => {
-    const mapping = accountMappingsQuery.data?.find(
-      (item) => item.key === "EXPENSE_DEFAULT_CASH"
-    );
-    if (mapping?.account) {
-      return mapping.account;
-    }
-    const accounts = accountsQuery.data ?? [];
-    const cashAccount = accounts.find((account) => {
-      const name = account.name.toLowerCase();
-      return name.includes("cash") || name.includes("صندوق") || name.includes("نقد");
-    });
-    return cashAccount?.id;
-  }, [accountMappingsQuery.data, accountsQuery.data]);
-
   const receivablesAccountId = useMemo(() => {
     const mapping = accountMappingsQuery.data?.find(
-      (item) => item.key === "ACCOUNTS_RECEIVABLE"
+      (item) => item.key === "ACCOUNTS_RECEIVABLE"      
     );
     if (mapping?.account) {
       return mapping.account;
@@ -382,29 +367,12 @@ export function FinanceDashboardPage() {
     return receivablesAccount?.id;
   }, [accountMappingsQuery.data, accountsQuery.data]);
 
-  const cashLedgerQuery = useGeneralLedger(
-    cashAccountId,
-    selection.start,
-    selection.end
-  );
   const receivablesLedgerQuery = useGeneralLedger(
     receivablesAccountId,
     selection.start,
     selection.end
   );
-
-  const cashBalance = useMemo(() => {
-    const lines = cashLedgerQuery.data?.lines ?? [];
-    if (lines.length === 0) {
-      return null;
-    }
-    const lastLineWithBalance = [...lines]
-      .reverse()
-      .find((line) => line.running_balance !== null && line.running_balance !== "");
-    const balance = lastLineWithBalance?.running_balance ?? lines[lines.length - 1]?.running_balance ?? 0;
-    return formatCurrency(String(balance));
-  }, [cashLedgerQuery.data?.lines]);
-
+  
   const receivablesBalance = useMemo(() => {
     const lines = receivablesLedgerQuery.data?.lines ?? [];
     if (lines.length === 0) {
@@ -419,9 +387,9 @@ export function FinanceDashboardPage() {
       const credit = Number(line.credit ?? 0);
       return sum + (debit - credit);
     }, 0);
-    return formatNumber(String(balance));
+    return formatNumber(String(Math.abs(balance)));    
   }, [receivablesLedgerQuery.data?.lines]);
-  
+
   const pnlTotals = useMemo(() => {
     const incomeTotal = Math.abs(Number(pnlQuery.data?.income_total ?? 0));
     const expenseTotal = Math.abs(Number(pnlQuery.data?.expense_total ?? 0));
@@ -438,6 +406,8 @@ export function FinanceDashboardPage() {
     }
     return formatCurrency(String(pnlTotals.netProfit));
   }, [pnlQuery.data, pnlTotals.netProfit]);
+
+  const cashBalance = forecastNetValue;
 
   const forecastChartData = useMemo(() => {
     if (!pnlQuery.data) {
@@ -870,7 +840,7 @@ export function FinanceDashboardPage() {
                 {
                   label: content.page.stats.cashBalance,
                   value: cashBalance ?? "-",
-                  isLoading: cashLedgerQuery.isLoading,
+                  isLoading: pnlQuery.isLoading,                  
                 },
                 {
                   label: content.page.stats.receivables,
