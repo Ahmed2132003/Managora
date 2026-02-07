@@ -1,0 +1,75 @@
+@import "../DashboardPage.css";
+
+.customer-form-page .hero-panel {
+  align-items: flex-start;
+}
+
+.customer-form-page .hero-panel__intro {
+  max-width: 640px;
+}
+
+.customer-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.customer-form .panel {
+  gap: 20px;
+}
+
+.customer-form .form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.customer-form .field textarea {
+  resize: vertical;
+}
+
+.field-error {
+  color: #ff7a7a;
+  font-size: 0.8rem;
+}
+
+.field-toggle {
+  gap: 10px;
+}
+
+.toggle-pill {
+  position: relative;
+  width: 52px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.35);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.toggle-pill span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--bg-alt);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.toggle-pill.is-active {
+  background: linear-gradient(120deg, var(--secondary), var(--primary));
+}
+
+.toggle-pill.is-active span {
+  transform: translateX(24px);
+}
+
+@media (max-width: 720px) {
+  .customer-form .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

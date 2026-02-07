@@ -1,16 +1,5 @@
 import { useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Button,
-  Card,
-  Group,
-  Stack,
-  Switch,
-  TextInput,
-  Textarea,
-  Title,
-  NumberInput,
-} from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
@@ -23,6 +12,8 @@ import {
   type CustomerPayload,
 } from "../../shared/customers/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
+import { DashboardShell } from "../DashboardShell";
+import "./CustomerFormPage.css";
 
 const customerSchema = z.object({
   code: z.string().min(1, "Code is required"),
@@ -83,8 +74,88 @@ export function CustomerFormPage() {
     }
   }, [customerQuery.data, form, isEditing]);
 
+  const headerCopy = {
+    en: {
+      title: isEditing ? "Edit customer" : "New customer",
+      subtitle: "Capture customer details, billing preferences, and status.",
+      helper: "Keep records accurate to speed up invoicing and collections.",
+      tags: ["Customers", "Setup"],
+    },
+    ar: {
+      title: isEditing ? "تعديل عميل" : "عميل جديد",
+      subtitle: "سجّل بيانات العميل وتفضيلات الدفع وحالة الحساب.",
+      helper: "حافظ على دقة البيانات لتسريع الفوترة والتحصيلات.",
+      tags: ["العملاء", "الإعداد"],
+    },
+  };
+
+  const pageCopy = {
+    en: {
+      back: "Back to Customers",
+      sections: {
+        details: "Customer details",
+        detailsSubtitle: "Update the core profile and contact details.",
+        finance: "Billing settings",
+        financeSubtitle: "Control credit limits and payment terms.",
+      },
+      fields: {
+        code: "Code",
+        name: "Name",
+        email: "Email",
+        phone: "Phone",
+        address: "Address",
+        creditLimit: "Credit Limit",
+        paymentTerms: "Payment terms (days)",
+        active: "Active",
+      },
+      placeholders: {
+        code: "CUST-0001",
+        name: "Customer name",
+        email: "customer@email.com",
+        phone: "+20 1XX XXX XXXX",
+        address: "Customer address",
+      },
+      actions: {
+        save: "Save",
+      },
+    },
+    ar: {
+      back: "العودة إلى العملاء",
+      sections: {
+        details: "بيانات العميل",
+        detailsSubtitle: "حدّث الملف الأساسي وبيانات التواصل.",
+        finance: "إعدادات الفوترة",
+        financeSubtitle: "تحكّم في حد الائتمان وشروط الدفع.",
+      },
+      fields: {
+        code: "الكود",
+        name: "الاسم",
+        email: "البريد الإلكتروني",
+        phone: "الهاتف",
+        address: "العنوان",
+        creditLimit: "حد الائتمان",
+        paymentTerms: "مدة السداد (أيام)",
+        active: "نشط",
+      },
+      placeholders: {
+        code: "CUST-0001",
+        name: "اسم العميل",
+        email: "customer@email.com",
+        phone: "+20 1XX XXX XXXX",
+        address: "عنوان العميل",
+      },
+      actions: {
+        save: "حفظ",
+      },
+    },
+  };
+
   if (isForbiddenError(customerQuery.error)) {
-    return <AccessDenied />;
+    return (
+      <DashboardShell copy={headerCopy} className="customer-form-page">
+        {() => <AccessDenied />}
+      </DashboardShell>
+    );
   }
 
   async function handleSubmit(values: CustomerFormValues) {
@@ -121,112 +192,185 @@ export function CustomerFormPage() {
   }
 
   return (
-    <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={3}>{isEditing ? "Edit Customer" : "New Customer"}</Title>
-        <Button variant="light" onClick={() => navigate("/customers")}>
-          Back to Customers
-        </Button>
-      </Group>
+    <DashboardShell
+      copy={headerCopy}
+      className="customer-form-page"
+      actions={({ language }) => (
+        <button
+          type="button"
+          className="action-button action-button--ghost"
+          onClick={() => navigate("/customers")}
+        >
+          {pageCopy[language].back}
+        </button>
+      )}
+    >
+      {({ language }) => {
+        const copy = pageCopy[language];
 
-      <Card withBorder radius="md" p="md">
-        <form onSubmit={form.handleSubmit(handleSubmit)}>
-          <Stack gap="md">
-            <Group grow>
-              <TextInput
-                label="Code"
-                placeholder="CUST-0001"
-                required
-                {...form.register("code")}
-                error={form.formState.errors.code?.message}
-              />
-              <TextInput
-                label="Name"
-                placeholder="Customer name"
-                required
-                {...form.register("name")}
-                error={form.formState.errors.name?.message}
-              />
-            </Group>
-
-            <Group grow>
-              <TextInput
-                label="Email"
-                placeholder="customer@email.com"
-                {...form.register("email")}
-                error={form.formState.errors.email?.message}
-              />
-              <TextInput
-                label="Phone"
-                placeholder="+20 1XX XXX XXXX"
-                {...form.register("phone")}
-                error={form.formState.errors.phone?.message}
-              />
-            </Group>
-
-            <Textarea
-              label="Address"
-              placeholder="Customer address"
-              minRows={2}
-              {...form.register("address")}
-              error={form.formState.errors.address?.message}
-            />
-
-            <Group grow>
-              <Controller
-                control={form.control}
-                name="credit_limit"
-                render={({ field }) => (
-                  <NumberInput
-                    label="Credit Limit"
-                    value={field.value ?? ""}
-                    onChange={(value) => {
-                      field.onChange(typeof value === "number" ? value : null);
-                    }}
-                    min={0}
-                    decimalScale={2}
+        return (
+          <form
+            className="customer-form"
+            onSubmit={form.handleSubmit(handleSubmit)}
+          >
+            <section className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{copy.sections.details}</h2>
+                  <p>{copy.sections.detailsSubtitle}</p>
+                </div>
+              </div>
+              <div className="form-grid">
+                <label className="field">
+                  <span>{copy.fields.code}</span>
+                  <input
+                    type="text"
+                    placeholder={copy.placeholders.code}
+                    required
+                    {...form.register("code")}
                   />
-                )}
-              />
-              <Controller
-                control={form.control}
-                name="payment_terms_days"
-                render={({ field }) => (
-                  <NumberInput
-                    label="Payment terms (days)"
-                    value={field.value}
-                    onChange={(value) => {
-                      field.onChange(typeof value === "number" ? value : 0);
-                    }}
-                    min={0}
+                  {form.formState.errors.code?.message && (
+                    <span className="field-error">
+                      {form.formState.errors.code?.message}
+                    </span>
+                  )}
+                </label>
+                <label className="field">
+                  <span>{copy.fields.name}</span>
+                  <input
+                    type="text"
+                    placeholder={copy.placeholders.name}
+                    required
+                    {...form.register("name")}
                   />
-                )}
-              />
-            </Group>
+                  {form.formState.errors.name?.message && (
+                    <span className="field-error">
+                      {form.formState.errors.name?.message}
+                    </span>
+                  )}
+                </label>
+                <label className="field">
+                  <span>{copy.fields.email}</span>
+                  <input
+                    type="email"
+                    placeholder={copy.placeholders.email}
+                    {...form.register("email")}
+                  />
+                  {form.formState.errors.email?.message && (
+                    <span className="field-error">
+                      {form.formState.errors.email?.message}
+                    </span>
+                  )}
+                </label>
+                <label className="field">
+                  <span>{copy.fields.phone}</span>
+                  <input
+                    type="text"
+                    placeholder={copy.placeholders.phone}
+                    {...form.register("phone")}
+                  />
+                  {form.formState.errors.phone?.message && (
+                    <span className="field-error">
+                      {form.formState.errors.phone?.message}
+                    </span>
+                  )}
+                </label>
+                <label className="field field--full">
+                  <span>{copy.fields.address}</span>
+                  <textarea
+                    rows={3}
+                    placeholder={copy.placeholders.address}
+                    {...form.register("address")}
+                  />
+                  {form.formState.errors.address?.message && (
+                    <span className="field-error">
+                      {form.formState.errors.address?.message}
+                    </span>
+                  )}
+                </label>
+              </div>
+            </section>
 
-            <Controller
-              control={form.control}
-              name="is_active"
-              render={({ field }) => (
-                <Switch
-                  label="Active"
-                  checked={field.value}
-                  onChange={(event) => field.onChange(event.currentTarget.checked)}
-                />
-              )}
-            />
+            <section className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{copy.sections.finance}</h2>
+                  <p>{copy.sections.financeSubtitle}</p>
+                </div>
+              </div>
+              <div className="form-grid">
+                <label className="field">
+                  <span>{copy.fields.creditLimit}</span>
+                  <Controller
+                    control={form.control}
+                    name="credit_limit"
+                    render={({ field }) => (
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={field.value ?? ""}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          field.onChange(value === "" ? null : Number(value));
+                        }}
+                      />
+                    )}
+                  />
+                </label>
+                <label className="field">
+                  <span>{copy.fields.paymentTerms}</span>
+                  <Controller
+                    control={form.control}
+                    name="payment_terms_days"
+                    render={({ field }) => (
+                      <input
+                        type="number"
+                        min={0}
+                        value={field.value}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          field.onChange(value === "" ? 0 : Number(value));
+                        }}
+                      />
+                    )}
+                  />
+                </label>
+                <label className="field field--full field-toggle">
+                  <span>{copy.fields.active}</span>
+                  <Controller
+                    control={form.control}
+                    name="is_active"
+                    render={({ field }) => (
+                      <button
+                        type="button"
+                        className={`toggle-pill${field.value ? " is-active" : ""}`}
+                        onClick={() => field.onChange(!field.value)}
+                      >
+                        <span />
+                      </button>
+                    )}
+                  />
+                </label>
+              </div>
+            </section>
 
-            <Group justify="flex-end">
-              <Button
+            <div className="panel-actions panel-actions--right">
+              <button
                 type="submit"
-                loading={createMutation.isPending || updateMutation.isPending}
+                className={`action-button${
+                  createMutation.isPending || updateMutation.isPending
+                    ? " action-button--disabled"
+                    : ""
+                }`}
+                disabled={createMutation.isPending || updateMutation.isPending}
               >
-                Save
-              </Button>
-            </Group>
-          </Stack>
-        </form>
-      </Card>
-    </Stack>
+                {copy.actions.save}
+              </button>
+            </div>
+          </form>
+        );
+      }}
+    </DashboardShell>
   );
 }

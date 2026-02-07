@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Button, Card, Group, Select, Stack, Table, Text, TextInput, Title, Badge } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
 import { isForbiddenError } from "../../shared/api/errors";
 import { useCan } from "../../shared/auth/useCan";
 import { useCustomers } from "../../shared/customers/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
+import { DashboardShell } from "../DashboardShell";
+import "./CustomersPage.css";
 
 export function CustomersPage() {
   const navigate = useNavigate();
@@ -26,101 +27,251 @@ export function CustomersPage() {
 
   const customersQuery = useCustomers(filters);
 
+  const headerCopy = {
+    en: {
+      title: "Customers",
+      subtitle: "Track customer records, credit limits, and account status.",
+      helper: "Filter by name, code, and activity status to find accounts quickly.",
+      tags: ["CRM", "Billing"],
+    },
+    ar: {
+      title: "العملاء",
+      subtitle: "تابع بيانات العملاء وحدود الائتمان وحالة الحساب.",
+      helper: "قم بالتصفية بالاسم أو الكود أو حالة النشاط للوصول السريع.",
+      tags: ["إدارة العملاء", "الفوترة"],
+    },
+  };
+
+  const pageCopy = useMemo(
+    () => ({
+      en: {
+        filtersTitle: "Filters",
+        filtersSubtitle: "Narrow down the list with quick filters.",
+        tableTitle: "Customer list",
+        tableSubtitle: "Review credit limits and account activity at a glance.",
+        actions: {
+          new: "New Customer",
+          edit: "Edit",
+        },
+        fields: {
+          name: "Name",
+          code: "Code",
+          status: "Status",
+        },
+        placeholders: {
+          name: "Customer name",
+          code: "CUST-0001",
+        },
+        statusOptions: {
+          all: "All",
+          active: "Active",
+          inactive: "Inactive",
+        },
+        table: {
+          code: "Code",
+          name: "Name",
+          phone: "Phone",
+          credit: "Credit Limit",
+          status: "Status",
+          actions: "Actions",
+          empty: "No customers found.",
+          loading: "Loading customers...",
+        },
+        statusLabel: {
+          active: "Active",
+          inactive: "Inactive",
+        },
+      },
+      ar: {
+        filtersTitle: "الفلاتر",
+        filtersSubtitle: "صفِّ النتائج بسرعة باستخدام فلاتر العملاء.",
+        tableTitle: "قائمة العملاء",
+        tableSubtitle: "راجع حدود الائتمان وحالة الحساب بسرعة.",
+        actions: {
+          new: "عميل جديد",
+          edit: "تعديل",
+        },
+        fields: {
+          name: "الاسم",
+          code: "الكود",
+          status: "الحالة",
+        },
+        placeholders: {
+          name: "اسم العميل",
+          code: "CUST-0001",
+        },
+        statusOptions: {
+          all: "الكل",
+          active: "نشط",
+          inactive: "غير نشط",
+        },
+        table: {
+          code: "الكود",
+          name: "الاسم",
+          phone: "الهاتف",
+          credit: "حد الائتمان",
+          status: "الحالة",
+          actions: "الإجراءات",
+          empty: "لا يوجد عملاء مطابقون.",
+          loading: "جارٍ تحميل العملاء...",
+        },
+        statusLabel: {
+          active: "نشط",
+          inactive: "غير نشط",
+        },
+      },
+    }),
+    []
+  );
+
   if (isForbiddenError(customersQuery.error)) {
-    return <AccessDenied />;
+    return (
+      <DashboardShell copy={headerCopy} className="customers-page">
+        {() => <AccessDenied />}
+      </DashboardShell>
+    );
   }
 
   return (
-    <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={3}>Customers</Title>
-        {canCreate && (
-          <Button onClick={() => navigate("/customers/new")}>New Customer</Button>
-        )}
-      </Group>
+    <DashboardShell
+      copy={headerCopy}
+      className="customers-page"
+      actions={
+        canCreate
+          ? ({ language }) => (
+              <button
+                type="button"
+                className="action-button"
+                onClick={() => navigate("/customers/new")}
+              >
+                {pageCopy[language].actions.new}
+              </button>
+            )
+          : undefined
+      }
+    >
+      {({ language }) => {
+        const copy = pageCopy[language];
 
-      <Card withBorder radius="md" p="md">
-        <Group align="end" gap="md" wrap="wrap">
-          <TextInput
-            label="Name"
-            placeholder="Customer name"
-            value={name}
-            onChange={(event) => setName(event.currentTarget.value)}
-          />
-          <TextInput
-            label="Code"
-            placeholder="CUST-0001"
-            value={code}
-            onChange={(event) => setCode(event.currentTarget.value)}
-          />
-          <Select
-            label="Status"
-            placeholder="All"
-            data={[
-              { value: "true", label: "Active" },
-              { value: "false", label: "Inactive" },
-            ]}
-            value={activeFilter}
-            onChange={setActiveFilter}
-            clearable
-          />
-        </Group>
-      </Card>
+        return (
+          <>
+            <section className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{copy.filtersTitle}</h2>
+                  <p>{copy.filtersSubtitle}</p>
+                </div>
+              </div>
+              <div className="filters-grid">
+                <label className="field">
+                  <span>{copy.fields.name}</span>
+                  <input
+                    type="text"
+                    value={name}
+                    placeholder={copy.placeholders.name}
+                    onChange={(event) => setName(event.currentTarget.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>{copy.fields.code}</span>
+                  <input
+                    type="text"
+                    value={code}
+                    placeholder={copy.placeholders.code}
+                    onChange={(event) => setCode(event.currentTarget.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>{copy.fields.status}</span>
+                  <select
+                    value={activeFilter ?? ""}
+                    onChange={(event) =>
+                      setActiveFilter(event.target.value || null)
+                    }
+                  >
+                    <option value="">{copy.statusOptions.all}</option>
+                    <option value="true">{copy.statusOptions.active}</option>
+                    <option value="false">{copy.statusOptions.inactive}</option>
+                  </select>
+                </label>
+              </div>
+            </section>
 
-      <Card withBorder radius="md" p="md">
-        {customersQuery.isLoading ? (
-          <Text c="dimmed">Loading customers...</Text>
-        ) : (
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Code</Table.Th>
-                <Table.Th>Name</Table.Th>
-                <Table.Th>Phone</Table.Th>
-                <Table.Th>Credit Limit</Table.Th>
-                <Table.Th>Status</Table.Th>
-                <Table.Th>Actions</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {(customersQuery.data ?? []).length === 0 ? (
-                <Table.Tr>
-                  <Table.Td colSpan={6}>
-                    <Text c="dimmed">No customers found.</Text>
-                  </Table.Td>
-                </Table.Tr>
-              ) : (
-                (customersQuery.data ?? []).map((customer) => (
-                  <Table.Tr key={customer.id}>
-                    <Table.Td>{customer.code}</Table.Td>
-                    <Table.Td>{customer.name}</Table.Td>
-                    <Table.Td>{customer.phone || "-"}</Table.Td>
-                    <Table.Td>{customer.credit_limit ?? "-"}</Table.Td>
-                    <Table.Td>
-                      <Badge color={customer.is_active ? "green" : "gray"}>
-                        {customer.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap="xs">
-                        {canEdit && (
-                          <Button
-                            size="xs"
-                            variant="light"
-                            onClick={() => navigate(`/customers/${customer.id}/edit`)}
-                          >
-                            Edit
-                          </Button>
-                        )}
-                      </Group>
-                    </Table.Td>
-                  </Table.Tr>
-                ))
-              )}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Card>
-    </Stack>
+            <section className="panel">
+              <div className="panel__header">
+                <div>
+                  <h2>{copy.tableTitle}</h2>
+                  <p>{copy.tableSubtitle}</p>
+                </div>
+              </div>
+              <div className="table-wrapper">
+                {customersQuery.isLoading ? (
+                  <p className="helper-text">{copy.table.loading}</p>
+                ) : (
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>{copy.table.code}</th>
+                        <th>{copy.table.name}</th>
+                        <th>{copy.table.phone}</th>
+                        <th>{copy.table.credit}</th>
+                        <th>{copy.table.status}</th>
+                        <th>{copy.table.actions}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(customersQuery.data ?? []).length === 0 ? (
+                        <tr>
+                          <td colSpan={6}>
+                            <span className="helper-text">{copy.table.empty}</span>
+                          </td>
+                        </tr>
+                      ) : (
+                        (customersQuery.data ?? []).map((customer) => (
+                          <tr key={customer.id}>
+                            <td>{customer.code}</td>
+                            <td>{customer.name}</td>
+                            <td>{customer.phone || "-"}</td>
+                            <td>{customer.credit_limit ?? "-"}</td>
+                            <td>
+                              <span
+                                className={`status-pill ${
+                                  customer.is_active
+                                    ? "status-pill--active"
+                                    : "status-pill--inactive"
+                                }`}
+                              >
+                                {customer.is_active
+                                  ? copy.statusLabel.active
+                                  : copy.statusLabel.inactive}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="table-actions">
+                                {canEdit && (
+                                  <button
+                                    type="button"
+                                    className="table-action"
+                                    onClick={() =>
+                                      navigate(`/customers/${customer.id}/edit`)
+                                    }
+                                  >
+                                    {copy.actions.edit}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </section>
+          </>
+        );
+      }}
+    </DashboardShell>
   );
 }

@@ -1,0 +1,51 @@
+@import "../DashboardPage.css";
+
+.customers-page .hero-panel {
+  align-items: flex-start;
+}
+
+.customers-page .hero-panel__intro {
+  max-width: 640px;
+}
+
+.customers-page .filters-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.customers-page .data-table td {
+  vertical-align: middle;
+}
+
+.customers-page .table-actions {
+  justify-content: flex-start;
+}
+
+.status-pill--active {
+  background: rgba(52, 211, 153, 0.18);
+  color: #1d8c5f;
+}
+
+.status-pill--inactive {
+  background: rgba(148, 163, 184, 0.2);
+  color: #64748b;
+}
+
+.dashboard-page[data-theme="dark"] .status-pill--active {
+  background: rgba(16, 185, 129, 0.2);
+  color: #9ff1d7;
+}
+
+.dashboard-page[data-theme="dark"] .status-pill--inactive {
+  background: rgba(148, 163, 184, 0.2);
+  color: #d4d9e6;
+}
+
+@media (max-width: 720px) {
+  .customers-page .filters-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .customers-page .table-actions {
+    justify-content: flex-start;
+  }
+}
