@@ -3,12 +3,13 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
-import { useAnalyticsSummary, useAnalyticsKpis } from "../../shared/analytics/insights.ts";
+import { useProfitLoss } from "../../shared/accounting/hooks";
 import { useAlerts } from "../../shared/analytics/hooks";
 import { useCashForecast } from "../../shared/analytics/forecast";
 import { buildRangeSelection } from "../../shared/analytics/range.ts";
 import type { RangeOption } from "../../shared/analytics/range.ts";
 import { formatCurrency, formatPercent } from "../../shared/analytics/format.ts";
+import { useAttendanceRecordsQuery } from "../../shared/hr/hooks";
 import {
   Line,
   LineChart,
@@ -276,67 +277,26 @@ const contentMap: Record<Language, Content> = {
   },
 };
 
-const kpiKeys = ["revenue_daily", "expenses_daily", "absence_rate_daily"];
+function buildAbsenceChartData(
+  records: Array<{ date: string; status: string }>
+) {
+  const valuesByDate = new Map<string, { absent: number; total: number }>();
 
-function buildChartData(series: Array<{ key: string; points: { date: string; value: string | null }[] }>) {
-  const valuesByDate = new Map<string, Record<string, number | null>>();
-
-  series.forEach((kpi) => {
-    kpi.points.forEach((point) => {
-      const entry = valuesByDate.get(point.date) ?? {};
-      entry[kpi.key] = point.value ? Number(point.value) : null;
-      valuesByDate.set(point.date, entry);
-    });
+  records.forEach((record) => {
+    const entry = valuesByDate.get(record.date) ?? { absent: 0, total: 0 };
+    entry.total += 1;
+    if (record.status === "absent") {
+      entry.absent += 1;
+    }
+    valuesByDate.set(record.date, entry);
   });
 
   return Array.from(valuesByDate.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, values]) => ({
       date,
-      revenue: values.revenue_daily ?? 0,
-      expenses: values.expenses_daily ?? 0,
-      absence: values.absence_rate_daily ?? 0,
+      absence: values.total ? values.absent / values.total : 0,
     }));
-}
-
-function sumSeries(series?: { points: { value: string | null }[] }) {
-  if (!series) {
-    return null;
-  }
-  let total = 0;
-  let hasValue = false;
-  series.points.forEach((point) => {
-    if (point.value === null) {
-      return;
-    }
-    const numeric = Number(point.value);
-    if (Number.isNaN(numeric)) {
-      return;
-    }
-    total += numeric;
-    hasValue = true;
-  });
-  return hasValue ? total : null;
-}
-
-function averageSeries(series?: { points: { value: string | null }[] }) {
-  if (!series) {
-    return null;
-  }
-  let total = 0;
-  let count = 0;
-  series.points.forEach((point) => {
-    if (point.value === null) {
-      return;
-    }
-    const numeric = Number(point.value);
-    if (Number.isNaN(numeric)) {
-      return;
-    }
-    total += numeric;
-    count += 1;
-  });
-  return count ? total / count : null;
 }
 
 function formatPercentNormalized(value?: string | number | null) {
@@ -406,53 +366,67 @@ export function CEODashboardPage() {
     [range, customStart, customEnd]
   );
 
-  const summaryQuery = useAnalyticsSummary(selection.rangeParam);
-  const kpisQuery = useAnalyticsKpis(kpiKeys, selection.start, selection.end);
+  const profitLossQuery = useProfitLoss(selection.start, selection.end);
   const alertsQuery = useAlerts({ status: "open", range: selection.rangeParam });
   const forecastQuery = useCashForecast();
+  const attendanceQuery = useAttendanceRecordsQuery(
+    {
+      dateFrom: selection.start,
+      dateTo: selection.end,
+    },
+    Boolean(selection.start && selection.end)
+  );
 
-  const chartData = useMemo(() => {
-    if (!kpisQuery.data) {
+  const revenueChartData = useMemo(() => {
+    if (!selection.start || !selection.end || !profitLossQuery.data) {
       return [];
     }
-    return buildChartData(kpisQuery.data);
-  }, [kpisQuery.data]);
+    const incomeTotal = Math.abs(Number(profitLossQuery.data.income_total ?? 0));
+    const expenseTotal = Math.abs(Number(profitLossQuery.data.expense_total ?? 0));
+    return [
+      { date: selection.start, revenue: incomeTotal, expenses: expenseTotal },
+      { date: selection.end, revenue: incomeTotal, expenses: expenseTotal },
+    ];
+  }, [profitLossQuery.data, selection.end, selection.start]);
 
-  const kpiSeries = useMemo(() => {
-    const map = new Map<string, { points: { value: string | null }[] }>();
-    (kpisQuery.data ?? []).forEach((series) => {
-      map.set(series.key, series);
-    });
-    return map;
-  }, [kpisQuery.data]);
+  const absenceChartData = useMemo(() => {
+    return buildAbsenceChartData(attendanceQuery.data ?? []);
+  }, [attendanceQuery.data]);
 
-  const revenueTotalFromKpis = useMemo(
-    () => sumSeries(kpiSeries.get("revenue_daily")),
-    [kpiSeries]
-  );
-  const expensesTotalFromKpis = useMemo(
-    () => sumSeries(kpiSeries.get("expenses_daily")),
-    [kpiSeries]
-  );
-  const absenceAvgFromKpis = useMemo(
-    () => averageSeries(kpiSeries.get("absence_rate_daily")),
-    [kpiSeries]
-  );
+  const incomeTotal = useMemo(() => {
+    if (!profitLossQuery.data) {
+      return null;
+    }
+    return Math.abs(Number(profitLossQuery.data.income_total ?? 0));
+  }, [profitLossQuery.data]);
+  const expenseTotal = useMemo(() => {
+    if (!profitLossQuery.data) {
+      return null;
+    }
+    return Math.abs(Number(profitLossQuery.data.expense_total ?? 0));
+  }, [profitLossQuery.data]);
+  const netProfitTotal = useMemo(() => {
+    if (incomeTotal === null || expenseTotal === null) {
+      return null;
+    }
+    return incomeTotal - expenseTotal;
+  }, [expenseTotal, incomeTotal]);
+  const absenceSummary = useMemo(() => {
+    const records = attendanceQuery.data ?? [];
+    const total = records.length;
+    const absent = records.filter((record) => record.status === "absent").length;
+    return {
+      total,
+      absent,
+      rate: total ? absent / total : null,
+    };
+  }, [attendanceQuery.data]);
 
-  const resolvedRevenueTotal =
-    summaryQuery.data?.revenue_total ??
-    (revenueTotalFromKpis !== null ? String(revenueTotalFromKpis) : null);
-  const resolvedExpensesTotal =
-    summaryQuery.data?.expenses_total ??
-    (expensesTotalFromKpis !== null ? String(expensesTotalFromKpis) : null);
-  const resolvedNetProfit =
-    summaryQuery.data?.net_profit_est ??
-    (resolvedRevenueTotal && resolvedExpensesTotal
-      ? String(Number(resolvedRevenueTotal) - Number(resolvedExpensesTotal))
-      : null);
+  const resolvedRevenueTotal = incomeTotal !== null ? String(incomeTotal) : null;
+  const resolvedExpensesTotal = expenseTotal !== null ? String(expenseTotal) : null;
+  const resolvedNetProfit = netProfitTotal !== null ? String(netProfitTotal) : null;
   const resolvedAbsenceAvg =
-    summaryQuery.data?.absence_rate_avg ??
-    (absenceAvgFromKpis !== null ? String(absenceAvgFromKpis) : null);
+    absenceSummary.rate !== null ? String(absenceSummary.rate) : null;
 
   const topAlerts = useMemo(() => {
     const severityRank: Record<string, number> = {
@@ -865,7 +839,9 @@ export function CEODashboardPage() {
                     <span>{stat.label}</span>
                     <span className="stat-card__change">{rangeLabel}</span>
                   </div>
-                  <strong>{summaryQuery.isLoading ? content.loadingLabel : stat.value}</strong>
+                  <strong>
+                    {profitLossQuery.isLoading ? content.loadingLabel : stat.value}
+                  </strong>                  
                   <div className="stat-card__spark" aria-hidden="true" />
                 </div>
               ))}
@@ -962,7 +938,7 @@ export function CEODashboardPage() {
                 <div>
                   <span>{content.page.stats.revenue}</span>
                   <strong>
-                    {summaryQuery.isLoading
+                    {profitLossQuery.isLoading                    
                       ? content.loadingLabel
                       : formatCurrency(resolvedRevenueTotal)}
                   </strong>
@@ -970,18 +946,18 @@ export function CEODashboardPage() {
                 <div>
                   <span>{content.page.stats.expenses}</span>
                   <strong>
-                    {summaryQuery.isLoading
+                    {profitLossQuery.isLoading                    
                       ? content.loadingLabel
                       : formatCurrency(resolvedExpensesTotal)}
                   </strong>
                 </div>
               </div>
-              {kpisQuery.isLoading ? (
+              {profitLossQuery.isLoading ? (                
                 <span className="helper-text">{content.loadingLabel}</span>
-              ) : chartData.length ? (
+              ) : revenueChartData.length ? (                
                 <div style={{ width: "100%", height: 240 }}>
                   <ResponsiveContainer>
-                    <LineChart data={chartData}>                      
+                    <LineChart data={revenueChartData}>                                     
                       <XAxis dataKey="date" />
                       <YAxis />
                       <Tooltip formatter={(value: number) => formatCurrency(String(value))} />
@@ -1020,18 +996,18 @@ export function CEODashboardPage() {
                 <div>
                   <span>{content.page.chartAbsenceAvg}</span>
                   <strong>
-                    {summaryQuery.isLoading
+                    {attendanceQuery.isLoading                    
                       ? content.loadingLabel
                       : formatPercentNormalized(resolvedAbsenceAvg)}
                   </strong>
                 </div>
               </div>
-              {kpisQuery.isLoading ? (
+              {attendanceQuery.isLoading ? (                
                 <span className="helper-text">{content.loadingLabel}</span>
-              ) : chartData.length ? (
+              ) : absenceChartData.length ? (                
                 <div style={{ width: "100%", height: 240 }}>
                   <ResponsiveContainer>
-                    <LineChart data={chartData}>
+                    <LineChart data={absenceChartData}>                      
                       <XAxis dataKey="date" />
                       <YAxis tickFormatter={(value: number) => formatPercentNormalized(value)} />
                       <Tooltip
