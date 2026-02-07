@@ -62,9 +62,10 @@ type Content = {
     chartRevenueSubtitle: string;
     chartAbsence: string;
     chartAbsenceSubtitle: string;
+    chartAbsenceAvg: string;
     alertsTitle: string;
     alertsBadge: string;
-    alertsEmpty: string;
+    alertsEmpty: string;    
   };
   nav: {
     dashboard: string;
@@ -146,9 +147,10 @@ const contentMap: Record<Language, Content> = {
       chartRevenueSubtitle: "Daily movement",
       chartAbsence: "Absence rate",
       chartAbsenceSubtitle: "People pulse",
+      chartAbsenceAvg: "Average absence",
       alertsTitle: "Top alerts",
       alertsBadge: "Open",
-      alertsEmpty: "No active alerts right now.",
+      alertsEmpty: "No active alerts right now.",      
     },
     nav: {
       dashboard: "Dashboard",
@@ -228,9 +230,10 @@ const contentMap: Record<Language, Content> = {
       chartRevenueSubtitle: "حركة يومية",
       chartAbsence: "معدل الغياب",
       chartAbsenceSubtitle: "نبض الموارد البشرية",
+      chartAbsenceAvg: "متوسط الغياب",
       alertsTitle: "أهم التنبيهات",
       alertsBadge: "مفتوحة",
-      alertsEmpty: "لا توجد تنبيهات حالياً.",
+      alertsEmpty: "لا توجد تنبيهات حالياً.",      
     },
     nav: {
       dashboard: "لوحة التحكم",
@@ -296,7 +299,67 @@ function buildChartData(series: Array<{ key: string; points: { date: string; val
     }));
 }
 
-export function CEODashboardPage() {
+function sumSeries(series?: { points: { value: string | null }[] }) {
+  if (!series) {
+    return null;
+  }
+  let total = 0;
+  let hasValue = false;
+  series.points.forEach((point) => {
+    if (point.value === null) {
+      return;
+    }
+    const numeric = Number(point.value);
+    if (Number.isNaN(numeric)) {
+      return;
+    }
+    total += numeric;
+    hasValue = true;
+  });
+  return hasValue ? total : null;
+}
+
+function averageSeries(series?: { points: { value: string | null }[] }) {
+  if (!series) {
+    return null;
+  }
+  let total = 0;
+  let count = 0;
+  series.points.forEach((point) => {
+    if (point.value === null) {
+      return;
+    }
+    const numeric = Number(point.value);
+    if (Number.isNaN(numeric)) {
+      return;
+    }
+    total += numeric;
+    count += 1;
+  });
+  return count ? total / count : null;
+}
+
+function formatPercentNormalized(value?: string | number | null) {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) {
+    return "-";
+  }
+  const normalized = numeric > 1 ? numeric / 100 : numeric;
+  return formatPercent(String(normalized));
+}
+
+function formatAlertDate(value: string, locale: "ar" | "en") {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleDateString(locale);
+}
+
+export function CEODashboardPage() {  
   const navigate = useNavigate();
   const location = useLocation();
   const { data, isLoading, isError } = useMe();
@@ -355,8 +418,60 @@ export function CEODashboardPage() {
     return buildChartData(kpisQuery.data);
   }, [kpisQuery.data]);
 
+  const kpiSeries = useMemo(() => {
+    const map = new Map<string, { points: { value: string | null }[] }>();
+    (kpisQuery.data ?? []).forEach((series) => {
+      map.set(series.key, series);
+    });
+    return map;
+  }, [kpisQuery.data]);
+
+  const revenueTotalFromKpis = useMemo(
+    () => sumSeries(kpiSeries.get("revenue_daily")),
+    [kpiSeries]
+  );
+  const expensesTotalFromKpis = useMemo(
+    () => sumSeries(kpiSeries.get("expenses_daily")),
+    [kpiSeries]
+  );
+  const absenceAvgFromKpis = useMemo(
+    () => averageSeries(kpiSeries.get("absence_rate_daily")),
+    [kpiSeries]
+  );
+
+  const resolvedRevenueTotal =
+    summaryQuery.data?.revenue_total ??
+    (revenueTotalFromKpis !== null ? String(revenueTotalFromKpis) : null);
+  const resolvedExpensesTotal =
+    summaryQuery.data?.expenses_total ??
+    (expensesTotalFromKpis !== null ? String(expensesTotalFromKpis) : null);
+  const resolvedNetProfit =
+    summaryQuery.data?.net_profit_est ??
+    (resolvedRevenueTotal && resolvedExpensesTotal
+      ? String(Number(resolvedRevenueTotal) - Number(resolvedExpensesTotal))
+      : null);
+  const resolvedAbsenceAvg =
+    summaryQuery.data?.absence_rate_avg ??
+    (absenceAvgFromKpis !== null ? String(absenceAvgFromKpis) : null);
+
   const topAlerts = useMemo(() => {
-    return (alertsQuery.data ?? []).slice(0, 5);
+    const severityRank: Record<string, number> = {
+      critical: 4,
+      high: 3,
+      medium: 2,
+      low: 1,
+    };
+    return [...(alertsQuery.data ?? [])]
+      .sort((a, b) => {
+        const rankDiff =
+          (severityRank[b.severity?.toLowerCase?.() ?? ""] ?? 0) -
+          (severityRank[a.severity?.toLowerCase?.() ?? ""] ?? 0);
+        if (rankDiff !== 0) {
+          return rankDiff;
+        }
+        return new Date(b.event_date).getTime() - new Date(a.event_date).getTime();
+      })
+      .slice(0, 5);
   }, [alertsQuery.data]);
 
   const forecast30 = useMemo(() => {
@@ -391,15 +506,15 @@ export function CEODashboardPage() {
     results.push(
       {
         label: content.page.stats.revenue,
-        description: formatCurrency(summaryQuery.data?.revenue_total ?? null),
+        description: formatCurrency(resolvedRevenueTotal),        
       },
       {
         label: content.page.stats.expenses,
-        description: formatCurrency(summaryQuery.data?.expenses_total ?? null),
+        description: formatCurrency(resolvedExpensesTotal),        
       },
       {
         label: content.page.stats.netProfit,
-        description: formatCurrency(summaryQuery.data?.net_profit_est ?? null),
+        description: formatCurrency(resolvedNetProfit),        
       },
       {
         label: content.page.stats.cashForecast,
@@ -427,7 +542,9 @@ export function CEODashboardPage() {
     forecast30?.net_expected,
     isArabic,
     searchTerm,
-    summaryQuery.data,
+    resolvedExpensesTotal,
+    resolvedNetProfit,
+    resolvedRevenueTotal,
     topAlerts,
   ]);
 
@@ -728,15 +845,15 @@ export function CEODashboardPage() {
               {[
                 {
                   label: content.page.stats.revenue,
-                  value: formatCurrency(summaryQuery.data?.revenue_total ?? null),
+                  value: formatCurrency(resolvedRevenueTotal),                  
                 },
                 {
                   label: content.page.stats.expenses,
-                  value: formatCurrency(summaryQuery.data?.expenses_total ?? null),
+                  value: formatCurrency(resolvedExpensesTotal),                  
                 },
                 {
                   label: content.page.stats.netProfit,
-                  value: formatCurrency(summaryQuery.data?.net_profit_est ?? null),
+                  value: formatCurrency(resolvedNetProfit),                  
                 },
                 {
                   label: content.page.stats.cashForecast,
@@ -841,12 +958,30 @@ export function CEODashboardPage() {
                 </div>
                 <span className="pill">{rangeLabel}</span>
               </div>
+              <div className="panel__metrics">
+                <div>
+                  <span>{content.page.stats.revenue}</span>
+                  <strong>
+                    {summaryQuery.isLoading
+                      ? content.loadingLabel
+                      : formatCurrency(resolvedRevenueTotal)}
+                  </strong>
+                </div>
+                <div>
+                  <span>{content.page.stats.expenses}</span>
+                  <strong>
+                    {summaryQuery.isLoading
+                      ? content.loadingLabel
+                      : formatCurrency(resolvedExpensesTotal)}
+                  </strong>
+                </div>
+              </div>
               {kpisQuery.isLoading ? (
                 <span className="helper-text">{content.loadingLabel}</span>
               ) : chartData.length ? (
                 <div style={{ width: "100%", height: 240 }}>
                   <ResponsiveContainer>
-                    <LineChart data={chartData}>
+                    <LineChart data={chartData}>                      
                       <XAxis dataKey="date" />
                       <YAxis />
                       <Tooltip formatter={(value: number) => formatCurrency(String(value))} />
@@ -881,6 +1016,16 @@ export function CEODashboardPage() {
                 </div>
                 <span className="pill">{rangeLabel}</span>
               </div>
+              <div className="panel__metrics">
+                <div>
+                  <span>{content.page.chartAbsenceAvg}</span>
+                  <strong>
+                    {summaryQuery.isLoading
+                      ? content.loadingLabel
+                      : formatPercentNormalized(resolvedAbsenceAvg)}
+                  </strong>
+                </div>
+              </div>
               {kpisQuery.isLoading ? (
                 <span className="helper-text">{content.loadingLabel}</span>
               ) : chartData.length ? (
@@ -888,13 +1033,15 @@ export function CEODashboardPage() {
                   <ResponsiveContainer>
                     <LineChart data={chartData}>
                       <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip formatter={(value: number) => formatPercent(String(value))} />
+                      <YAxis tickFormatter={(value: number) => formatPercentNormalized(value)} />
+                      <Tooltip
+                        formatter={(value: number) => formatPercentNormalized(value)}
+                      />
                       <Legend />
                       <Line
                         type="monotone"
                         dataKey="absence"
-                        name={isArabic ? "الغياب" : "Absence"}
+                        name={isArabic ? "الغياب" : "Absence"}                        
                         stroke="#845ef7"
                         strokeWidth={2}
                       />
@@ -933,7 +1080,7 @@ export function CEODashboardPage() {
                           <td>
                             <span className="status-pill">{alert.severity}</span>
                           </td>
-                          <td>{alert.event_date}</td>
+                          <td>{formatAlertDate(alert.event_date, isArabic ? "ar" : "en")}</td>                          
                         </tr>
                       ))}
                     </tbody>

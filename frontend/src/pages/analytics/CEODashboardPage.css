@@ -421,6 +421,28 @@
   font-size: 0.85rem;
 }
 
+.panel__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  border-radius: 16px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  padding: 12px 14px;
+}
+
+.panel__metrics span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.panel__metrics strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1rem;
+}
+
 .bar-chart {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
