@@ -13,7 +13,7 @@ import {
 import { useCustomers } from "../../shared/customers/hooks";
 import { buildRangeSelection } from "../../shared/analytics/range.ts";
 import type { RangeOption } from "../../shared/analytics/range.ts";
-import { formatCurrency } from "../../shared/analytics/format.ts";
+import { formatCurrency, formatNumber } from "../../shared/analytics/format.ts";
 import {
   Bar,
   BarChart,
@@ -398,10 +398,10 @@ export function FinanceDashboardPage() {
     if (lines.length === 0) {
       return null;
     }
-    const balance = lines.reduce(
-      (acc, line) => Number(line.running_balance || acc),
-      0
-    );
+    const lastLineWithBalance = [...lines]
+      .reverse()
+      .find((line) => line.running_balance !== null && line.running_balance !== "");
+    const balance = lastLineWithBalance?.running_balance ?? lines[lines.length - 1]?.running_balance ?? 0;
     return formatCurrency(String(balance));
   }, [cashLedgerQuery.data?.lines]);
 
@@ -410,13 +410,18 @@ export function FinanceDashboardPage() {
     if (lines.length === 0) {
       return null;
     }
-    const balance = lines.reduce(
-      (acc, line) => Number(line.running_balance || acc),
-      0
-    );
-    return formatCurrency(String(balance));
+    const filteredLines = lines.filter((line) => {
+      const description = `${line.description ?? ""} ${line.memo ?? ""}`.toLowerCase();
+      return !description.includes("سلف") && !description.includes("advance");
+    });
+    const balance = filteredLines.reduce((sum, line) => {
+      const debit = Number(line.debit ?? 0);
+      const credit = Number(line.credit ?? 0);
+      return sum + (debit - credit);
+    }, 0);
+    return formatNumber(String(balance));
   }, [receivablesLedgerQuery.data?.lines]);
-
+  
   const pnlTotals = useMemo(() => {
     const incomeTotal = Math.abs(Number(pnlQuery.data?.income_total ?? 0));
     const expenseTotal = Math.abs(Number(pnlQuery.data?.expense_total ?? 0));
@@ -566,7 +571,7 @@ export function FinanceDashboardPage() {
     searchTerm,
     topCustomers,
   ]);
-  
+
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });
