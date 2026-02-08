@@ -5,6 +5,18 @@ type AxiosLikeError = {
   response?: { status?: number; data?: unknown };
 };
 
+function cleanHtmlString(value: string) {
+  const decoded = value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+  const stripped = decoded.replace(/<[^>]*>/g, " ");
+  const normalized = stripped.replace(/\s+/g, " ").trim();
+  return normalized || value.trim();
+}
+
 export function isForbiddenError(error: unknown) {
   return axios.isAxiosError(error) && error.response?.status === 403;
 }
@@ -15,8 +27,8 @@ export function formatApiError(error: unknown): string {
 
   if (data == null) return e?.message ?? String(error);
 
-  if (typeof data === "string") return data;
-
+  if (typeof data === "string") return cleanHtmlString(data);
+  
   if (typeof data === "object") {
     const record = data as Record<string, unknown>;
     if (typeof record.detail === "string") return record.detail;

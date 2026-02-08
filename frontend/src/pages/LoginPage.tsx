@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
 import { notifications } from "@mantine/notifications";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { http } from "../shared/api/http";
 import { endpoints } from "../shared/api/endpoints";
+import { formatApiError } from "../shared/api/errors";
 import { hasAccessToken, setTokens } from "../shared/auth/tokens";
 import "./LoginPage.css";
 
@@ -130,13 +130,11 @@ export function LoginPage() {
 
       navigate(redirectPath, { replace: true });
     } catch (err: unknown) {
-      const message = axios.isAxiosError(err)
-        ? JSON.stringify(err.response?.data ?? err.message)
-        : "Unknown error";
+      const message = formatApiError(err);
       notifications.show({
         title: isArabic ? "فشل تسجيل الدخول" : "Login failed",        
         message,
-        color: "red",
+        color: "red",        
       });
     } finally {
       setIsSubmitting(false);
