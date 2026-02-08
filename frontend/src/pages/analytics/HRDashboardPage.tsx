@@ -4,13 +4,13 @@ import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
 import {
-  useAnalyticsSummary,
   useAnalyticsKpis,
   useAnalyticsBreakdown,
 } from "../../shared/analytics/insights.ts";
 import { buildRangeSelection } from "../../shared/analytics/range.ts";
 import type { RangeOption } from "../../shared/analytics/range.ts";
-import { formatNumber, formatPercent } from "../../shared/analytics/format.ts";
+import { formatNumber } from "../../shared/analytics/format.ts";
+import { useAttendanceRecordsQuery, type AttendanceRecord } from "../../shared/hr/hooks";
 import {
   Line,
   LineChart,
@@ -59,14 +59,30 @@ type Content = {
       latenessAvg: string;
       overtimeTotal: string;
     };
+    units: {
+      days: string;
+      minutes: string;
+    };
     charts: {
       absenceTrend: string;
       latenessTrend: string;
       breakdownTitle: string;
       breakdownEmpty: string;
     };
+    attendanceLog: {
+      title: string;
+      subtitle: string;
+      fromLabel: string;
+      toLabel: string;
+      employee: string;
+      date: string;
+      status: string;
+      department: string;
+      lateMinutes: string;
+      empty: string;
+    };
   };
-  nav: {
+  nav: {    
     dashboard: string;
     users: string;
     attendanceSelf: string;
@@ -141,14 +157,30 @@ const contentMap: Record<Language, Content> = {
         latenessAvg: "Average lateness",
         overtimeTotal: "Overtime hours",
       },
+      units: {
+        days: "days",
+        minutes: "min",
+      },
       charts: {
         absenceTrend: "Absence trend",
         latenessTrend: "Lateness trend",
         breakdownTitle: "Top absence departments",
         breakdownEmpty: "No absence data yet.",        
       },
+      attendanceLog: {
+        title: "Attendance log",
+        subtitle: "Filter attendance records by date.",
+        fromLabel: "From",
+        toLabel: "To",
+        employee: "Employee",
+        date: "Date",
+        status: "Status",
+        department: "Department",
+        lateMinutes: "Late minutes",
+        empty: "No attendance records found for this range.",
+      },
     },
-    nav: {
+    nav: {      
       dashboard: "Dashboard",
       users: "Users",
       attendanceSelf: "My Attendance",
@@ -221,14 +253,30 @@ const contentMap: Record<Language, Content> = {
         latenessAvg: "متوسط التأخير",
         overtimeTotal: "ساعات إضافية",
       },
+      units: {
+        days: "يوم",
+        minutes: "دقيقة",
+      },
       charts: {
         absenceTrend: "اتجاه الغياب",
         latenessTrend: "اتجاه التأخير",
         breakdownTitle: "أكثر الأقسام غيابًا",
         breakdownEmpty: "لسه مفيش داتا للغياب.",        
       },
+      attendanceLog: {
+        title: "سجل الحضور",
+        subtitle: "فلتر بيانات الحضور حسب التاريخ.",
+        fromLabel: "من",
+        toLabel: "إلى",
+        employee: "الموظف",
+        date: "التاريخ",
+        status: "الحالة",
+        department: "القسم",
+        lateMinutes: "دقائق التأخير",
+        empty: "لا توجد سجلات حضور في هذا النطاق.",
+      },
     },
-    nav: {
+    nav: {      
       dashboard: "لوحة التحكم",
       users: "المستخدمون",
       attendanceSelf: "حضوري",
@@ -269,27 +317,99 @@ const contentMap: Record<Language, Content> = {
   },
 };
 
-const kpiKeys = ["absence_rate_daily", "lateness_rate_daily", "overtime_hours_daily"];
+const kpiKeys = ["overtime_hours_daily"];
 
-function buildChartData(series: Array<{ key: string; points: { date: string; value: string | null }[] }>) {
-  const valuesByDate = new Map<string, Record<string, number | null>>();
+function toDate(value: string) {
+  return new Date(`${value}T00:00:00`);
+}
 
-  series.forEach((kpi) => {
-    kpi.points.forEach((point) => {
-      const entry = valuesByDate.get(point.date) ?? {};
-      entry[kpi.key] = point.value ? Number(point.value) : null;
-      valuesByDate.set(point.date, entry);
-    });
+function getRangeDays(start?: string, end?: string) {
+  if (!start || !end) return null;
+  const startDate = toDate(start);
+  const endDate = toDate(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return null;
+  }
+  const diffMs = endDate.getTime() - startDate.getTime();
+  return Math.max(Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1, 1);
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function toIsoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+type AttendanceTrendPoint = {
+  label: string;
+  absenceAvg: number;
+  latenessAvg: number;
+};
+
+function buildAttendanceTrend(
+  records: AttendanceRecord[],
+  start?: string,
+  end?: string
+): AttendanceTrendPoint[] {
+  const rangeDays = getRangeDays(start, end);
+  if (!rangeDays || !start || !end) {
+    return [];
+  }
+  const bucketSize = rangeDays <= 7 ? 1 : rangeDays <= 31 ? 7 : 30;
+  const bucketCount = Math.ceil(rangeDays / bucketSize);
+  const startDate = toDate(start);
+
+  const buckets = Array.from({ length: bucketCount }, (_, index) => {
+    const bucketStart = addDays(startDate, index * bucketSize);
+    const bucketEnd = addDays(bucketStart, bucketSize - 1);
+    return {
+      start: bucketStart,
+      end: bucketEnd,
+      employees: new Map<number, { presentDays: number; lateMinutes: number }>(),
+    };
   });
 
-  return Array.from(valuesByDate.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, values]) => ({
-      date,
-      absence: values.absence_rate_daily ?? 0,
-      lateness: values.lateness_rate_daily ?? 0,
-      overtime: values.overtime_hours_daily ?? 0,
-    }));
+  records.forEach((record) => {
+    const recordDate = toDate(record.date);
+    const diffMs = recordDate.getTime() - startDate.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays < 0 || diffDays >= rangeDays) {
+      return;
+    }
+    const bucketIndex = Math.min(Math.floor(diffDays / bucketSize), buckets.length - 1);
+    const bucket = buckets[bucketIndex];
+    const entry = bucket.employees.get(record.employee.id) ?? {
+      presentDays: 0,
+      lateMinutes: 0,
+    };
+    if (record.status !== "absent") {
+      entry.presentDays += 1;
+    }
+    entry.lateMinutes += record.late_minutes ?? 0;
+    bucket.employees.set(record.employee.id, entry);
+  });
+
+  return buckets.map((bucket) => {
+    const bucketDays =
+      Math.floor((bucket.end.getTime() - bucket.start.getTime()) / (1000 * 60 * 60 * 24)) +
+      1;
+    let totalAbsent = 0;
+    let totalLateMinutes = 0;
+    bucket.employees.forEach((entry) => {
+      totalAbsent += Math.max(bucketDays - entry.presentDays, 0);
+      totalLateMinutes += entry.lateMinutes;
+    });
+    const employeeCount = bucket.employees.size || 1;
+    return {
+      label: toIsoDate(bucket.start),
+      absenceAvg: totalAbsent / employeeCount,
+      latenessAvg: totalLateMinutes / employeeCount,
+    };
+  });
 }
 
 export function HRDashboardPage() {
@@ -339,27 +459,40 @@ export function HRDashboardPage() {
     [range, customStart, customEnd]
   );
 
-  const summaryQuery = useAnalyticsSummary(selection.rangeParam);
+  useEffect(() => {
+    if (range !== "custom" && selection.start && selection.end) {
+      setCustomStart(selection.start);
+      setCustomEnd(selection.end);
+    }
+  }, [range, selection.end, selection.start]);
+
   const kpisQuery = useAnalyticsKpis(kpiKeys, selection.start, selection.end);
   const breakdownQuery = useAnalyticsBreakdown(
     "absence_by_department_daily",    
     "department",
-    selection.end,
+    selection.end,    
     5
   );
-
-  const fmtPercent = (value: unknown) => {
-    if (value === null || value === undefined || value === "") {
-      return "-";
-    }
-    return formatPercent(String(value));
-  };
 
   const fmtNumber = (value: unknown) => {
     if (value === null || value === undefined || value === "") {
       return "-";
     }
     return formatNumber(String(value));
+  };
+
+  const fmtDays = (value: number | null) => {
+    if (value === null || Number.isNaN(value)) {
+      return "-";
+    }
+    return `${formatNumber(value.toFixed(1))} ${content.page.units.days}`;
+  };
+
+  const fmtMinutes = (value: number | null) => {
+    if (value === null || Number.isNaN(value)) {
+      return "-";
+    }
+    return `${formatNumber(Math.round(value).toString())} ${content.page.units.minutes}`;
   };
 
   const ltrRangeLabel = useMemo(() => {
@@ -370,12 +503,16 @@ export function HRDashboardPage() {
     return `${selection.start} → ${selection.end}`;
   }, [selection.end, selection.start]);
 
-  const chartData = useMemo(() => {
-    if (!kpisQuery.data) {
-      return [];
-    }
-    return buildChartData(kpisQuery.data);
-  }, [kpisQuery.data]);
+  const statusLabels = useMemo(
+    () => ({
+      present: isArabic ? "حاضر" : "Present",
+      late: isArabic ? "متأخر" : "Late",
+      absent: isArabic ? "غائب" : "Absent",
+      early_leave: isArabic ? "انصراف مبكر" : "Early leave",
+      incomplete: isArabic ? "غير مكتمل" : "Incomplete",
+    }),
+    [isArabic]
+  );
 
   const overtimeTotal = useMemo(() => {
     const overtimeSeries = kpisQuery.data?.find((series) => series.key === "overtime_hours_daily");
@@ -385,6 +522,55 @@ export function HRDashboardPage() {
     const total = overtimeSeries.points.reduce((sum, point) => sum + Number(point.value ?? 0), 0);
     return formatNumber(String(total));
   }, [kpisQuery.data]);
+
+  const attendanceQuery = useAttendanceRecordsQuery(
+    {
+      dateFrom: selection.start,
+      dateTo: selection.end,
+    },
+    Boolean(selection.start && selection.end)
+  );
+
+  const attendanceSummary = useMemo(() => {
+    const rangeDays = getRangeDays(selection.start, selection.end);
+    if (!rangeDays || !attendanceQuery.data) {
+      return null;
+    }
+    const employees = new Map<number, { presentDays: number; lateMinutes: number }>();
+    attendanceQuery.data.forEach((record) => {
+      const entry = employees.get(record.employee.id) ?? { presentDays: 0, lateMinutes: 0 };
+      if (record.status !== "absent") {
+        entry.presentDays += 1;
+      }
+      entry.lateMinutes += record.late_minutes ?? 0;
+      employees.set(record.employee.id, entry);
+    });
+    if (employees.size === 0) {
+      return null;
+    }
+    let totalAbsentDays = 0;
+    let totalLateMinutes = 0;
+    employees.forEach((entry) => {
+      totalAbsentDays += Math.max(rangeDays - entry.presentDays, 0);
+      totalLateMinutes += entry.lateMinutes;
+    });
+    return {
+      absenceAvg: totalAbsentDays / employees.size,
+      latenessAvg: totalLateMinutes / employees.size,
+    };
+  }, [attendanceQuery.data, selection.end, selection.start]);
+
+  const attendanceTrend = useMemo(() => {
+    return buildAttendanceTrend(attendanceQuery.data ?? [], selection.start, selection.end);
+  }, [attendanceQuery.data, selection.end, selection.start]);
+
+  const attendanceLogRows = useMemo(() => {
+    if (!attendanceQuery.data) {
+      return [];
+    }
+    return [...attendanceQuery.data].sort((a, b) => b.date.localeCompare(a.date));
+  }, [attendanceQuery.data]);
+
 
   const showCustomHint = range === "custom" && (!selection.start || !selection.end);
 
@@ -408,17 +594,16 @@ export function HRDashboardPage() {
     if (!query) {
       return [];
     }
-
     const results: Array<{ label: string; description: string }> = [];
 
     results.push(
       {
         label: content.page.stats.absenceAvg,
-        description: fmtPercent(summaryQuery.data?.absence_rate_avg ?? null),
+        description: fmtDays(attendanceSummary?.absenceAvg ?? null),        
       },
       {
         label: content.page.stats.latenessAvg,
-        description: fmtPercent(summaryQuery.data?.lateness_rate_avg ?? null),
+        description: fmtMinutes(attendanceSummary?.latenessAvg ?? null),        
       },
       {
         label: content.page.stats.overtimeTotal,
@@ -441,10 +626,12 @@ export function HRDashboardPage() {
     });
   }, [
     breakdownQuery.data?.items,
+    attendanceSummary,
     content.page.stats,
     overtimeTotal,
     searchTerm,
-    summaryQuery.data,
+    fmtDays,
+    fmtMinutes,
   ]);
 
   function handleLogout() {
@@ -743,14 +930,18 @@ export function HRDashboardPage() {
               </div>
             </div>
             <div className="hero-panel__stats">
+              {/*
+                Stats are driven by attendance records (absence/lateness)
+                and KPI data (overtime).
+              */}
               {[
                 {
                   label: content.page.stats.absenceAvg,
-                  value: fmtPercent(summaryQuery.data?.absence_rate_avg ?? null),
+                  value: fmtDays(attendanceSummary?.absenceAvg ?? null),
                 },
                 {
                   label: content.page.stats.latenessAvg,
-                  value: fmtPercent(summaryQuery.data?.lateness_rate_avg ?? null),
+                  value: fmtMinutes(attendanceSummary?.latenessAvg ?? null),
                 },
                 {
                   label: content.page.stats.overtimeTotal,
@@ -762,7 +953,11 @@ export function HRDashboardPage() {
                     <span>{stat.label}</span>
                     <span className="stat-card__change">{rangeLabel}</span>
                   </div>
-                  <strong>{summaryQuery.isLoading ? content.loadingLabel : stat.value}</strong>
+                  <strong>
+                    {attendanceQuery.isLoading || kpisQuery.isLoading
+                      ? content.loadingLabel
+                      : stat.value}
+                  </strong>
                   <div className="stat-card__spark" aria-hidden="true" />
                 </div>
               ))}
@@ -846,35 +1041,99 @@ export function HRDashboardPage() {
             </section>
           )}
 
+          <section className="panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.page.attendanceLog.title}</h2>
+                <p>{content.page.attendanceLog.subtitle}</p>
+              </div>
+              <span className="pill">{rangeLabel}</span>
+            </div>
+            <div className="filters-grid">
+              <label className="field">
+                <span>{content.page.attendanceLog.fromLabel}</span>
+                <input
+                  type="date"
+                  value={selection.start ?? ""}
+                  onChange={(event) => {
+                    setRange("custom");
+                    setCustomStart(event.target.value);
+                  }}
+                />
+              </label>
+              <label className="field">
+                <span>{content.page.attendanceLog.toLabel}</span>
+                <input
+                  type="date"
+                  value={selection.end ?? ""}
+                  onChange={(event) => {
+                    setRange("custom");
+                    setCustomEnd(event.target.value);
+                  }}
+                />
+              </label>
+            </div>
+            {attendanceQuery.isLoading ? (
+              <span className="helper-text">{content.loadingLabel}</span>
+            ) : attendanceLogRows.length ? (
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>{content.page.attendanceLog.employee}</th>
+                      <th>{content.page.attendanceLog.department}</th>
+                      <th>{content.page.attendanceLog.date}</th>
+                      <th>{content.page.attendanceLog.status}</th>
+                      <th>{content.page.attendanceLog.lateMinutes}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendanceLogRows.map((record) => (
+                      <tr key={record.id}>
+                        <td>{record.employee.full_name}</td>
+                        <td>{record.employee.department?.name ?? "-"}</td>
+                        <td>{record.date}</td>
+                        <td>{statusLabels[record.status] ?? record.status}</td>
+                        <td>{fmtNumber(record.late_minutes ?? 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <span className="helper-text">{content.page.attendanceLog.empty}</span>
+            )}
+          </section>
+
           <section className="grid-panels">
             <div className="panel">
               <div className="panel__header">
                 <div>
                   <h2>{content.page.charts.absenceTrend}</h2>
-                  <p>{isArabic ? "الاتجاه اليومي" : "Daily movement"}</p>
+                  <p>{isArabic ? "الاتجاه حسب المدة" : "Range-based trend"}</p>
                 </div>
                 <span className="pill">{rangeLabel}</span>
               </div>
-              {kpisQuery.isLoading ? (
+              {attendanceQuery.isLoading ? (
                 <span className="helper-text">{content.loadingLabel}</span>
-              ) : chartData.length ? (
+              ) : attendanceTrend.length ? (
                 <div style={{ width: "100%", height: 240 }}>
                   <ResponsiveContainer>
-                    <LineChart data={chartData}>
-                      <XAxis dataKey="date" />
+                    <LineChart data={attendanceTrend}>
+                      <XAxis dataKey="label" />
                       <YAxis />
-                      <Tooltip formatter={(value: number) => formatPercent(String(value))} />
+                      <Tooltip formatter={(value: number) => fmtDays(value)} />
                       <Legend />
                       <Line
                         type="monotone"
-                        dataKey="absence"
-                        name={isArabic ? "الغياب" : "Absence"}
+                        dataKey="absenceAvg"
+                        name={isArabic ? "متوسط الغياب" : "Avg absence"}
                         stroke="#845ef7"
                         strokeWidth={2}
                       />
                     </LineChart>
                   </ResponsiveContainer>
-                </div>
+                </div>                
               ) : (
                 <span className="helper-text">{content.searchEmptyTitle}</span>
               )}
@@ -884,24 +1143,24 @@ export function HRDashboardPage() {
               <div className="panel__header">
                 <div>
                   <h2>{content.page.charts.latenessTrend}</h2>
-                  <p>{isArabic ? "الاتجاه اليومي" : "Daily movement"}</p>
+                  <p>{isArabic ? "الاتجاه حسب المدة" : "Range-based trend"}</p>                  
                 </div>
                 <span className="pill">{rangeLabel}</span>
               </div>
-              {kpisQuery.isLoading ? (
+              {attendanceQuery.isLoading ? (                
                 <span className="helper-text">{content.loadingLabel}</span>
-              ) : chartData.length ? (
+              ) : attendanceTrend.length ? (                
                 <div style={{ width: "100%", height: 240 }}>
                   <ResponsiveContainer>
-                    <LineChart data={chartData}>
-                      <XAxis dataKey="date" />
+                    <LineChart data={attendanceTrend}>                      
+                      <XAxis dataKey="label" />                      
                       <YAxis />
-                      <Tooltip formatter={(value: number) => formatPercent(String(value))} />
+                      <Tooltip formatter={(value: number) => fmtMinutes(value)} />                        
                       <Legend />
                       <Line
                         type="monotone"
-                        dataKey="lateness"
-                        name={isArabic ? "التأخير" : "Lateness"}
+                        dataKey="latenessAvg"                        
+                        name={isArabic ? "متوسط التأخير" : "Avg lateness"}                        
                         stroke="#fab005"
                         strokeWidth={2}
                       />
