@@ -348,6 +348,28 @@ export function HRDashboardPage() {
     5
   );
 
+  const fmtPercent = (value: unknown) => {
+    if (value === null || value === undefined || value === "") {
+      return "-";
+    }
+    return formatPercent(String(value));
+  };
+
+  const fmtNumber = (value: unknown) => {
+    if (value === null || value === undefined || value === "") {
+      return "-";
+    }
+    return formatNumber(String(value));
+  };
+
+  const ltrRangeLabel = useMemo(() => {
+    if (!selection.start || !selection.end) {
+      return null;
+    }
+    // Render dates in LTR so Arabic (RTL) UI doesn't visually flip numeric ranges.
+    return `${selection.start} → ${selection.end}`;
+  }, [selection.end, selection.start]);
+
   const chartData = useMemo(() => {
     if (!kpisQuery.data) {
       return [];
@@ -392,11 +414,11 @@ export function HRDashboardPage() {
     results.push(
       {
         label: content.page.stats.absenceAvg,
-        description: formatPercent(summaryQuery.data?.absence_rate_avg ?? null),
+        description: fmtPercent(summaryQuery.data?.absence_rate_avg ?? null),
       },
       {
         label: content.page.stats.latenessAvg,
-        description: formatPercent(summaryQuery.data?.lateness_rate_avg ?? null),
+        description: fmtPercent(summaryQuery.data?.lateness_rate_avg ?? null),
       },
       {
         label: content.page.stats.overtimeTotal,
@@ -407,7 +429,7 @@ export function HRDashboardPage() {
     breakdownQuery.data?.items?.forEach((item) => {
       results.push({
         label: item.dimension_id,
-        description: formatNumber(item.amount ?? null),
+        description: fmtNumber(item.amount ?? null),
       });
     });
 
@@ -712,9 +734,11 @@ export function HRDashboardPage() {
               <div className="hero-tags">
                 <span className="pill">{rangeLabel}</span>
                 <span className="pill pill--accent">
-                  {selection.start && selection.end
-                    ? `${selection.start} → ${selection.end}`
-                    : content.rangeLabel}
+                  {ltrRangeLabel ? (
+                    <span dir="ltr" style={{ unicodeBidi: "plaintext" }}>{ltrRangeLabel}</span>
+                  ) : (
+                    content.rangeLabel
+                  )}
                 </span>
               </div>
             </div>
@@ -722,11 +746,11 @@ export function HRDashboardPage() {
               {[
                 {
                   label: content.page.stats.absenceAvg,
-                  value: formatPercent(summaryQuery.data?.absence_rate_avg ?? null),
+                  value: fmtPercent(summaryQuery.data?.absence_rate_avg ?? null),
                 },
                 {
                   label: content.page.stats.latenessAvg,
-                  value: formatPercent(summaryQuery.data?.lateness_rate_avg ?? null),
+                  value: fmtPercent(summaryQuery.data?.lateness_rate_avg ?? null),
                 },
                 {
                   label: content.page.stats.overtimeTotal,
@@ -911,7 +935,7 @@ export function HRDashboardPage() {
                       {breakdownQuery.data.items.map((item) => (
                         <tr key={item.dimension_id}>
                           <td>{item.dimension_id}</td>
-                          <td>{formatNumber(item.amount ?? null)}</td>
+                          <td>{fmtNumber(item.amount ?? null)}</td>
                         </tr>
                       ))}
                     </tbody>

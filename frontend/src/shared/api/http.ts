@@ -40,11 +40,24 @@ function getAxiosStatus(err: unknown): number | undefined {
 }
 
 /**
- * ---- 401 Refresh Queue (THE FIX) ----
+ * setTokens signature might be either:
+ * - setTokens({ access, refresh })
+ * - setTokens(access, refresh)
+ * We support both to avoid silent failures that cause endless 401s.
+ */
+function setTokensCompat(access: string, refresh: string) {
+  try {
+    (setTokens as unknown as (v: { access: string; refresh: string }) => void)({ access, refresh });
+  } catch {
+    (setTokens as unknown as (a: string, r: string) => void)(access, refresh);
+  }
+}
+
+/**
+ * ---- 401 Refresh Queue ----
  * When access token expires, multiple requests may fail with 401 at the same time.
  * We do only ONE refresh, and queue all failed requests until refresh resolves.
  */
-
 type RetriableConfig = InternalAxiosRequestConfig & {
   _retry?: boolean;
   _networkNotified?: boolean;
@@ -56,9 +69,7 @@ type QueueItem = {
   config: RetriableConfig;
 };
 
-// single in-flight refresh promise
 let refreshPromise: Promise<string | null> | null = null;
-// if refresh is happening, queue failed requests
 let isRefreshing = false;
 const requestQueue: QueueItem[] = [];
 
@@ -77,23 +88,47 @@ function processQueue(error: unknown, newAccess: string | null) {
   }
 }
 
+/**
+ * Robust refresh:
+ * - tries endpoints.auth.refresh (your project)
+ * - tries /api/auth/refresh/ (observed in logs)
+ * - tries SimpleJWT defaults
+ */
 async function doRefresh(refreshToken: string): Promise<string | null> {
-  // Keep your fallback logic exactly as you had it
-  // 1) Try configured refresh endpoint
-  try {
-    const r1 = await refreshClient.post(endpoints.auth.refresh, { refresh: refreshToken });
-    const newAccess1 = (r1.data as { access?: string } | undefined)?.access;
-    if (newAccess1) return newAccess1;
-  } catch (e1: unknown) {
-    const s = getAxiosStatus(e1);
-    // if not 404, it's a real error
-    if (s !== 404) throw e1;
+  const candidates = [
+    endpoints?.auth?.refresh,
+    "/api/auth/refresh/",
+    "/api/auth/token/refresh/",
+    "/api/auth/jwt/refresh/",
+    "/api/auth/token/refresh",
+    "/api/auth/refresh",
+  ]
+    .filter(Boolean)
+    .map(String);
+
+  const seen = new Set<string>();
+
+  for (const url of candidates) {
+    if (seen.has(url)) continue;
+    seen.add(url);
+
+    try {
+      const r = await refreshClient.post(url, { refresh: refreshToken });
+      const newAccess = (r.data as { access?: string } | undefined)?.access;
+      if (newAccess) return newAccess;
+      // If response doesn't include access, treat as failure and continue.
+    } catch (e: unknown) {
+      const s = getAxiosStatus(e);
+      // 404 means "not this endpoint" -> try next candidate
+      if (s === 404) continue;
+      // 401/403 means refresh token invalid -> stop immediately
+      if (s === 401 || s === 403) throw e;
+      // otherwise try next, but keep the last error as real signal
+      continue;
+    }
   }
 
-  // 2) Fallback: SimpleJWT default path
-  const r2 = await refreshClient.post("/api/auth/token/refresh/", { refresh: refreshToken });
-  const newAccess2 = (r2.data as { access?: string } | undefined)?.access;
-  return newAccess2 ?? null;
+  return null;
 }
 
 // Attach token
@@ -128,16 +163,15 @@ http.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // url may be undefined per axios types
     const requestUrl = String(originalRequest.url ?? "");
 
     // Don’t try to refresh if this request IS the refresh call itself
     const isRefreshCall =
-      requestUrl.includes(endpoints.auth.refresh) || requestUrl.includes("/api/auth/token/refresh/");
+      requestUrl.includes(String(endpoints?.auth?.refresh ?? "")) ||
+      requestUrl.includes("/api/auth/refresh") ||
+      requestUrl.includes("/api/auth/token/refresh");
 
-    /**
-     * ✅ Handle 401 with refresh + QUEUE
-     */
+    // ✅ Handle 401 with refresh + QUEUE
     if (status === 401 && refreshToken && !originalRequest._retry && !isRefreshCall) {
       originalRequest._retry = true;
 
@@ -148,7 +182,6 @@ http.interceptors.response.use(
         });
       }
 
-      // Start refresh
       isRefreshing = true;
 
       try {
@@ -157,7 +190,7 @@ http.interceptors.response.use(
             .then((newAccess) => {
               if (!newAccess) return null;
               // Keep refresh token as-is
-              setTokens({ access: newAccess, refresh: refreshToken });
+              setTokensCompat(newAccess, refreshToken);
               return newAccess;
             })
             .finally(() => {
@@ -168,7 +201,6 @@ http.interceptors.response.use(
         const newAccess = await refreshPromise;
 
         if (!newAccess) {
-          // Refresh returned no access token -> session invalid
           processQueue(new Error("Refresh returned no access token"), null);
           clearTokens();
           redirectToLogin();
