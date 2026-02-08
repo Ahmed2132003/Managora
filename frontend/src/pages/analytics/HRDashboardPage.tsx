@@ -3,10 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
-import {
-  useAnalyticsKpis,
-  useAnalyticsBreakdown,
-} from "../../shared/analytics/insights.ts";
+import { useAnalyticsKpis } from "../../shared/analytics/insights.ts";
 import { buildRangeSelection } from "../../shared/analytics/range.ts";
 import type { RangeOption } from "../../shared/analytics/range.ts";
 import { formatNumber } from "../../shared/analytics/format.ts";
@@ -67,8 +64,10 @@ type Content = {
       absenceTrend: string;
       latenessTrend: string;
       breakdownTitle: string;
+      breakdownDepartment: string;
+      breakdownAbsences: string;
       breakdownEmpty: string;
-    };
+    };    
     attendanceLog: {
       title: string;
       subtitle: string;
@@ -165,8 +164,10 @@ const contentMap: Record<Language, Content> = {
         absenceTrend: "Absence trend",
         latenessTrend: "Lateness trend",
         breakdownTitle: "Top absence departments",
+        breakdownDepartment: "Department",
+        breakdownAbsences: "Absences",
         breakdownEmpty: "No absence data yet.",        
-      },
+      },      
       attendanceLog: {
         title: "Attendance log",
         subtitle: "Filter attendance records by date.",
@@ -261,8 +262,10 @@ const contentMap: Record<Language, Content> = {
         absenceTrend: "اتجاه الغياب",
         latenessTrend: "اتجاه التأخير",
         breakdownTitle: "أكثر الأقسام غيابًا",
+        breakdownDepartment: "القسم",
+        breakdownAbsences: "عدد الغياب",
         breakdownEmpty: "لسه مفيش داتا للغياب.",        
-      },
+      },      
       attendanceLog: {
         title: "سجل الحضور",
         subtitle: "فلتر بيانات الحضور حسب التاريخ.",
@@ -460,12 +463,6 @@ export function HRDashboardPage() {
   );
 
   const kpisQuery = useAnalyticsKpis(kpiKeys, selection.start, selection.end);  
-  const breakdownQuery = useAnalyticsBreakdown(
-    "absence_by_department_daily",    
-    "department",
-    selection.end,    
-    5
-  );
 
   const fmtNumber = (value: unknown) => {
     if (value === null || value === undefined || value === "") {
@@ -487,7 +484,7 @@ export function HRDashboardPage() {
     }
     return `${formatNumber(Math.round(value).toString())} ${content.page.units.minutes}`;
   }, [content.page.units.minutes]);
-  
+
   const ltrRangeLabel = useMemo(() => {
     if (!selection.start || !selection.end) {
       return null;
@@ -557,13 +554,31 @@ export function HRDashboardPage() {
     return buildAttendanceTrend(attendanceQuery.data ?? [], selection.start, selection.end);
   }, [attendanceQuery.data, selection.end, selection.start]);
 
+  const absenceByDepartment = useMemo(() => {
+    if (!attendanceQuery.data) {
+      return [];
+    }
+    const departmentFallback = isArabic ? "بدون قسم" : "Unassigned";
+    const counts = new Map<string, number>();
+    attendanceQuery.data.forEach((record) => {
+      if (record.status !== "absent") {
+        return;
+      }
+      const departmentName = record.employee.department?.name ?? departmentFallback;
+      counts.set(departmentName, (counts.get(departmentName) ?? 0) + 1);
+    });
+    return [...counts.entries()]
+      .map(([department, absences]) => ({ department, absences }))
+      .sort((a, b) => b.absences - a.absences)
+      .slice(0, 5);
+  }, [attendanceQuery.data, isArabic]);
+
   const attendanceLogRows = useMemo(() => {
     if (!attendanceQuery.data) {
       return [];
     }
     return [...attendanceQuery.data].sort((a, b) => b.date.localeCompare(a.date));
   }, [attendanceQuery.data]);
-
 
   const showCustomHint = range === "custom" && (!selection.start || !selection.end);
 
@@ -604,10 +619,11 @@ export function HRDashboardPage() {
       }
     );
 
-    breakdownQuery.data?.items?.forEach((item) => {
+
+    absenceByDepartment.forEach((item) => {      
       results.push({
-        label: item.dimension_id,
-        description: fmtNumber(item.amount ?? null),
+        label: item.department,        
+        description: fmtNumber(item.absences ?? null),        
       });
     });
 
@@ -618,7 +634,7 @@ export function HRDashboardPage() {
       );
     });
   }, [
-    breakdownQuery.data?.items,
+    absenceByDepartment,    
     attendanceSummary,
     content.page.stats,
     overtimeTotal,
@@ -1172,22 +1188,22 @@ export function HRDashboardPage() {
                   <p>{isArabic ? "أعلى الأقسام غيابًا" : "Highest absences"}</p>                  
                 </div>
               </div>
-              {breakdownQuery.isLoading ? (
+              {attendanceQuery.isLoading ? (                
                 <span className="helper-text">{content.loadingLabel}</span>
-              ) : breakdownQuery.data?.items?.length ? (
+              ) : absenceByDepartment.length ? (                
                 <div className="table-wrapper">
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>{isArabic ? "القسم" : "Department"}</th>
-                        <th>{isArabic ? "القيمة" : "Value"}</th>
+                        <th>{content.page.charts.breakdownDepartment}</th>                        
+                        <th>{content.page.charts.breakdownAbsences}</th>                        
                       </tr>
                     </thead>
                     <tbody>
-                      {breakdownQuery.data.items.map((item) => (
-                        <tr key={item.dimension_id}>
-                          <td>{item.dimension_id}</td>
-                          <td>{fmtNumber(item.amount ?? null)}</td>
+                      {absenceByDepartment.map((item) => (                        
+                        <tr key={item.department}>
+                          <td>{item.department}</td>
+                          <td>{fmtNumber(item.absences ?? null)}</td>                          
                         </tr>
                       ))}
                     </tbody>
