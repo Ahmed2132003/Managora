@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
@@ -459,14 +459,7 @@ export function HRDashboardPage() {
     [range, customStart, customEnd]
   );
 
-  useEffect(() => {
-    if (range !== "custom" && selection.start && selection.end) {
-      setCustomStart(selection.start);
-      setCustomEnd(selection.end);
-    }
-  }, [range, selection.end, selection.start]);
-
-  const kpisQuery = useAnalyticsKpis(kpiKeys, selection.start, selection.end);
+  const kpisQuery = useAnalyticsKpis(kpiKeys, selection.start, selection.end);  
   const breakdownQuery = useAnalyticsBreakdown(
     "absence_by_department_daily",    
     "department",
@@ -481,20 +474,20 @@ export function HRDashboardPage() {
     return formatNumber(String(value));
   };
 
-  const fmtDays = (value: number | null) => {
+  const fmtDays = useCallback((value: number | null) => {    
     if (value === null || Number.isNaN(value)) {
       return "-";
     }
     return `${formatNumber(value.toFixed(1))} ${content.page.units.days}`;
-  };
+  }, [content.page.units.days]);
 
-  const fmtMinutes = (value: number | null) => {
+  const fmtMinutes = useCallback((value: number | null) => {    
     if (value === null || Number.isNaN(value)) {
       return "-";
     }
     return `${formatNumber(Math.round(value).toString())} ${content.page.units.minutes}`;
-  };
-
+  }, [content.page.units.minutes]);
+  
   const ltrRangeLabel = useMemo(() => {
     if (!selection.start || !selection.end) {
       return null;
