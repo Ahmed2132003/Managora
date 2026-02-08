@@ -77,8 +77,11 @@ type Content = {
   pageSubtitle: string;
 
   rangeLabel: string;
+  rangeDefault: string;
+  rangeHelper: string;
+  rangeIncomplete: string;
   filtersTitle: string;
-  filtersSubtitle: string;
+  filtersSubtitle: string;  
   searchLabel: string;
   searchHint: string;
   fromLabel: string;
@@ -246,8 +249,11 @@ const contentMap: Record<Language, Content> = {
     pageSubtitle: "Review daily attendance, QR tokens, and approve self-service requests.",
 
     rangeLabel: "Date range",
+    rangeDefault: "All time",
+    rangeHelper: "Select a start and end date to filter the summary.",
+    rangeIncomplete: "Select both start and end dates to apply the range.",
     filtersTitle: "Attendance filters",
-    filtersSubtitle: "Slice data by date, department, or status",
+    filtersSubtitle: "Slice data by date, department, or status",    
     searchLabel: "Search",
     searchHint: "Search by name or code",
     fromLabel: "From",
@@ -424,8 +430,11 @@ const contentMap: Record<Language, Content> = {
     pageSubtitle: "راجع سجلات الحضور، أكواد QR، واعتماد طلبات الحضور الذاتية.",
 
     rangeLabel: "النطاق الزمني",
+    rangeDefault: "إجمالي البيانات",
+    rangeHelper: "حدد تاريخ البداية والنهاية لعرض الملخص حسب الفترة.",
+    rangeIncomplete: "يرجى اختيار تاريخ البداية والنهاية لتفعيل النطاق.",
     filtersTitle: "فلاتر الحضور",
-    filtersSubtitle: "فرز البيانات حسب التاريخ أو القسم أو الحالة",
+    filtersSubtitle: "فرز البيانات حسب التاريخ أو القسم أو الحالة",    
     searchLabel: "بحث",
     searchHint: "ابحث بالاسم أو الكود",
     fromLabel: "من",
@@ -712,9 +721,12 @@ export function HRAttendancePage() {
     [employeesQuery.data]
   );
 
+  const hasRange = Boolean(dateFrom && dateTo);
+  const hasPartialRange = Boolean((dateFrom || dateTo) && !hasRange);
+
   const attendanceQuery = useAttendanceRecordsQuery({
-    dateFrom: dateFrom || undefined,
-    dateTo: dateTo || undefined,
+    dateFrom: hasRange ? dateFrom : undefined,
+    dateTo: hasRange ? dateTo : undefined,
     departmentId: departmentId ?? undefined,
     employeeId: employeeId ?? undefined,
     status: status ?? undefined,
@@ -1041,14 +1053,21 @@ export function HRAttendancePage() {
               <div className="hero-tags">
                 <span className="pill">{content.rangeLabel}</span>
                 <span className="pill pill--accent">
-                  {dateFrom || dateTo ? `${dateFrom || "--"} → ${dateTo || "--"}` : "--"}
+                  {hasRange ? `${dateFrom} → ${dateTo}` : content.rangeDefault}
                 </span>
               </div>
             </div>
 
+            {(hasPartialRange || !hasRange) && (
+              <p className={`range-note${hasPartialRange ? " range-note--warn" : ""}`}>
+                {hasPartialRange ? content.rangeIncomplete : content.rangeHelper}
+              </p>
+            )}
+
             <div className="hero-panel__stats">
               {[
                 { label: content.stats.total, value: stats.total },
+                
                 { label: content.stats.present, value: stats.present },
                 { label: content.stats.late, value: stats.late },
                 { label: content.stats.absent, value: stats.absent },
@@ -1333,8 +1352,10 @@ export function HRAttendancePage() {
                 </select>
               </label>
             </div>
+            {hasPartialRange && (
+              <p className="range-note range-note--warn">{content.rangeIncomplete}</p>
+            )}
           </section>
-
           {/* QR */}
           <section className="panel hr-attendance-panel">
             <div className="panel__header">

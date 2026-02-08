@@ -14,8 +14,18 @@
   gap: 16px;
 }
 
+.range-note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.range-note--warn {
+  color: #d97706;
+}
+
 .attendance-filters,
-.attendance-qr-grid {
+.attendance-qr-grid {  
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;
