@@ -4,6 +4,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from core.serializers.auth import LoginSerializer
+
 from core.throttles import LoginRateThrottle
 
 
