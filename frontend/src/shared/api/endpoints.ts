@@ -1,108 +1,154 @@
+// Central place for API endpoint paths.
+//
+// IMPORTANT:
+// - This file returns *paths* (not full URLs).
+// - Base URL / proxy is handled by src/shared/api/http.ts (axios baseURL + Vite proxy).
+//
+// You can switch between /api and /api/v1 by setting:
+//   VITE_API_PREFIX=/api/v1
+// If not set, it defaults to /api.
+
+const RAW_PREFIX = (import.meta.env.VITE_API_PREFIX as string | undefined) ?? "/api";
+const API_PREFIX = RAW_PREFIX.replace(/\/$/, ""); // remove trailing slash if any
+
+const api = (path: string): string => `${API_PREFIX}${path}`;
+
 export const endpoints = {
   auth: {
-    login: "/api/auth/login/",
-    refresh: "/api/auth/refresh/",
+    login: api("/auth/login/"),
+    refresh: api("/auth/refresh/"),
+    verify: api("/auth/verify/"),
+    logout: api("/auth/logout/"),
   },
-  me: "/api/me/",
-  companies: "/api/companies/",  
-  auditLogs: "/api/audit/logs/",
-  users: "/api/users/",
-  roles: "/api/roles/",
+
+  me: api("/me/"),
+  companies: api("/companies/"),
+  auditLogs: api("/audit/logs/"),
+  users: api("/users/"),
+  roles: api("/roles/"),
+
   setup: {
-    templates: "/api/setup/templates/",
-    applyTemplate: "/api/setup/apply-template/",
-  },  
+    templates: api("/setup/templates/"),
+    applyTemplate: api("/setup/apply-template/"),
+  },
+
   hr: {
-    departments: "/api/departments/",
-    jobTitles: "/api/job-titles/",
-    shifts: "/api/shifts/",
-    employees: "/api/employees/",
-    employee: (id: number) => `/api/employees/${id}/`,
-    employeeDefaults: "/api/employees/defaults/",
-    employeeSelectableUsers: "/api/employees/selectable-users/",
-    employeeDocuments: (employeeId: number) => `/api/employees/${employeeId}/documents/`,
-    documentDownload: (id: number) => `/api/documents/${id}/download/`,
-    documentDelete: (id: number) => `/api/documents/${id}/`,
-    salaryStructures: "/api/salary-structures/",
-    salaryStructure: (id: number) => `/api/salary-structures/${id}/`,
-    salaryComponents: "/api/salary-components/",
-    salaryComponent: (id: number) => `/api/salary-components/${id}/`,
-    loanAdvances: "/api/loan-advances/",
-    loanAdvance: (id: number) => `/api/loan-advances/${id}/`,    
-    department: (id: number) => `/api/departments/${id}/`,    
-    jobTitle: (id: number) => `/api/job-titles/${id}/`,
-    shift: (id: number) => `/api/shifts/${id}/`,
-    attendanceRecords: "/api/attendance/records/",
-    attendanceMy: "/api/attendance/my/",
-    attendanceSelfRequestOtp: "/api/attendance/self/request-otp/",
-    attendanceSelfVerifyOtp: "/api/attendance/self/verify-otp/",
-    attendanceEmailConfig: "/api/attendance/hr/email-config/",
-    attendancePendingApprovals: "/api/attendance/hr/pending/",
-    attendanceApproveReject: (recordId: number, action: "approve" | "reject") => `/api/attendance/hr/${recordId}/${action}/`,
-    leaveTypes: "/api/leaves/types/",
-    leaveBalances: "/api/leaves/balances/",
-    leaveBalanceMy: "/api/leaves/balances/my/",
-    leaveRequestsMy: "/api/leaves/requests/my/",
-    leaveRequests: "/api/leaves/requests/",
-    leaveRequestCancel: (id: number) => `/api/leaves/requests/${id}/cancel/`,
-    leaveApprovalsInbox: "/api/leaves/approvals/inbox/",
-    leaveRequestApprove: (id: number) => `/api/leaves/requests/${id}/approve/`,
-    leaveRequestReject: (id: number) => `/api/leaves/requests/${id}/reject/`,
-    commissionApprovalsInbox: "/api/commissions/approvals/inbox/",
-    policies: "/api/policies/",    
-    hrActions: "/api/actions/",
-    hrAction: (id: number) => `/api/actions/${id}/`,    
-    payrollPeriods: "/api/payroll/periods/",
-    payrollPeriodGenerate: (id: number) => `/api/payroll/periods/${id}/generate/`,
-    payrollPeriodRuns: (id: number) => `/api/payroll/periods/${id}/runs/`,
-    payrollPeriodLock: (id: number) => `/api/payroll/periods/${id}/lock/`,
-    payrollRun: (id: number) => `/api/payroll/runs/${id}/`,
-    payrollRunMarkPaid: (id: number) => `/api/payroll/runs/${id}/mark-paid/`,
-    payrollRunPayslipPng: (id: number) => `/api/payroll/runs/${id}/payslip.png`,
-    payrollRunPayslip: (id: number) => `/api/payroll/runs/${id}/payslip.png`,
-    payrollRunPayslipPdf: (id: number) => `/api/payroll/runs/${id}/payslip.pdf`,
+    departments: api("/departments/"),
+    department: (id: number) => api(`/departments/${id}/`),
+
+    jobTitles: api("/job-titles/"),
+    jobTitle: (id: number) => api(`/job-titles/${id}/`),
+
+    shifts: api("/shifts/"),
+    shift: (id: number) => api(`/shifts/${id}/`),
+
+    employees: api("/employees/"),
+    employee: (id: number) => api(`/employees/${id}/`),
+    employeeDefaults: api("/employees/defaults/"),
+    employeeSelectableUsers: api("/employees/selectable-users/"),
+
+    employeeDocuments: (employeeId: number) => api(`/employees/${employeeId}/documents/`),
+    documentDownload: (id: number) => api(`/documents/${id}/download/`),
+    documentDelete: (id: number) => api(`/documents/${id}/`),
+
+    salaryStructures: api("/salary-structures/"),
+    salaryStructure: (id: number) => api(`/salary-structures/${id}/`),
+
+    salaryComponents: api("/salary-components/"),
+    salaryComponent: (id: number) => api(`/salary-components/${id}/`),
+
+    loanAdvances: api("/loan-advances/"),
+    loanAdvance: (id: number) => api(`/loan-advances/${id}/`),
+
+    attendanceRecords: api("/attendance/records/"),
+    attendanceMy: api("/attendance/my/"),
+    attendanceSelfRequestOtp: api("/attendance/self/request-otp/"),
+    attendanceSelfVerifyOtp: api("/attendance/self/verify-otp/"),
+    attendanceEmailConfig: api("/attendance/hr/email-config/"),
+    attendancePendingApprovals: api("/attendance/hr/pending/"),
+    attendanceApproveReject: (recordId: number, action: "approve" | "reject") =>
+      api(`/attendance/hr/${recordId}/${action}/`),
+
+    leaveTypes: api("/leaves/types/"),
+    leaveBalances: api("/leaves/balances/"),
+    leaveBalanceMy: api("/leaves/balances/my/"),
+    leaveRequestsMy: api("/leaves/requests/my/"),
+    leaveRequests: api("/leaves/requests/"),
+    leaveRequestCancel: (id: number) => api(`/leaves/requests/${id}/cancel/`),
+    leaveApprovalsInbox: api("/leaves/approvals/inbox/"),
+    leaveRequestApprove: (id: number) => api(`/leaves/requests/${id}/approve/`),
+    leaveRequestReject: (id: number) => api(`/leaves/requests/${id}/reject/`),
+
+    commissionApprovalsInbox: api("/commissions/approvals/inbox/"),
+
+    policies: api("/policies/"),
+
+    hrActions: api("/actions/"),
+    hrAction: (id: number) => api(`/actions/${id}/`),
+
+    payrollPeriods: api("/payroll/periods/"),
+    payrollPeriodGenerate: (id: number) => api(`/payroll/periods/${id}/generate/`),
+    payrollPeriodRuns: (id: number) => api(`/payroll/periods/${id}/runs/`),
+    payrollPeriodLock: (id: number) => api(`/payroll/periods/${id}/lock/`),
+    payrollRun: (id: number) => api(`/payroll/runs/${id}/`),
+    payrollRunMarkPaid: (id: number) => api(`/payroll/runs/${id}/mark-paid/`),
+    payrollRunPayslipPng: (id: number) => api(`/payroll/runs/${id}/payslip.png`),
+    payrollRunPayslipPdf: (id: number) => api(`/payroll/runs/${id}/payslip.pdf`),
   },
+
   accounting: {
-    accounts: "/api/accounting/accounts/",
-    account: (id: number) => `/api/accounting/accounts/${id}/`,
-    mappings: "/api/accounting/mappings/",
-    mapping: (id: number) => `/api/accounting/mappings/${id}/`,
-    mappingsBulkSet: "/api/accounting/mappings/bulk-set/",
-    costCenters: "/api/accounting/cost-centers/",        
-    costCenter: (id: number) => `/api/accounting/cost-centers/${id}/`,
-    applyTemplate: "/api/accounting/coa/apply-template/",
-    journalEntries: "/api/accounting/journal-entries/",
-    journalEntry: (id: number) => `/api/accounting/journal-entries/${id}/`,
-    expenses: "/api/expenses/",
-    expense: (id: number) => `/api/expenses/${id}/`,
-    expenseApprove: (id: number) => `/api/expenses/${id}/approve/`,
-    expenseAttachments: (id: number) => `/api/expenses/${id}/attachments/`,
-    payments: "/api/payments/",
-  },  
-  invoices: "/api/invoices/",
-  invoice: (id: number) => `/api/invoices/${id}/`,
-  invoiceIssue: (id: number) => `/api/invoices/${id}/issue/`,
-  customers: "/api/customers/",
-  customer: (id: number) => `/api/customers/${id}/`,   
+    accounts: api("/accounting/accounts/"),
+    account: (id: number) => api(`/accounting/accounts/${id}/`),
+
+    mappings: api("/accounting/mappings/"),
+    mapping: (id: number) => api(`/accounting/mappings/${id}/`),
+    mappingsBulkSet: api("/accounting/mappings/bulk-set/"),
+
+    costCenters: api("/accounting/cost-centers/"),
+    costCenter: (id: number) => api(`/accounting/cost-centers/${id}/`),
+
+    applyTemplate: api("/accounting/coa/apply-template/"),
+
+    journalEntries: api("/accounting/journal-entries/"),
+    journalEntry: (id: number) => api(`/accounting/journal-entries/${id}/`),
+
+    expenses: api("/expenses/"),
+    expense: (id: number) => api(`/expenses/${id}/`),
+    expenseApprove: (id: number) => api(`/expenses/${id}/approve/`),
+    expenseAttachments: (id: number) => api(`/expenses/${id}/attachments/`),
+
+    payments: api("/payments/"),
+  },
+
+  invoices: api("/invoices/"),
+  invoice: (id: number) => api(`/invoices/${id}/`),
+  invoiceIssue: (id: number) => api(`/invoices/${id}/issue/`),
+
+  customers: api("/customers/"),
+  customer: (id: number) => api(`/customers/${id}/`),
+
   reports: {
-    arAging: "/api/reports/ar-aging/",
-    trialBalance: "/api/reports/trial-balance/",
-    generalLedger: "/api/reports/general-ledger/",
-    pnl: "/api/reports/pnl/",
-    balanceSheet: "/api/reports/balance-sheet/",
+    arAging: api("/reports/ar-aging/"),
+    trialBalance: api("/reports/trial-balance/"),
+    generalLedger: api("/reports/general-ledger/"),
+    pnl: api("/reports/pnl/"),
+    balanceSheet: api("/reports/balance-sheet/"),
   },
-  alerts: "/api/alerts/",
+
+  alerts: api("/alerts/"),
+
   analytics: {
-    alerts: "/api/analytics/alerts/",
-    alert: (id: number) => `/api/analytics/alerts/${id}/`,
-    alertAck: (id: number) => `/api/analytics/alerts/${id}/ack/`,
-    alertResolve: (id: number) => `/api/analytics/alerts/${id}/resolve/`,
-    summary: "/api/analytics/summary/",
-    kpis: "/api/analytics/kpis/",
-    breakdown: "/api/analytics/breakdown/",
-    cashForecast: "/api/analytics/forecast/cash/",
+    alerts: api("/analytics/alerts/"),
+    alert: (id: number) => api(`/analytics/alerts/${id}/`),
+    alertAck: (id: number) => api(`/analytics/alerts/${id}/ack/`),
+    alertResolve: (id: number) => api(`/analytics/alerts/${id}/resolve/`),
+    summary: api("/analytics/summary/"),
+    kpis: api("/analytics/kpis/"),
+    breakdown: api("/analytics/breakdown/"),
+    cashForecast: api("/analytics/forecast/cash/"),
   },
+
   copilot: {
-    query: "/api/copilot/query/",
+    query: api("/copilot/query/"),
   },
-};
+} as const;

@@ -5,7 +5,9 @@ import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "../auth
 import { endpoints } from "./endpoints";
 
 // In dev we use Vite proxy (/api -> backend) to avoid CORS.
-const API_BASE_URL = import.meta.env.DEV ? "" : env.API_BASE_URL;
+const API_BASE_URL = import.meta.env.DEV
+  ? (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_BACKEND_URL || "")
+  : env.API_BASE_URL;
 
 /**
  * Main API client
@@ -98,6 +100,8 @@ async function doRefresh(refreshToken: string): Promise<string | null> {
   const candidates = [
     endpoints?.auth?.refresh,
     "/api/auth/refresh/",
+    "/api/v1/auth/refresh/",
+    "/api/v1/auth/token/refresh/",
     "/api/auth/token/refresh/",
     "/api/auth/jwt/refresh/",
     "/api/auth/token/refresh",
