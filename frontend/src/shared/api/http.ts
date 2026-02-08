@@ -5,6 +5,7 @@ import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "../auth
 import { endpoints } from "./endpoints";
 
 // In dev we use Vite proxy (/api -> backend) to avoid CORS.
+// If you set VITE_API_BASE_URL, it will use it directly instead of proxy.
 const API_BASE_URL = import.meta.env.DEV
   ? (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_BACKEND_URL || "")
   : env.API_BASE_URL;
@@ -92,20 +93,18 @@ function processQueue(error: unknown, newAccess: string | null) {
 
 /**
  * Robust refresh:
- * - tries endpoints.auth.refresh (your project)
- * - tries /api/auth/refresh/ (observed in logs)
- * - tries SimpleJWT defaults
+ * - tries endpoints.auth.refresh first (your project config)
+ * - then tries common fallbacks (in case backend differs)
  */
 async function doRefresh(refreshToken: string): Promise<string | null> {
   const candidates = [
-    endpoints?.auth?.refresh,
-    "/api/auth/refresh/",
+    endpoints?.auth?.refresh,          // ✅ should be /api/v1/auth/refresh/
     "/api/v1/auth/refresh/",
+    "/api/auth/refresh/",
     "/api/v1/auth/token/refresh/",
     "/api/auth/token/refresh/",
-    "/api/auth/jwt/refresh/",
-    "/api/auth/token/refresh",
-    "/api/auth/refresh",
+    "/api/v1/token/refresh/",
+    "/api/token/refresh/",
   ]
     .filter(Boolean)
     .map(String);
@@ -120,14 +119,10 @@ async function doRefresh(refreshToken: string): Promise<string | null> {
       const r = await refreshClient.post(url, { refresh: refreshToken });
       const newAccess = (r.data as { access?: string } | undefined)?.access;
       if (newAccess) return newAccess;
-      // If response doesn't include access, treat as failure and continue.
     } catch (e: unknown) {
       const s = getAxiosStatus(e);
-      // 404 means "not this endpoint" -> try next candidate
-      if (s === 404) continue;
-      // 401/403 means refresh token invalid -> stop immediately
-      if (s === 401 || s === 403) throw e;
-      // otherwise try next, but keep the last error as real signal
+      if (s === 404) continue; // try next candidate
+      if (s === 401 || s === 403) throw e; // invalid refresh token
       continue;
     }
   }
@@ -173,7 +168,9 @@ http.interceptors.response.use(
     const isRefreshCall =
       requestUrl.includes(String(endpoints?.auth?.refresh ?? "")) ||
       requestUrl.includes("/api/auth/refresh") ||
-      requestUrl.includes("/api/auth/token/refresh");
+      requestUrl.includes("/api/auth/token/refresh") ||
+      requestUrl.includes("/api/v1/auth/refresh") ||
+      requestUrl.includes("/api/v1/auth/token/refresh");
 
     // ✅ Handle 401 with refresh + QUEUE
     if (status === 401 && refreshToken && !originalRequest._retry && !isRefreshCall) {
@@ -193,7 +190,6 @@ http.interceptors.response.use(
           refreshPromise = doRefresh(refreshToken)
             .then((newAccess) => {
               if (!newAccess) return null;
-              // Keep refresh token as-is
               setTokensCompat(newAccess, refreshToken);
               return newAccess;
             })

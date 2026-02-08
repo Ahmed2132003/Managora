@@ -6,9 +6,9 @@
 //
 // You can switch between /api and /api/v1 by setting:
 //   VITE_API_PREFIX=/api/v1
-// If not set, it defaults to /api.
+// If not set, it defaults to /api/v1 (matches backend URLs).
 
-const RAW_PREFIX = (import.meta.env.VITE_API_PREFIX as string | undefined) ?? "/api";
+const RAW_PREFIX = (import.meta.env.VITE_API_PREFIX as string | undefined) ?? "/api/v1";
 const API_PREFIX = RAW_PREFIX.replace(/\/$/, ""); // remove trailing slash if any
 
 const api = (path: string): string => `${API_PREFIX}${path}`;
