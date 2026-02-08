@@ -1,4 +1,5 @@
 from drf_spectacular.utils import extend_schema
+from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -14,4 +15,5 @@ from core.throttles import LoginRateThrottle
 )
 class LoginView(TokenObtainPairView):
     serializer_class = TokenObtainPairSerializer
+    permission_classes = [AllowAny]
     throttle_classes = [LoginRateThrottle]
