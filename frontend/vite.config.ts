@@ -6,13 +6,13 @@ import react from "@vitejs/plugin-react";
  * --------------
  * - If Vite runs on your HOST machine, keep BACKEND_URL as http://localhost:8001
  * - If Vite runs INSIDE Docker (frontend container), localhost points to the container itself.
- *   In that case set VITE_BACKEND_URL=http://managora_backend:8000 (or your backend service name/port).
+ *   In that case set VITE_BACKEND_URL=http://managora_backend:8001 (or your backend service name/port). * 
  *
  * You can override the proxy target without editing this file:
  *   Windows (PowerShell):
  *     $env:VITE_BACKEND_URL="http://localhost:8001"; npm run dev
  *   Docker:
- *     VITE_BACKEND_URL=http://managora_backend:8000
+ *     VITE_BACKEND_URL=http://managora_backend:8001 * 
  */
 const BACKEND_URL = process.env.VITE_BACKEND_URL || "http://localhost:8001";
 
