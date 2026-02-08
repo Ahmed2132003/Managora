@@ -62,12 +62,28 @@ class KPIFactDailyListView(ListAPIView):
         company = self.request.user.company
         queryset = KPIFactDaily.objects.filter(company=company)
 
+        # Support both legacy params (kpi_key/start_date/end_date)
+        # and the frontend analytics dashboard params (keys/start/end).
+        keys_param = self.request.query_params.get("keys")
         kpi_key = self.request.query_params.get("kpi_key")
-        if kpi_key:
+
+        if keys_param:
+            keys = [k.strip() for k in keys_param.split(",") if k.strip()]
+            if keys:
+                queryset = queryset.filter(kpi_key__in=keys)
+        elif kpi_key:
             queryset = queryset.filter(kpi_key=kpi_key)
 
-        start_date = parse_date(self.request.query_params.get("start_date", ""))
-        end_date = parse_date(self.request.query_params.get("end_date", ""))
+        start_date = parse_date(
+            self.request.query_params.get("start_date")
+            or self.request.query_params.get("start")
+            or ""
+        )
+        end_date = parse_date(
+            self.request.query_params.get("end_date")
+            or self.request.query_params.get("end")
+            or ""
+        )
         if start_date:
             queryset = queryset.filter(date__gte=start_date)
         if end_date:
@@ -75,14 +91,19 @@ class KPIFactDailyListView(ListAPIView):
 
         allowed_categories = self._allowed_categories(self.request.user)
         if allowed_categories:
-            allowed_keys = KPIDefinition.objects.filter(
+            allowed_keys_qs = KPIDefinition.objects.filter(
                 company=company,
                 category__in=allowed_categories,
                 is_active=True,
             ).values_list("key", flat=True)
-            queryset = queryset.filter(kpi_key__in=allowed_keys)
 
-        return queryset.order_by("-date", "kpi_key")
+            # If KPI definitions haven't been seeded yet, don't hide facts.
+            # (This keeps dashboards usable while setup/seed runs.)
+            if allowed_keys_qs.exists():
+                queryset = queryset.filter(kpi_key__in=allowed_keys_qs)
+
+        return queryset.order_by("date", "kpi_key")
+
 
 class AnalyticsRebuildView(APIView):
     permission_classes = []

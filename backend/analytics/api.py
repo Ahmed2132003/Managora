@@ -31,6 +31,28 @@ SUMMARY_KEYS = {
     "cash_balance_latest": "cash_balance_daily",
 }
 
+DEFAULT_KEYS_BY_CATEGORY = {
+    KPIDefinition.Category.HR: {
+        "absence_rate_daily",
+        "lateness_rate_daily",
+        "overtime_hours_daily",
+        "absence_by_department_daily",
+        "lateness_by_department_daily",
+        "overtime_hours_by_department_daily",
+    },
+    KPIDefinition.Category.FINANCE: {
+        "revenue_daily",
+        "expenses_daily",
+        "ar_balance_daily",
+        "ap_balance_daily",
+    },
+    KPIDefinition.Category.CASH: {
+        "cash_balance_daily",
+        "cash_inflow_daily",
+        "cash_outflow_daily",
+    },
+}
+
 
 def _serialize_decimal(value: Decimal | None) -> str | None:
     if value is None:
@@ -67,15 +89,30 @@ class AnalyticsAccessMixin:
 
     def _allowed_keys(self):
         categories = self._allowed_categories(self.request.user)
+        if categories is None:
+            return None
+
+        # When categories is an empty set (shouldn't happen with the permission gate),
+        # treat it as "no restriction" to avoid accidentally hiding all data.
         if not categories:
             return None
-        return set(
-            KPIDefinition.objects.filter(
-                company=self.request.user.company,
-                category__in=categories,
-                is_active=True,
-            ).values_list("key", flat=True)
-        )
+
+        qs = KPIDefinition.objects.filter(
+            company=self.request.user.company,
+            category__in=categories,
+            is_active=True,
+        ).values_list("key", flat=True)
+
+        # If KPI definitions are not seeded yet, fall back to a safe default
+        # allow-list per category so dashboards still show data.
+        if not qs.exists():
+            fallback: set[str] = set()
+            for cat in categories:
+                fallback.update(DEFAULT_KEYS_BY_CATEGORY.get(cat, set()))
+            return fallback or None
+
+        return set(qs)
+
 
 
 class AnalyticsSummaryView(AnalyticsAccessMixin, APIView):
