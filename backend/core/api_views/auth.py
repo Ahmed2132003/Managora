@@ -3,6 +3,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from core.serializers.auth import LoginSerializer
 from core.throttles import LoginRateThrottle
 
 
@@ -10,10 +11,10 @@ from core.throttles import LoginRateThrottle
     tags=["Auth"],    
     summary="Login",
     description="Obtain access and refresh tokens using username/password credentials.",
-    request=TokenObtainPairSerializer,
-    responses={200: TokenObtainPairSerializer},
+    request=LoginSerializer,
+    responses={200: LoginSerializer},    
 )
 class LoginView(TokenObtainPairView):
-    serializer_class = TokenObtainPairSerializer
+    serializer_class = LoginSerializer    
     permission_classes = [AllowAny]
     throttle_classes = [LoginRateThrottle]
