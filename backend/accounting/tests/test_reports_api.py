@@ -148,6 +148,44 @@ class ReportsApiTests(APITestCase):
         self.assertEqual(res.data["expense_total"], "1000.00")
         self.assertEqual(res.data["net_profit"], "500.00")
 
+    def test_profit_and_loss_includes_revenue_legacy_account_type(self):
+        self.auth("accountant")
+        revenue_legacy = Account.objects.create(
+            company=self.company,
+            code="4010",
+            name="Legacy Revenue",
+            type="REVENUE",
+        )
+        JournalEntry.objects.create(
+            company=self.company,
+            date="2024-01-25",
+            memo="Legacy revenue",
+            status=JournalEntry.Status.POSTED,
+            created_by=self.accountant,
+            lines=[
+                {
+                    "account_id": self.cash.id,
+                    "debit": "400.00",
+                    "credit": "0",
+                },
+                {
+                    "account_id": revenue_legacy.id,
+                    "debit": "0",
+                    "credit": "400.00",
+                },
+            ],
+        )
+
+        url = reverse("report-pnl")
+        res = self.client.get(
+            url, {"date_from": "2024-01-01", "date_to": "2024-01-31"}
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["income_total"], "1900.00")
+        codes = {item["code"]: item for item in res.data["income_accounts"]}
+        self.assertEqual(codes["4010"]["type"], Account.Type.INCOME)
+        self.assertEqual(codes["4010"]["net"], "400.00")
+        
     def test_profit_and_loss_includes_collected_sales_by_method(self):
         self.auth("accountant")
         customer = Customer.objects.create(company=self.company, code="C-300", name="Cash Buyer")

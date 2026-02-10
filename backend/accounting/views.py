@@ -1092,6 +1092,10 @@ class ProfitLossView(APIView):
         return permissions
 
     def get(self, request):
+        def _is_income_type(account_type: str | None) -> bool:
+            normalized = (account_type or "").upper()
+            return normalized in {Account.Type.INCOME, "REVENUE"}
+
         date_from = _parse_date_param(request, "date_from")
         date_to = _parse_date_param(request, "date_to")
         if not date_from or not date_to:
@@ -1111,7 +1115,11 @@ class ProfitLossView(APIView):
                 entry__status=JournalEntry.Status.POSTED,
                 entry__date__gte=date_from,
                 entry__date__lte=date_to,
-                account__type__in=[Account.Type.INCOME, Account.Type.EXPENSE],
+            )
+            .filter(
+                Q(account__type=Account.Type.EXPENSE)
+                | Q(account__type=Account.Type.INCOME)
+                | Q(account__type__iexact="REVENUE")                
             )
             .values("account_id", "account__code", "account__name", "account__type")
             .annotate(
@@ -1134,7 +1142,8 @@ class ProfitLossView(APIView):
             debit = Decimal(row["debit"])
             credit = Decimal(row["credit"])
             account_type = row["account__type"]
-            if account_type == Account.Type.INCOME:
+            is_income = _is_income_type(account_type)
+            if is_income:                
                 net = credit - debit
                 income_total += net
             else:
@@ -1145,12 +1154,12 @@ class ProfitLossView(APIView):
                 "account_id": row["account_id"],
                 "code": row["account__code"],
                 "name": row["account__name"],
-                "type": account_type,
+                "type": Account.Type.INCOME if is_income else Account.Type.EXPENSE,                
                 "debit": _format_amount(debit),
                 "credit": _format_amount(credit),
                 "net": _format_amount(net),
             }
-            if account_type == Account.Type.INCOME:
+            if is_income:                
                 income_accounts.append(item)
             else:
                 expense_accounts.append(item)
