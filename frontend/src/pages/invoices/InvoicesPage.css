@@ -60,3 +60,9 @@
     grid-template-columns: 1fr;
   }
 }
+
+.invoices-page .data-table td:last-child {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

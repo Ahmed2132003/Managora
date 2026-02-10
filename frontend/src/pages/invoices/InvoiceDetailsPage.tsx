@@ -13,6 +13,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { isForbiddenError } from "../../shared/api/errors";
+import { useMe } from "../../shared/auth/useMe";
 import { useCustomers } from "../../shared/customers/hooks";
 import { useInvoice, useIssueInvoice } from "../../shared/invoices/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
@@ -40,6 +41,7 @@ export function InvoiceDetailsPage() {
 
   const invoiceQuery = useInvoice(id);
   const customersQuery = useCustomers({});
+  const meQuery = useMe();
   const issueInvoice = useIssueInvoice();
 
   const customerName = useMemo(() => {
@@ -71,6 +73,12 @@ export function InvoiceDetailsPage() {
   const invoice = invoiceQuery.data;
   const overdue = isInvoiceOverdue(invoice);
   const hasLines = invoice.lines.length > 0;
+  const user = meQuery.data?.user;
+  const currentUserName = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.username;
+  const userRoles = meQuery.data?.roles ?? [];
+  const isManager = userRoles.some((role) => role.name.toLowerCase() === "manager");
+  const isAccountant = userRoles.some((role) => role.name.toLowerCase() === "accountant");
+  const companyName = meQuery.data?.company.name ?? "-";
 
   return (
     <Stack gap="lg">      
@@ -78,7 +86,18 @@ export function InvoiceDetailsPage() {
         <Stack gap={0}>
           <Title order={3}>Invoice {invoice.invoice_number}</Title>
           <Text c="dimmed">{customerName ?? "Unknown customer"}</Text>
-        </Stack>
+          <Text c="dimmed" size="sm">
+            Company: {companyName}
+          </Text>
+          <Text c="dimmed" size="sm">
+            Company Manager: {isManager ? currentUserName : "-"}
+          </Text>
+          {isAccountant && (
+            <Text c="dimmed" size="sm">
+              Accountant: {currentUserName}
+            </Text>
+          )}
+        </Stack>        
         <Group>
           <Button component={Link} to="/invoices" variant="default">
             Back to Invoices
