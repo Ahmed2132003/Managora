@@ -47,6 +47,7 @@ type Content = {
     newCustomer: string;
     invoices: string;
     newInvoice: string;
+    sales: string;
     alertsCenter: string;
     cashForecast: string;
     ceoDashboard: string;
@@ -99,6 +100,7 @@ const contentMap: Record<Language, Content> = {
       newCustomer: "New Customer",
       invoices: "Invoices",
       newInvoice: "New Invoice",
+      sales: "Sales",
       alertsCenter: "Alerts Center",
       cashForecast: "Cash Forecast",
       ceoDashboard: "CEO Dashboard",
@@ -149,6 +151,7 @@ const contentMap: Record<Language, Content> = {
       newCustomer: "عميل جديد",
       invoices: "الفواتير",
       newInvoice: "فاتورة جديدة",
+      sales: "المبيعات",
       alertsCenter: "مركز التنبيهات",
       cashForecast: "توقعات النقد",
       ceoDashboard: "لوحة CEO",
@@ -367,6 +370,12 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
         path: "/invoices/new",
         label: content.nav.newInvoice,
         icon: "🧾",
+        permissions: ["invoices.*"],
+      },
+      {
+        path: "/sales",
+        label: content.nav.sales,
+        icon: "🛒",
         permissions: ["invoices.*"],
       },
       {

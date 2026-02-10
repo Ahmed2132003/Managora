@@ -44,6 +44,7 @@ import { SetupProgressPage } from "../pages/setup/SetupProgressPage";
 import { AuditLogsPage } from "../pages/admin/AuditLogsPage";
 import { AdminPanelPage } from "../pages/admin/AdminPanelPage";
 import { CatalogPage } from "../pages/catalog/CatalogPage";
+import { SalesPage } from "../pages/catalog/SalesPage.tsx";
 export const router = createBrowserRouter([           
   {    
     path: "/login",
@@ -92,6 +93,7 @@ export const router = createBrowserRouter([
       { path: "invoices/:id/edit", element: <InvoiceFormPage /> },
       { path: "invoices/:id", element: <InvoiceDetailsPage /> },      
       { path: "catalog", element: <CatalogPage /> },
+      { path: "sales", element: <SalesPage /> },
       { path: "analytics/alerts", element: <AlertsCenterPage /> },
       { path: "analytics/cash-forecast", element: <CashForecastPage /> },
       { path: "analytics/ceo", element: <CEODashboardPage /> },

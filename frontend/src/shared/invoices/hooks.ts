@@ -99,3 +99,45 @@ export function useDeleteInvoice() {
     },
   });
 }
+
+export type SaleLinePayload = {
+  item: number;
+  quantity: string;
+  unit_price?: string;
+};
+
+export type RecordSalePayload = {
+  customer?: number;
+  customer_name?: string;
+  customer_data?: {
+    code: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    credit_limit?: string;
+    payment_terms_days?: number;
+    is_active?: boolean;
+  };
+  invoice_number: string;
+  issue_date: string;
+  due_date?: string;
+  tax_amount?: string;
+  amount_paid?: string;
+  notes?: string;
+  items: SaleLinePayload[];
+  expense_account?: number;
+  paid_from_account?: number;
+  cost_center?: number;
+  payment_method?: string;
+  expense_vendor_name?: string;
+};
+
+export function useRecordSale() {
+  return useMutation({
+    mutationFn: async (payload: RecordSalePayload) => {
+      const response = await http.post<Invoice>(endpoints.invoiceRecordSale, payload);
+      return response.data;
+    },
+  });
+}

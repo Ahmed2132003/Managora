@@ -23,6 +23,7 @@ from accounting.models import (
     Customer,
     Expense,
     Invoice,
+    InvoiceLine,
     JournalEntry,
     JournalLine,
     Payment,
@@ -349,12 +350,16 @@ class InvoiceViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
             F("total_amount") - total_paid,
             output_field=DecimalField(max_digits=14, decimal_places=2),
         )
-        return (
+        queryset = (            
             Invoice.objects.filter(company=self.request.user.company)
             .select_related("customer", "created_by")
             .annotate(total_paid=total_paid, remaining_balance=remaining_balance)            
         )
-
+        invoice_number = self.request.query_params.get("invoice_number")
+        if invoice_number:
+            queryset = queryset.filter(invoice_number__icontains=invoice_number)
+        return queryset
+    
     def perform_create(self, serializer):
         serializer.save()
 
@@ -362,31 +367,92 @@ class InvoiceViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="record-sale")
     def record_sale(self, request, *args, **kwargs):
         customer_id = request.data.get("customer")
+        customer_name = str(request.data.get("customer_name", "")).strip()
+        customer_payload = request.data.get("customer_data") or {}
         item_id = request.data.get("item")
         quantity = Decimal(str(request.data.get("quantity", "1")))
+        lines_payload = request.data.get("items") or []
         invoice_number = request.data.get("invoice_number")
         issue_date = parse_date(request.data.get("issue_date") or "") or timezone.now().date()
+        due_date = parse_date(request.data.get("due_date") or "")
         tax_amount = Decimal(str(request.data.get("tax_amount", "0")))
         amount_paid = Decimal(str(request.data.get("amount_paid", "0")))
         notes = request.data.get("notes", "")
+        expense_account_id = request.data.get("expense_account")
+        paid_from_account_id = request.data.get("paid_from_account")
+        cost_center_id = request.data.get("cost_center")
+        payment_method = request.data.get("payment_method", "auto")
+        expense_vendor_name = request.data.get("expense_vendor_name", "")
 
-        if quantity <= 0:
-            return Response({"detail": "quantity must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            customer = Customer.objects.get(id=customer_id, company=request.user.company)
-            item = CatalogItem.objects.get(id=item_id, company=request.user.company, is_active=True)
-        except (Customer.DoesNotExist, CatalogItem.DoesNotExist):
-            return Response({"detail": "Customer or item not found."}, status=status.HTTP_400_BAD_REQUEST)
-
-        if item.item_type == CatalogItem.ItemType.PRODUCT and item.stock_quantity < quantity:
-            return Response({"detail": "Insufficient stock quantity."}, status=status.HTTP_400_BAD_REQUEST)
-
-        line_total = quantity * item.sale_price
-        subtotal = line_total
+        parsed_lines = []
+        if lines_payload:
+            for raw_line in lines_payload:
+                try:
+                    line_item = CatalogItem.objects.get(
+                        id=raw_line.get("item"), company=request.user.company, is_active=True
+                    )
+                except CatalogItem.DoesNotExist:
+                    return Response({"detail": "One or more catalog items were not found."}, status=status.HTTP_400_BAD_REQUEST)
+                line_quantity = Decimal(str(raw_line.get("quantity", "1")))
+                if line_quantity <= 0:
+                    return Response({"detail": "Line quantity must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
+                unit_price = Decimal(str(raw_line.get("unit_price", line_item.sale_price)))
+                parsed_lines.append(
+                    {
+                        "item": line_item,
+                        "quantity": line_quantity,
+                        "unit_price": unit_price,
+                    }
+                )
+        else:
+            if quantity <= 0:
+                return Response({"detail": "quantity must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                line_item = CatalogItem.objects.get(id=item_id, company=request.user.company, is_active=True)
+            except CatalogItem.DoesNotExist:
+                return Response({"detail": "Catalog item not found."}, status=status.HTTP_400_BAD_REQUEST)
+            parsed_lines = [{"item": line_item, "quantity": quantity, "unit_price": line_item.sale_price}]
+            
+        customer = None
+        if customer_id:
+            customer = Customer.objects.filter(id=customer_id, company=request.user.company).first()
+            if not customer:
+                return Response({"detail": "Customer not found."}, status=status.HTTP_400_BAD_REQUEST)
+        elif customer_name:
+            customer = Customer.objects.filter(company=request.user.company, name__iexact=customer_name).first()
+            if not customer:
+                return Response({"detail": "Customer name not found. Send customer_data to create one."}, status=status.HTTP_400_BAD_REQUEST)
+        elif customer_payload:
+            customer = Customer.objects.filter(
+                company=request.user.company,
+                code=customer_payload.get("code"),
+            ).first()
+            if not customer:
+                customer = Customer.objects.create(
+                    company=request.user.company,
+                    code=customer_payload.get("code", ""),
+                    name=customer_payload.get("name", ""),
+                    email=customer_payload.get("email") or None,
+                    phone=customer_payload.get("phone") or None,
+                    address=customer_payload.get("address") or None,
+                    credit_limit=customer_payload.get("credit_limit") or None,
+                    payment_terms_days=customer_payload.get("payment_terms_days", 0),
+                    is_active=bool(customer_payload.get("is_active", True)),
+                )
+        if not customer:
+            return Response({"detail": "A customer selection or customer_data is required."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        for line in parsed_lines:
+            if line["item"].item_type == CatalogItem.ItemType.PRODUCT and line["item"].stock_quantity < line["quantity"]:
+                return Response(
+                    {"detail": f"Insufficient stock quantity for {line['item'].name}."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+                
+        subtotal = sum((line["quantity"] * line["unit_price"] for line in parsed_lines), Decimal("0"))        
         total_amount = subtotal + tax_amount
-        due_date = issue_date + timedelta(days=customer.payment_terms_days)
-
+        due_date = due_date or (issue_date + timedelta(days=customer.payment_terms_days))
+        
         try:
             with transaction.atomic():
                 invoice = Invoice.objects.create(
@@ -399,49 +465,73 @@ class InvoiceViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
                     subtotal=subtotal,
                     tax_amount=tax_amount,
                     total_amount=total_amount,
-                    notes=notes or item.name,
+                    notes=notes or "Auto sale invoice",                    
                     created_by=request.user,
                 )
-                invoice.lines.create(
-                    description=item.name,
-                    quantity=quantity,
-                    unit_price=item.sale_price,
-                    line_total=line_total,
-                )
+                invoice_lines = []
+                for line in parsed_lines:
+                    invoice_lines.append(
+                        InvoiceLine(
+                            invoice=invoice,
+                            description=line["item"].name,
+                            quantity=line["quantity"],
+                            unit_price=line["unit_price"],
+                            line_total=line["quantity"] * line["unit_price"],
+                        )
+                    )
+                InvoiceLine.objects.bulk_create(invoice_lines)                
                 ensure_invoice_journal_entry(invoice)
 
-                if item.item_type == CatalogItem.ItemType.PRODUCT:
-                    item.stock_quantity = item.stock_quantity - quantity
-                    item.save(update_fields=["stock_quantity", "updated_at"])
-
-                StockTransaction.objects.create(
-                    company=request.user.company,
-                    item=item,
-                    transaction_type=StockTransaction.TransactionType.SALE,
-                    quantity_delta=(-quantity if item.item_type == CatalogItem.ItemType.PRODUCT else Decimal("0")),
-                    unit_cost=item.cost_price,
-                    unit_price=item.sale_price,
-                    memo=f"Sale invoice {invoice.invoice_number}",
-                    invoice=invoice,
-                    created_by=request.user,
-                )
-
+                for line in parsed_lines:
+                    item = line["item"]
+                    if item.item_type == CatalogItem.ItemType.PRODUCT:
+                        item.stock_quantity = item.stock_quantity - line["quantity"]
+                        item.save(update_fields=["stock_quantity", "updated_at"])
+                        
+                    StockTransaction.objects.create(
+                        company=request.user.company,
+                        item=item,
+                        transaction_type=StockTransaction.TransactionType.SALE,
+                        quantity_delta=(-line["quantity"] if item.item_type == CatalogItem.ItemType.PRODUCT else Decimal("0")),
+                        unit_cost=item.cost_price,
+                        unit_price=line["unit_price"],
+                        memo=f"Sale invoice {invoice.invoice_number}",
+                        invoice=invoice,
+                        created_by=request.user,
+                    )
+                    
                 # direct expense recognition for cost price
-                cogs_amount = quantity * item.cost_price
+                cogs_amount = sum((line["quantity"] * line["item"].cost_price for line in parsed_lines), Decimal("0"))                
                 if cogs_amount > 0:
-                    cogs_account = ensure_mapping_account(request.user.company, AccountMapping.Key.SALES_COGS_EXPENSE)
-                    cash_account = ensure_mapping_account(request.user.company, AccountMapping.Key.EXPENSE_DEFAULT_CASH)
+                    cogs_account = (
+                        Account.objects.filter(company=request.user.company, id=expense_account_id).first()
+                        if expense_account_id
+                        else ensure_mapping_account(request.user.company, AccountMapping.Key.SALES_COGS_EXPENSE)
+                    )
+                    cash_account = (
+                        Account.objects.filter(company=request.user.company, id=paid_from_account_id).first()
+                        if paid_from_account_id
+                        else ensure_mapping_account(request.user.company, AccountMapping.Key.EXPENSE_DEFAULT_CASH)
+                    )
+                    cost_center = None
+                    if cost_center_id:
+                        cost_center = CostCenter.objects.filter(company=request.user.company, id=cost_center_id).first()
+                    line_types = {line["item"].item_type for line in parsed_lines}
+                    is_service_only = line_types == {CatalogItem.ItemType.SERVICE}
+                    category = "إعلانات" if is_service_only else "تكلفة شراء منتج"
+                    vendor_name = expense_vendor_name or ("جهة الإعلانات" if is_service_only else "جهة شراء منتج")                    
                     expense = Expense.objects.create(
                         company=request.user.company,
                         date=issue_date,
-                        vendor_name=f"COGS - {item.name}",
-                        category="Cost of Sales",
+                        vendor_name=vendor_name,
+                        category=category,                        
                         amount=cogs_amount,
                         currency="",
-                        payment_method="auto",
+                        payment_method=payment_method,                        
                         paid_from_account=cash_account,
                         expense_account=cogs_account,
-                        notes=f"Auto-posted cost for invoice {invoice.invoice_number}",
+                        cost_center=cost_center,
+                        notes=f"{category} - linked to invoice {invoice.invoice_number}",                        
                         status=Expense.Status.APPROVED,
                         created_by=request.user,
                     )
@@ -635,6 +725,7 @@ class CatalogItemViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         "update": ["catalog.edit", "accounting.*"],
         "destroy": ["catalog.delete", "accounting.*"],
         "add_stock": ["catalog.edit", "accounting.*"],
+        "remove_stock": ["catalog.edit", "accounting.*"],
     }
 
     def get_queryset(self):
@@ -684,7 +775,32 @@ class CatalogItemViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         )
         return Response(StockTransactionSerializer(tx, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
-
+    @action(detail=True, methods=["post"], url_path="remove-stock")
+    def remove_stock(self, request, *args, **kwargs):
+        item = self.get_object()
+        quantity = Decimal(str(request.data.get("quantity", "0")))
+        memo = request.data.get("memo", "")
+        reason = request.data.get("reason", "")
+        if item.item_type != CatalogItem.ItemType.PRODUCT:
+            return Response({"detail": "Stock can be removed only from product items."}, status=status.HTTP_400_BAD_REQUEST)
+        if quantity <= 0:
+            return Response({"detail": "Quantity must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
+        if item.stock_quantity < quantity:
+            return Response({"detail": "Insufficient stock quantity."}, status=status.HTTP_400_BAD_REQUEST)
+        item.stock_quantity = (item.stock_quantity or Decimal("0")) - quantity
+        item.save(update_fields=["stock_quantity", "updated_at"])
+        tx = StockTransaction.objects.create(
+            company=request.user.company,
+            item=item,
+            transaction_type=StockTransaction.TransactionType.STOCK_OUT,
+            quantity_delta=-quantity,
+            unit_cost=item.cost_price,
+            unit_price=item.sale_price,
+            memo=memo or reason or "Stock out",
+            created_by=request.user,
+        )
+        return Response(StockTransactionSerializer(tx, context={"request": request}).data, status=status.HTTP_201_CREATED)
+    
 @extend_schema_view(
     list=extend_schema(tags=["Inventory"], summary="List stock transactions"),
     retrieve=extend_schema(tags=["Inventory"], summary="Retrieve stock transaction"),

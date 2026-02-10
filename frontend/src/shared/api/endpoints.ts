@@ -128,6 +128,7 @@ export const endpoints = {
   catalogItems: api("/catalog-items/"),
   catalogItem: (id: number) => api(`/catalog-items/${id}/`),
   catalogItemAddStock: (id: number) => api(`/catalog-items/${id}/add-stock/`),
+  catalogItemRemoveStock: (id: number) => api(`/catalog-items/${id}/remove-stock/`),
   inventoryTransactions: api("/inventory/transactions/"),
   invoiceRecordSale: api("/invoices/record-sale/"),
 
