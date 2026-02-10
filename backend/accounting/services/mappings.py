@@ -16,6 +16,18 @@ FALLBACK_MAPPING_METADATA = {
         "type": Account.Type.INCOME,
         "default_code": "REV",
     },
+    AccountMapping.Key.SALES_LIABILITY: {
+        "codes": ["2200"],
+        "names": ["Sales Liability", "Deferred Revenue"],
+        "type": Account.Type.LIABILITY,
+        "default_code": "SLIAB",
+    },
+    AccountMapping.Key.SALES_COGS_EXPENSE: {
+        "codes": ["5100"],
+        "names": ["Cost of Goods Sold", "COGS"],
+        "type": Account.Type.EXPENSE,
+        "default_code": "COGS",
+    },
     AccountMapping.Key.PAYROLL_SALARIES_EXPENSE: {
         "codes": ["5000", "5200"],
         "names": ["Salaries Expense", "Payroll Salaries Expense"],

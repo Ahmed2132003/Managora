@@ -117,6 +117,8 @@ class AccountMapping(models.Model):
     class Key(models.TextChoices):
         ACCOUNTS_RECEIVABLE = "ACCOUNTS_RECEIVABLE", "Accounts Receivable"
         SALES_REVENUE = "SALES_REVENUE", "Sales Revenue"
+        SALES_LIABILITY = "SALES_LIABILITY", "Sales Liability"
+        SALES_COGS_EXPENSE = "SALES_COGS_EXPENSE", "Cost of Goods Sold"
         PAYROLL_SALARIES_EXPENSE = "PAYROLL_SALARIES_EXPENSE", "Payroll Salaries Expense"
         PAYROLL_PAYABLE = "PAYROLL_PAYABLE", "Payroll Payable"
         EXPENSE_DEFAULT_CASH = "EXPENSE_DEFAULT_CASH", "Expense Default Cash"
@@ -528,3 +530,90 @@ class ExpenseAttachment(models.Model):
 
     def __str__(self):
         return f"ExpenseAttachment {self.id}"
+
+
+class CatalogItem(models.Model):
+    class ItemType(models.TextChoices):
+        PRODUCT = "product", "Product"
+        SERVICE = "service", "Service"
+
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="catalog_items",
+    )
+    item_type = models.CharField(max_length=16, choices=ItemType.choices)
+    name = models.CharField(max_length=255)
+    barcode = models.CharField(max_length=64)
+    stock_quantity = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    cost_price = models.DecimalField(max_digits=14, decimal_places=2)
+    sale_price = models.DecimalField(max_digits=14, decimal_places=2)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="catalog_items",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "barcode"],
+                name="unique_catalog_item_barcode_per_company",
+            ),
+        ]
+
+    def clean(self):
+        if self.item_type == self.ItemType.SERVICE:
+            self.stock_quantity = 0
+
+    def __str__(self):
+        return f"{self.name} ({self.item_type})"
+
+
+class StockTransaction(models.Model):
+    class TransactionType(models.TextChoices):
+        STOCK_IN = "stock_in", "Stock In"
+        STOCK_OUT = "stock_out", "Stock Out"
+        ADJUSTMENT = "adjustment", "Adjustment"
+        SALE = "sale", "Sale"
+        UPDATE = "update", "Update"
+        DELETE = "delete", "Delete"
+
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="stock_transactions",
+    )
+    item = models.ForeignKey(
+        "accounting.CatalogItem",
+        on_delete=models.CASCADE,
+        related_name="stock_transactions",
+    )
+    transaction_type = models.CharField(max_length=16, choices=TransactionType.choices)
+    quantity_delta = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    unit_cost = models.DecimalField(max_digits=14, decimal_places=2)
+    unit_price = models.DecimalField(max_digits=14, decimal_places=2)
+    memo = models.TextField(blank=True)
+    invoice = models.ForeignKey(
+        "accounting.Invoice",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="stock_transactions",
+    )
+    created_by = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="stock_transactions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.item_id} - {self.transaction_type}"

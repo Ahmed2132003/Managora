@@ -18,6 +18,8 @@ from accounting.models import (
     JournalEntry,
     JournalLine,
     Payment,
+    CatalogItem,
+    StockTransaction,
 )
 
 from accounting.services.journal import post_journal_entry
@@ -512,3 +514,70 @@ class ExpenseAttachmentCreateSerializer(serializers.ModelSerializer):
         model = ExpenseAttachment
         fields = ["id", "file"]
         read_only_fields = ["id"]
+
+class CatalogItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CatalogItem
+        fields = [
+            "id",
+            "item_type",
+            "name",
+            "barcode",
+            "stock_quantity",
+            "cost_price",
+            "sale_price",
+            "is_active",
+            "created_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_by", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        company = request.user.company
+        barcode = attrs.get("barcode") or getattr(self.instance, "barcode", None)
+        item_type = attrs.get("item_type") or getattr(self.instance, "item_type", None)
+
+        if barcode:
+            qs = CatalogItem.objects.filter(company=company, barcode=barcode)
+            if self.instance:
+                qs = qs.exclude(id=self.instance.id)
+            if qs.exists():
+                raise serializers.ValidationError({"barcode": "Barcode already exists for this company."})
+
+        stock_quantity = attrs.get("stock_quantity")
+        if item_type == CatalogItem.ItemType.SERVICE:
+            attrs["stock_quantity"] = Decimal("0")
+        elif stock_quantity is not None and stock_quantity < 0:
+            raise serializers.ValidationError({"stock_quantity": "Stock quantity cannot be negative."})
+        return attrs
+
+
+class StockTransactionSerializer(serializers.ModelSerializer):
+    item_name = serializers.CharField(source="item.name", read_only=True)
+
+    class Meta:
+        model = StockTransaction
+        fields = [
+            "id",
+            "item",
+            "item_name",
+            "transaction_type",
+            "quantity_delta",
+            "unit_cost",
+            "unit_price",
+            "memo",
+            "invoice",
+            "created_by",
+            "created_at",
+        ]
+        read_only_fields = ["created_by", "created_at"]
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        company = request.user.company
+        item = attrs.get("item")
+        if item and item.company_id != company.id:
+            raise serializers.ValidationError("Item must belong to the same company.")
+        return attrs

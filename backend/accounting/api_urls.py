@@ -10,6 +10,8 @@ from accounting.views import (
     BalanceSheetView,
     CostCenterViewSet,    
     CustomerViewSet,
+    CatalogItemViewSet,
+    StockTransactionViewSet,
     ExpenseViewSet,
     GeneralLedgerView,
     InvoiceViewSet,
@@ -30,6 +32,8 @@ router.register(
 )
 router.register("expenses", ExpenseViewSet, basename="expense")
 router.register("payments", PaymentViewSet, basename="payment")
+router.register("catalog-items", CatalogItemViewSet, basename="catalog-item")
+router.register("inventory/transactions", StockTransactionViewSet, basename="stock-transaction")
 
 urlpatterns = [
     path("", include(router.urls)),

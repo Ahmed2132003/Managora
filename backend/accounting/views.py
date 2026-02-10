@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -25,6 +26,8 @@ from accounting.models import (
     JournalEntry,
     JournalLine,
     Payment,
+    CatalogItem,
+    StockTransaction,
 )
 
 from accounting.serializers import (
@@ -41,12 +44,16 @@ from accounting.serializers import (
     JournalEntryCreateSerializer,
     JournalEntrySerializer,
     PaymentSerializer,
+    CatalogItemSerializer,
+    StockTransactionSerializer,
 )
 from accounting.services.expenses import ensure_expense_journal_entry
 from accounting.services.invoices import ensure_invoice_journal_entry
 from accounting.services.alerts import generate_alerts
 from accounting.services.receivables import get_open_invoices
 from accounting.services.seed import seed_coa_template
+from accounting.services.mappings import ensure_mapping_account
+from accounting.services.payments import record_payment
 from core.permissions import HasPermission, PermissionByActionMixin, user_has_permission
 
 
@@ -329,6 +336,7 @@ class InvoiceViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         "partial_update": "invoices.*",
         "update": "invoices.*",
         "issue": "invoices.*",
+        "record_sale": "invoices.*",
     }
 
     def get_queryset(self):
@@ -349,6 +357,116 @@ class InvoiceViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save()
+
+
+    @action(detail=False, methods=["post"], url_path="record-sale")
+    def record_sale(self, request, *args, **kwargs):
+        customer_id = request.data.get("customer")
+        item_id = request.data.get("item")
+        quantity = Decimal(str(request.data.get("quantity", "1")))
+        invoice_number = request.data.get("invoice_number")
+        issue_date = parse_date(request.data.get("issue_date") or "") or timezone.now().date()
+        tax_amount = Decimal(str(request.data.get("tax_amount", "0")))
+        amount_paid = Decimal(str(request.data.get("amount_paid", "0")))
+        notes = request.data.get("notes", "")
+
+        if quantity <= 0:
+            return Response({"detail": "quantity must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            customer = Customer.objects.get(id=customer_id, company=request.user.company)
+            item = CatalogItem.objects.get(id=item_id, company=request.user.company, is_active=True)
+        except (Customer.DoesNotExist, CatalogItem.DoesNotExist):
+            return Response({"detail": "Customer or item not found."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if item.item_type == CatalogItem.ItemType.PRODUCT and item.stock_quantity < quantity:
+            return Response({"detail": "Insufficient stock quantity."}, status=status.HTTP_400_BAD_REQUEST)
+
+        line_total = quantity * item.sale_price
+        subtotal = line_total
+        total_amount = subtotal + tax_amount
+        due_date = issue_date + timedelta(days=customer.payment_terms_days)
+
+        try:
+            with transaction.atomic():
+                invoice = Invoice.objects.create(
+                    company=request.user.company,
+                    invoice_number=invoice_number,
+                    customer=customer,
+                    issue_date=issue_date,
+                    due_date=due_date,
+                    status=Invoice.Status.ISSUED,
+                    subtotal=subtotal,
+                    tax_amount=tax_amount,
+                    total_amount=total_amount,
+                    notes=notes or item.name,
+                    created_by=request.user,
+                )
+                invoice.lines.create(
+                    description=item.name,
+                    quantity=quantity,
+                    unit_price=item.sale_price,
+                    line_total=line_total,
+                )
+                ensure_invoice_journal_entry(invoice)
+
+                if item.item_type == CatalogItem.ItemType.PRODUCT:
+                    item.stock_quantity = item.stock_quantity - quantity
+                    item.save(update_fields=["stock_quantity", "updated_at"])
+
+                StockTransaction.objects.create(
+                    company=request.user.company,
+                    item=item,
+                    transaction_type=StockTransaction.TransactionType.SALE,
+                    quantity_delta=(-quantity if item.item_type == CatalogItem.ItemType.PRODUCT else Decimal("0")),
+                    unit_cost=item.cost_price,
+                    unit_price=item.sale_price,
+                    memo=f"Sale invoice {invoice.invoice_number}",
+                    invoice=invoice,
+                    created_by=request.user,
+                )
+
+                # direct expense recognition for cost price
+                cogs_amount = quantity * item.cost_price
+                if cogs_amount > 0:
+                    cogs_account = ensure_mapping_account(request.user.company, AccountMapping.Key.SALES_COGS_EXPENSE)
+                    cash_account = ensure_mapping_account(request.user.company, AccountMapping.Key.EXPENSE_DEFAULT_CASH)
+                    expense = Expense.objects.create(
+                        company=request.user.company,
+                        date=issue_date,
+                        vendor_name=f"COGS - {item.name}",
+                        category="Cost of Sales",
+                        amount=cogs_amount,
+                        currency="",
+                        payment_method="auto",
+                        paid_from_account=cash_account,
+                        expense_account=cogs_account,
+                        notes=f"Auto-posted cost for invoice {invoice.invoice_number}",
+                        status=Expense.Status.APPROVED,
+                        created_by=request.user,
+                    )
+                    ensure_expense_journal_entry(expense)
+
+                if amount_paid > 0:
+                    cash_account = ensure_mapping_account(request.user.company, AccountMapping.Key.EXPENSE_DEFAULT_CASH)
+                    payment = Payment.objects.create(
+                        company=request.user.company,
+                        customer=customer,
+                        invoice=invoice,
+                        payment_date=issue_date,
+                        amount=amount_paid,
+                        method=Payment.Method.CASH,
+                        cash_account=cash_account,
+                        notes="Auto payment while recording sale",
+                        created_by=request.user,
+                    )
+                    record_payment(payment)
+
+        except ValidationError as exc:
+            return Response({"detail": exc.messages}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(invoice)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="issue")
     def issue(self, request, *args, **kwargs):
@@ -498,6 +616,94 @@ class PaymentViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         if customer_id:
             queryset = queryset.filter(customer_id=customer_id)
         return queryset.order_by("-payment_date", "-id")
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Catalog"], summary="List products/services"),
+    retrieve=extend_schema(tags=["Catalog"], summary="Retrieve product/service"),
+    create=extend_schema(tags=["Catalog"], summary="Create product/service"),
+    partial_update=extend_schema(tags=["Catalog"], summary="Update product/service"),
+)
+class CatalogItemViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
+    serializer_class = CatalogItemSerializer
+    permission_classes = [IsAuthenticated]
+    permission_map = {
+        "list": ["catalog.view", "accounting.*"],
+        "retrieve": ["catalog.view", "accounting.*"],
+        "create": ["catalog.create", "accounting.*"],
+        "partial_update": ["catalog.edit", "accounting.*"],
+        "update": ["catalog.edit", "accounting.*"],
+        "destroy": ["catalog.delete", "accounting.*"],
+        "add_stock": ["catalog.edit", "accounting.*"],
+    }
+
+    def get_queryset(self):
+        queryset = CatalogItem.objects.filter(company=self.request.user.company)
+        item_type = self.request.query_params.get("item_type")
+        if item_type:
+            queryset = queryset.filter(item_type=item_type)
+        return queryset.order_by("name", "id")
+
+    def perform_create(self, serializer):
+        serializer.save(company=self.request.user.company, created_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=["is_active", "updated_at"])
+        StockTransaction.objects.create(
+            company=self.request.user.company,
+            item=instance,
+            transaction_type=StockTransaction.TransactionType.DELETE,
+            quantity_delta=0,
+            unit_cost=instance.cost_price,
+            unit_price=instance.sale_price,
+            memo="Soft delete catalog item",
+            created_by=self.request.user,
+        )
+
+    @action(detail=True, methods=["post"], url_path="add-stock")
+    def add_stock(self, request, *args, **kwargs):
+        item = self.get_object()
+        quantity = Decimal(str(request.data.get("quantity", "0")))
+        memo = request.data.get("memo", "")
+        if item.item_type != CatalogItem.ItemType.PRODUCT:
+            return Response({"detail": "Stock can be added only to product items."}, status=status.HTTP_400_BAD_REQUEST)
+        if quantity <= 0:
+            return Response({"detail": "Quantity must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
+        item.stock_quantity = (item.stock_quantity or Decimal("0")) + quantity
+        item.save(update_fields=["stock_quantity", "updated_at"])
+        tx = StockTransaction.objects.create(
+            company=request.user.company,
+            item=item,
+            transaction_type=StockTransaction.TransactionType.STOCK_IN,
+            quantity_delta=quantity,
+            unit_cost=item.cost_price,
+            unit_price=item.sale_price,
+            memo=memo or "Stock in",
+            created_by=request.user,
+        )
+        return Response(StockTransactionSerializer(tx, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Inventory"], summary="List stock transactions"),
+    retrieve=extend_schema(tags=["Inventory"], summary="Retrieve stock transaction"),
+)
+class StockTransactionViewSet(PermissionByActionMixin, viewsets.ReadOnlyModelViewSet):
+    serializer_class = StockTransactionSerializer
+    permission_classes = [IsAuthenticated]
+    permission_map = {
+        "list": ["catalog.view", "accounting.*"],
+        "retrieve": ["catalog.view", "accounting.*"],
+    }
+
+    def get_queryset(self):
+        queryset = StockTransaction.objects.filter(company=self.request.user.company).select_related("item", "created_by", "invoice")
+        tx_type = self.request.query_params.get("transaction_type")
+        if tx_type:
+            queryset = queryset.filter(transaction_type=tx_type)
+        return queryset.order_by("-created_at", "-id")
+
 
 
 @extend_schema(tags=["Reports"], summary="Accounts receivable aging")

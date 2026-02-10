@@ -41,9 +41,9 @@ import { HRDashboardPage } from "../pages/analytics/HRDashboardPage.tsx";
 import { SetupWizardPage } from "../pages/setup/SetupWizardPage";
 import { SetupTemplatesPage } from "../pages/setup/SetupTemplatesPage";
 import { SetupProgressPage } from "../pages/setup/SetupProgressPage";
-import { CopilotPage } from "../pages/CopilotPage";
 import { AuditLogsPage } from "../pages/admin/AuditLogsPage";
 import { AdminPanelPage } from "../pages/admin/AdminPanelPage";
+import { CatalogPage } from "../pages/catalog/CatalogPage";
 export const router = createBrowserRouter([           
   {    
     path: "/login",
@@ -91,12 +91,12 @@ export const router = createBrowserRouter([
       { path: "invoices/new", element: <InvoiceFormPage /> },
       { path: "invoices/:id/edit", element: <InvoiceFormPage /> },
       { path: "invoices/:id", element: <InvoiceDetailsPage /> },      
+      { path: "catalog", element: <CatalogPage /> },
       { path: "analytics/alerts", element: <AlertsCenterPage /> },
       { path: "analytics/cash-forecast", element: <CashForecastPage /> },
       { path: "analytics/ceo", element: <CEODashboardPage /> },
       { path: "analytics/finance", element: <FinanceDashboardPage /> },
-      { path: "analytics/hr", element: <HRDashboardPage /> },
-      { path: "copilot", element: <CopilotPage /> },
+      { path: "analytics/hr", element: <HRDashboardPage /> },      
       { path: "admin", element: <AdminPanelPage /> },
       { path: "admin/audit-logs", element: <AuditLogsPage /> },      
       {                     

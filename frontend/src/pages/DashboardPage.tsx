@@ -3,7 +3,7 @@ import { clearTokens } from "../shared/auth/tokens";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMe } from "../shared/auth/useMe.ts";
 import { hasPermission } from "../shared/auth/useCan";
-import { useAlerts, useAlert } from "../shared/analytics/hooks";
+import { useAlerts } from "../shared/analytics/hooks";
 import { useAnalyticsSummary, useAnalyticsKpis } from "../shared/analytics/insights.ts";
 import { useCashForecast } from "../shared/analytics/forecast";
 import { formatCurrency } from "../shared/analytics/format.ts";
@@ -42,9 +42,6 @@ type Content = {
     topCustomer: string;
     topCategory: string;
   };
-  assistantTitle: string;
-  assistantFallbackQuestion: string;
-  assistantFallbackAnswer: string;
   footer: string;
   userFallback: string;
   searchResultsTitle: string;
@@ -86,7 +83,7 @@ type Content = {
     ceoDashboard: string;
     financeDashboard: string;
     hrDashboard: string;
-    copilot: string;
+    catalog: string;
     auditLogs: string;
     setupTemplates: string;
     setupProgress: string;
@@ -124,9 +121,6 @@ const contentMap: Record<Language, Content> = {
       topCustomer: "Top customer",
       topCategory: "Top category",
     },
-    assistantTitle: "Copilot",
-    assistantFallbackQuestion: "No alerts to investigate right now.",
-    assistantFallbackAnswer: "Everything is running within expected thresholds.",
     footer: "This system is produced by Creativity Code.",
     userFallback: "Explorer",
     searchResultsTitle: "Search results",
@@ -168,7 +162,7 @@ const contentMap: Record<Language, Content> = {
       ceoDashboard: "CEO Dashboard",
       financeDashboard: "Finance Dashboard",
       hrDashboard: "HR Dashboard",
-      copilot: "Copilot",
+      catalog: "Products & Services",
       auditLogs: "Audit Logs",
       setupTemplates: "Setup Templates",
       setupProgress: "Setup Progress",
@@ -204,9 +198,6 @@ const contentMap: Record<Language, Content> = {
       topCustomer: "أعلى عميل",
       topCategory: "أعلى تصنيف",
     },
-    assistantTitle: "المساعد الذكي",
-    assistantFallbackQuestion: "لا توجد تنبيهات لمراجعتها الآن.",
-    assistantFallbackAnswer: "كل المؤشرات تعمل ضمن الحدود الطبيعية.",
     footer: "هذا السيستم من انتاج كريتفيتي كود",
     userFallback: "ضيف",
     searchResultsTitle: "نتائج البحث",
@@ -248,7 +239,7 @@ const contentMap: Record<Language, Content> = {
       ceoDashboard: "لوحة CEO",
       financeDashboard: "لوحة المالية",
       hrDashboard: "لوحة الموارد البشرية",
-      copilot: "المساعد",
+      catalog: "الخدمات والمنتجات",
       auditLogs: "سجل التدقيق",
       setupTemplates: "قوالب الإعداد",
       setupProgress: "تقدم الإعداد",
@@ -313,8 +304,6 @@ export function DashboardPage() {
   );
   const alertsQuery = useAlerts({ status: "open", range: "30d" });
   const forecastQuery = useCashForecast();
-  const primaryAlertId = alertsQuery.data?.[0]?.id ?? null;
-  const alertDetailQuery = useAlert(primaryAlertId);
 
   const barValues = useMemo(() => {
     if (!kpisQuery.data) {
@@ -637,7 +626,7 @@ export function DashboardPage() {
       { path: "/analytics/ceo", label: content.nav.ceoDashboard, icon: "📌" },
       { path: "/analytics/finance", label: content.nav.financeDashboard, icon: "💹" },
       { path: "/analytics/hr", label: content.nav.hrDashboard, icon: "🧑‍💻" },
-      { path: "/copilot", label: content.nav.copilot, icon: "🤖" },
+      { path: "/catalog", label: content.nav.catalog, icon: "📦" },
       {
         path: "/admin/audit-logs",
         label: content.nav.auditLogs,
@@ -938,22 +927,6 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div className="panel panel--assistant">
-              <div className="panel__header">
-                <div>
-                  <h2>{content.assistantTitle}</h2>
-                  <p>{isArabic ? "ردود ذكية فورًا" : "Instant smart replies"}</p>
-                </div>
-              </div>
-              <div className="assistant-chat">
-                <div className="assistant-message assistant-message--question">
-                  {alertDetailQuery.data?.title ?? content.assistantFallbackQuestion}
-                </div>
-                <div className="assistant-message assistant-message--answer">
-                  {alertDetailQuery.data?.message ?? content.assistantFallbackAnswer}
-                </div>
-              </div>
-            </div>            
           </section>
         </main>
       </div>
