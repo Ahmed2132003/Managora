@@ -6,7 +6,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from accounting.models import Account, Alert, Customer, Invoice
+from accounting.models import Account, Alert, Customer, Invoice, Payment
 from accounting.services.journal import post_journal_entry
 from core.models import Company, Permission, Role, RolePermission, UserRole
 
@@ -147,6 +147,53 @@ class ReportsApiTests(APITestCase):
         self.assertEqual(res.data["income_total"], "1500.00")
         self.assertEqual(res.data["expense_total"], "1000.00")
         self.assertEqual(res.data["net_profit"], "500.00")
+
+    def test_profit_and_loss_includes_collected_sales_by_method(self):
+        self.auth("accountant")
+        customer = Customer.objects.create(company=self.company, code="C-300", name="Cash Buyer")
+        invoice = Invoice.objects.create(
+            company=self.company,
+            invoice_number="INV-300",
+            customer=customer,
+            issue_date=timezone.now().date(),
+            due_date=timezone.now().date(),
+            status=Invoice.Status.ISSUED,
+            subtotal="700.00",
+            total_amount="700.00",
+            created_by=self.accountant,
+        )
+        Payment.objects.create(
+            company=self.company,
+            customer=customer,
+            invoice=invoice,
+            payment_date=timezone.now().date(),
+            amount="200.00",
+            method=Payment.Method.CASH,
+            cash_account=self.cash,
+            created_by=self.accountant,
+        )
+        Payment.objects.create(
+            company=self.company,
+            customer=customer,
+            invoice=invoice,
+            payment_date=timezone.now().date(),
+            amount="300.00",
+            method=Payment.Method.BANK,
+            cash_account=self.cash,
+            created_by=self.accountant,
+        )
+
+        url = reverse("report-pnl")
+        today = timezone.now().date().isoformat()
+        res = self.client.get(url, {"date_from": today, "date_to": today})
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["income_total"], "500.00")
+        self.assertEqual(res.data["expense_total"], "0.00")
+        self.assertEqual(res.data["net_profit"], "500.00")
+        codes = {item["code"]: item for item in res.data["income_accounts"]}
+        self.assertEqual(codes["PAYMENT-CASH"]["net"], "200.00")
+        self.assertEqual(codes["PAYMENT-BANK"]["net"], "300.00")
 
     def test_balance_sheet_balances(self):
         self.auth("accountant")

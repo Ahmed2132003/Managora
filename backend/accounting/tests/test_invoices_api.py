@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from accounting.models import Account, AccountMapping, Customer, Invoice, InvoiceLine, JournalEntry
+from accounting.services.invoices import ensure_invoice_journal_entry
 from core.models import Company, Permission, Role, RolePermission, UserRole
 
 User = get_user_model()
@@ -137,6 +138,63 @@ class InvoiceApiTests(APITestCase):
         total_credit = sum(line.credit for line in entry.lines.all())
         self.assertEqual(total_debit, total_credit)
 
+    def test_update_issued_invoice_updates_journal_amounts(self):
+        self.auth("accountant")
+        invoice = Invoice.objects.create(
+            company=self.company,
+            invoice_number="INV-2001-UPD",
+            customer=self.customer,
+            issue_date="2024-03-02",
+            due_date="2024-04-01",
+            subtotal="100.00",
+            tax_amount="0.00",
+            total_amount="100.00",
+            status=Invoice.Status.ISSUED,
+            created_by=self.accountant,
+        )
+        InvoiceLine.objects.create(
+            invoice=invoice,
+            description="Consulting",
+            quantity="1",
+            unit_price="100.00",
+            line_total="100.00",
+        )
+        ensure_invoice_journal_entry(invoice)
+
+        url = reverse("invoice-detail", args=[invoice.id])
+        res = self.client.patch(
+            url,
+            {
+                "invoice_number": invoice.invoice_number,
+                "customer": self.customer.id,
+                "issue_date": "2024-03-02",
+                "tax_amount": "0.00",
+                "notes": "Updated",
+                "lines": [
+                    {
+                        "description": "Consulting",
+                        "quantity": "2",
+                        "unit_price": "100.00",
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        entry = JournalEntry.objects.get(
+            company=self.company,
+            reference_type=JournalEntry.ReferenceType.INVOICE,
+            reference_id=str(invoice.id),
+        )
+        self.assertEqual(entry.lines.count(), 2)
+        receivable_line = entry.lines.get(account=self.receivable)
+        revenue_line = entry.lines.get(account=self.revenue)
+        self.assertEqual(receivable_line.debit, Decimal("200.00"))
+        self.assertEqual(receivable_line.credit, Decimal("0.00"))
+        self.assertEqual(revenue_line.credit, Decimal("200.00"))
+        self.assertEqual(revenue_line.debit, Decimal("0.00"))
+        
     def test_issue_twice_is_blocked(self):
         self.auth("accountant")
         invoice = Invoice.objects.create(

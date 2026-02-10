@@ -363,6 +363,10 @@ class InvoiceViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save()
 
+    def perform_update(self, serializer):
+        invoice = serializer.save()
+        if invoice.status == Invoice.Status.ISSUED:
+            ensure_invoice_journal_entry(invoice)
 
     @action(detail=False, methods=["post"], url_path="record-sale")
     def record_sale(self, request, *args, **kwargs):
@@ -1150,6 +1154,44 @@ class ProfitLossView(APIView):
                 income_accounts.append(item)
             else:
                 expense_accounts.append(item)
+        # Cash-basis revenue support:
+        # include collected invoice payments within the selected period so
+        # finance users can track realized cash/bank sales in P&L.
+        payment_revenue_rows = (
+            Payment.objects.filter(
+                company=request.user.company,
+                payment_date__gte=date_from,
+                payment_date__lte=date_to,
+            )
+            .values("method")
+            .annotate(
+                total=Coalesce(
+                    Sum("amount"),
+                    Value(0),
+                    output_field=DecimalField(max_digits=14, decimal_places=2),
+                )
+            )
+            .order_by("method")
+        )
+        for row in payment_revenue_rows:
+            total = Decimal(row["total"])
+            if total <= 0:
+                continue
+            method = row["method"]
+            method_label = "Cash" if method == Payment.Method.CASH else "Bank"
+            code = "PAYMENT-CASH" if method == Payment.Method.CASH else "PAYMENT-BANK"
+            income_total += total
+            income_accounts.append(
+                {
+                    "account_id": None,
+                    "code": code,
+                    "name": f"Collected Sales ({method_label})",
+                    "type": Account.Type.INCOME,
+                    "debit": _format_amount(0),
+                    "credit": _format_amount(total),
+                    "net": _format_amount(total),
+                }
+            )
 
         net_profit = income_total - expense_total
 
