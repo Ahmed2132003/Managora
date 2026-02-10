@@ -7,6 +7,9 @@ import { useInvoices, useRecordSale } from "../../shared/invoices/hooks";
 
 type SaleLine = { item: number; quantity: string; unit_price: string };
 
+const INITIAL_INVOICE_NUMBER = `INV-${Date.now()}`;
+const INITIAL_ISSUE_DATE = new Date().toISOString().slice(0, 10);
+
 export function SalesPage() {
   const customers = useCustomers({});
   const catalog = useCatalogItems();
@@ -21,8 +24,8 @@ export function SalesPage() {
   const [customerName, setCustomerName] = useState("");
   const [newCustomer, setNewCustomer] = useState({ code: "", name: "", email: "", phone: "", address: "", credit_limit: "", payment_terms_days: 0, is_active: true });
 
-  const [invoiceNumber, setInvoiceNumber] = useState(`INV-${Date.now()}`);
-  const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [invoiceNumber, setInvoiceNumber] = useState(INITIAL_INVOICE_NUMBER);
+  const [issueDate, setIssueDate] = useState(INITIAL_ISSUE_DATE);
   const [dueDate, setDueDate] = useState("");
   const [taxAmount, setTaxAmount] = useState("0");
   const [notes, setNotes] = useState("");
@@ -34,6 +37,7 @@ export function SalesPage() {
   const [expenseVendorName, setExpenseVendorName] = useState("");
 
   const [lines, setLines] = useState<SaleLine[]>([{ item: 0, quantity: "1", unit_price: "0" }]);
+
 
   const itemMap = useMemo(() => {
     const map = new Map<number, { name: string; sale: string }>();
