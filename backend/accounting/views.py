@@ -1244,6 +1244,7 @@ class BalanceSheetView(APIView):
                     Account.Type.ASSET,
                     Account.Type.LIABILITY,
                     Account.Type.EQUITY,
+                    Account.Type.INCOME,
                 ],
             )
             .values("account_id", "account__code", "account__name", "account__type")
@@ -1272,6 +1273,9 @@ class BalanceSheetView(APIView):
             if account_type == Account.Type.ASSET:
                 balance = debit - credit
                 assets_total += balance
+            elif account_type == Account.Type.INCOME:
+                balance = credit - debit
+                assets_total += balance
             elif account_type == Account.Type.LIABILITY:
                 balance = credit - debit
                 liabilities_total += balance
@@ -1287,6 +1291,13 @@ class BalanceSheetView(APIView):
             }
             if account_type == Account.Type.ASSET:
                 assets.append(item)
+            elif account_type == Account.Type.INCOME:
+                assets.append(
+                    {
+                        **item,
+                        "name": f"{item['name']} (Income)",
+                    }
+                )
             elif account_type == Account.Type.LIABILITY:
                 liabilities.append(item)
             else:
