@@ -11,15 +11,90 @@
   gap: 8px;
 }
 
+.catalog-page__form-grid {
+  align-items: end;
+}
+
+.catalog-page__input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.catalog-page__input-group span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.catalog-page__input-group input,
+.catalog-page__input-group select {
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-alt) 90%, transparent);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.catalog-page__input-group input:focus,
+.catalog-page__input-group select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.catalog-page__input-group--compact {
+  min-width: 210px;
+}
+
+.catalog-page__reason-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.catalog-page__reason-field span {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
 .catalog-page__reason-input {
-  width: 140px;
+  width: 180px;
   margin-inline: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+}
+
+.catalog-page__reason-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
 }
 
 .catalog-page .data-table td:last-child {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.catalog-page__tx-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.catalog-page__tx-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
@@ -27,5 +102,9 @@
   .catalog-page__reason-input {
     width: 100%;
     margin-inline: 0;
+  }
+
+  .catalog-page__input-group--compact {
+    min-width: 100%;
   }
 }

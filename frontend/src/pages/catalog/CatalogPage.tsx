@@ -32,7 +32,9 @@ export function CatalogPage() {
     sale_price: "0",
   });
   const [stockReason, setStockReason] = useState<Record<number, string>>({});
-
+  const [txDateFilter, setTxDateFilter] = useState("");
+  const [showAllTx, setShowAllTx] = useState(false);
+  
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (editing) await updateItem.mutateAsync({ id: editing.id, payload: form });
@@ -56,6 +58,19 @@ export function CatalogPage() {
     );
   }, [items.data]);
 
+  const filteredTransactions = useMemo(() => {
+    const allTransactions = tx.data ?? [];
+    if (!txDateFilter) return allTransactions;
+    return allTransactions.filter((row) => {
+      const txDate = new Date(row.created_at);
+      if (Number.isNaN(txDate.getTime())) return false;
+      return txDate.toISOString().slice(0, 10) === txDateFilter;
+    });
+  }, [tx.data, txDateFilter]);
+
+  const visibleTransactions = showAllTx ? filteredTransactions : filteredTransactions.slice(0, 10);
+  const hasMoreTransactions = filteredTransactions.length > 10;
+
   return (
     <DashboardShell
       copy={{
@@ -68,16 +83,34 @@ export function CatalogPage() {
         <>
           <section className="panel">
             <div className="panel__header"><h2>{language === "ar" ? "إضافة / تعديل" : "Add / Edit"}</h2></div>
-            <form onSubmit={submit} className="filters-grid">
-              <select value={form.item_type} onChange={(e) => setForm((f) => ({ ...f, item_type: e.target.value as CatalogItemType }))}>
-                <option value="product">{language === "ar" ? "منتج" : "Product"}</option>
-                <option value="service">{language === "ar" ? "خدمة" : "Service"}</option>
-              </select>
-              <input placeholder={language === "ar" ? "الاسم" : "Name"} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-              <input placeholder={language === "ar" ? "باركود" : "Barcode"} value={form.barcode} onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))} />
-              <input placeholder={language === "ar" ? "المخزون" : "Stock"} value={form.stock_quantity} onChange={(e) => setForm((f) => ({ ...f, stock_quantity: e.target.value }))} />
-              <input placeholder={language === "ar" ? "سعر التكلفة" : "Cost price"} value={form.cost_price} onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))} />
-              <input placeholder={language === "ar" ? "سعر البيع" : "Sale price"} value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} />
+            <form onSubmit={submit} className="filters-grid catalog-page__form-grid">
+              <label className="catalog-page__input-group">
+                <span>{language === "ar" ? "النوع" : "Type"}</span>
+                <select value={form.item_type} onChange={(e) => setForm((f) => ({ ...f, item_type: e.target.value as CatalogItemType }))}>
+                  <option value="product">{language === "ar" ? "منتج" : "Product"}</option>
+                  <option value="service">{language === "ar" ? "خدمة" : "Service"}</option>
+                </select>
+              </label>
+              <label className="catalog-page__input-group">
+                <span>{language === "ar" ? "الاسم" : "Name"}</span>
+                <input placeholder={language === "ar" ? "اسم الخدمة أو المنتج" : "Item name"} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+              </label>
+              <label className="catalog-page__input-group">
+                <span>{language === "ar" ? "الباركود" : "Barcode"}</span>
+                <input placeholder={language === "ar" ? "باركود اختياري" : "Optional barcode"} value={form.barcode} onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))} />
+              </label>
+              <label className="catalog-page__input-group">
+                <span>{language === "ar" ? "المخزون" : "Stock"}</span>
+                <input placeholder={language === "ar" ? "الكمية الحالية" : "Current quantity"} value={form.stock_quantity} onChange={(e) => setForm((f) => ({ ...f, stock_quantity: e.target.value }))} />
+              </label>
+              <label className="catalog-page__input-group">
+                <span>{language === "ar" ? "سعر التكلفة" : "Cost price"}</span>
+                <input placeholder={language === "ar" ? "سعر التكلفة" : "Cost price"} value={form.cost_price} onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))} />
+              </label>
+              <label className="catalog-page__input-group">
+                <span>{language === "ar" ? "سعر البيع" : "Sale price"}</span>
+                <input placeholder={language === "ar" ? "سعر البيع" : "Sale price"} value={form.sale_price} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} />
+              </label>
               <button className="action-button" type="submit">{editing ? (language === "ar" ? "حفظ" : "Save") : (language === "ar" ? "إضافة" : "Add")}</button>
             </form>
           </section>
@@ -104,15 +137,18 @@ export function CatalogPage() {
                           {it.item_type === "product" ? (
                             <>
                               <button className="table-action" onClick={() => addStock.mutate({ id: it.id, quantity: "1", memo: "Manual stock increment" })}>+1 Stock</button>
-                              <input
-                                className="catalog-page__reason-input"
-                                placeholder={language === "ar" ? "سبب التنقيص" : "Decrease reason"}
-                                value={stockReason[it.id] ?? ""}
-                                onChange={(e) => setStockReason((prev) => ({ ...prev, [it.id]: e.target.value }))}
-                              />
+                              <label className="catalog-page__reason-field">
+                                <span>{language === "ar" ? "سبب التنقيص" : "Decrease reason"}</span>
+                                <input
+                                  className="catalog-page__reason-input"
+                                  placeholder={language === "ar" ? "اكتب السبب" : "Write reason"}
+                                  value={stockReason[it.id] ?? ""}
+                                  onChange={(e) => setStockReason((prev) => ({ ...prev, [it.id]: e.target.value }))}
+                                />
+                              </label>
                               <button className="table-action" onClick={() => removeStock.mutate({ id: it.id, quantity: "1", reason: stockReason[it.id], memo: stockReason[it.id] })}>-1 Stock</button>
                             </>
-                          ) : null}
+                          ) : null}                          
                         </td>
                       </tr>
                     );
@@ -123,9 +159,32 @@ export function CatalogPage() {
           </section>
 
           <section className="panel">
-            <div className="panel__header"><h2>{language === "ar" ? "حركات المخزون" : "Inventory transactions"}</h2></div>
-            <div className="table-wrapper"><table className="data-table"><thead><tr><th>Item</th><th>Type</th><th>Qty Δ</th><th>Memo</th><th>Date</th></tr></thead><tbody>{(tx.data ?? []).map((row) => <tr key={row.id}><td>{row.item_name}</td><td>{row.transaction_type}</td><td>{row.quantity_delta}</td><td>{row.memo}</td><td>{new Date(row.created_at).toLocaleString()}</td></tr>)}</tbody></table></div>
-          </section>
+            <div className="panel__header">
+              <h2>{language === "ar" ? "حركات المخزون" : "Inventory transactions"}</h2>
+              <div className="catalog-page__tx-filters">
+                <label className="catalog-page__input-group catalog-page__input-group--compact">
+                  <span>{language === "ar" ? "فلتر التاريخ" : "Date filter"}</span>
+                  <input
+                    type="date"
+                    value={txDateFilter}
+                    onChange={(e) => {
+                      setTxDateFilter(e.target.value);
+                      setShowAllTx(false);
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="table-wrapper"><table className="data-table"><thead><tr><th>Item</th><th>Type</th><th>Qty Δ</th><th>Memo</th><th>Date</th></tr></thead><tbody>{visibleTransactions.map((row) => <tr key={row.id}><td>{row.item_name}</td><td>{row.transaction_type}</td><td>{row.quantity_delta}</td><td>{row.memo}</td><td>{new Date(row.created_at).toLocaleString()}</td></tr>)}</tbody></table></div>
+            <div className="catalog-page__tx-footer">
+              <span className="helper-text">{language === "ar" ? `إجمالي الحركات: ${filteredTransactions.length}` : `Total transactions: ${filteredTransactions.length}`}</span>
+              {hasMoreTransactions ? (
+                <button className="table-action" onClick={() => setShowAllTx((prev) => !prev)}>
+                  {showAllTx ? (language === "ar" ? "عرض أقل" : "Show less") : (language === "ar" ? "قراءة المزيد" : "Read more")}
+                </button>
+              ) : null}
+            </div>
+          </section>          
         </>
       )}
     </DashboardShell>
