@@ -6,7 +6,7 @@ import { hasPermission } from "../shared/auth/useCan";
 import { useAlerts } from "../shared/analytics/hooks";
 import { useAnalyticsSummary, useAnalyticsKpis } from "../shared/analytics/insights.ts";
 import { useCashForecast } from "../shared/analytics/forecast";
-import { formatCurrency } from "../shared/analytics/format.ts";
+import { formatCurrency, formatNumber, formatPercent } from "../shared/analytics/format.ts";
 import "./DashboardPage.css";
 
 type Language = "en" | "ar";
@@ -34,6 +34,27 @@ type Content = {
   insightsSubtitle: string;
   forecastTitle: string;
   forecastSubtitle: string;
+  commandCenterTitle: string;
+  commandCenterSubtitle: string;
+  financeMixTitle: string;
+  financeMixSubtitle: string;
+  hrHealthTitle: string;
+  hrHealthSubtitle: string;
+  signalsTitle: string;
+  signalsSubtitle: string;
+  runwayLabel: string;
+  inflowLabel: string;
+  outflowLabel: string;
+  netExpectedLabel: string;
+  overtimeLabel: string;
+  absenceLabel: string;
+  latenessLabel: string;
+  openAlertsLabel: string;
+  severityHigh: string;
+  severityMedium: string;
+  severityLow: string;
+  noDataLabel: string;
+  generatedLabel: string;
   forecastLabels: {
     invoicesDue: string;
     expectedCollected: string;
@@ -113,6 +134,27 @@ const contentMap: Record<Language, Content> = {
     insightsSubtitle: "Actual daily movement over the last week",
     forecastTitle: "Cashflow Snapshot",
     forecastSubtitle: "Forecasted inflows and outflows",
+    commandCenterTitle: "Executive Command Center",
+    commandCenterSubtitle: "Cross-functional KPIs generated from live finance, cash, HR, and risk engines",
+    financeMixTitle: "Finance Mix",
+    financeMixSubtitle: "Revenue vs expense vs net margin over the latest days",
+    hrHealthTitle: "Workforce Health",
+    hrHealthSubtitle: "Attendance quality and capacity pressure from HR signals",
+    signalsTitle: "Risk Signals",
+    signalsSubtitle: "Alert distribution by severity from the live alerts center",
+    runwayLabel: "Cash runway",
+    inflowLabel: "Inflow",
+    outflowLabel: "Outflow",
+    netExpectedLabel: "Net expected",
+    overtimeLabel: "Overtime hours",
+    absenceLabel: "Absence rate",
+    latenessLabel: "Lateness rate",
+    openAlertsLabel: "Open alerts",
+    severityHigh: "High",
+    severityMedium: "Medium",
+    severityLow: "Low",
+    noDataLabel: "No analytics data yet",
+    generatedLabel: "Generated from system data",
     forecastLabels: {
       invoicesDue: "Invoices due",
       expectedCollected: "Expected collected",
@@ -190,6 +232,27 @@ const contentMap: Record<Language, Content> = {
     insightsSubtitle: "الحركة الفعلية لآخر أسبوع",
     forecastTitle: "ملخص التدفق النقدي",
     forecastSubtitle: "توقعات الدخول والخروج",
+    commandCenterTitle: "مركز القيادة التنفيذي",
+    commandCenterSubtitle: "مؤشرات مشتركة بين المالية والنقدية والموارد البشرية والمخاطر من بيانات النظام",
+    financeMixTitle: "مزيج المالية",
+    financeMixSubtitle: "الإيراد مقابل المصروف مقابل هامش الربح خلال آخر الأيام",
+    hrHealthTitle: "صحة القوى العاملة",
+    hrHealthSubtitle: "جودة الحضور وضغط الطاقة التشغيلية من إشارات الموارد البشرية",
+    signalsTitle: "إشارات المخاطر",
+    signalsSubtitle: "توزيع التنبيهات حسب الشدة من مركز التنبيهات المباشر",
+    runwayLabel: "مدى السيولة",
+    inflowLabel: "التدفقات الداخلة",
+    outflowLabel: "التدفقات الخارجة",
+    netExpectedLabel: "الصافي المتوقع",
+    overtimeLabel: "ساعات إضافية",
+    absenceLabel: "معدل الغياب",
+    latenessLabel: "معدل التأخير",
+    openAlertsLabel: "تنبيهات مفتوحة",
+    severityHigh: "عالي",
+    severityMedium: "متوسط",
+    severityLow: "منخفض",
+    noDataLabel: "لا توجد بيانات تحليلية بعد",
+    generatedLabel: "مُولّد من بيانات النظام",
     forecastLabels: {
       invoicesDue: "فواتير مستحقة",
       expectedCollected: "تحصيل متوقع",
@@ -302,6 +365,20 @@ export function DashboardPage() {
     range.start,
     range.end
   );
+  const performanceKpisQuery = useAnalyticsKpis(
+    [
+      "revenue_daily",
+      "expenses_daily",
+      "cash_balance_daily",
+      "cash_inflow_daily",
+      "cash_outflow_daily",
+      "absence_rate_daily",
+      "lateness_rate_daily",
+      "overtime_hours_daily",
+    ],
+    range.start,
+    range.end
+  );
   const alertsQuery = useAlerts({ status: "open", range: "30d" });
   const forecastQuery = useCashForecast();
 
@@ -382,6 +459,175 @@ export function DashboardPage() {
     return (alertsQuery.data ?? []).slice(0, 4);
   }, [alertsQuery.data]);
 
+  const performanceSeries = useMemo(() => {
+    const byKey = new Map<string, Array<{ date: string; value: number }>>();
+    (performanceKpisQuery.data ?? []).forEach((series) => {
+      const points = series.points
+        .filter((point) => point.value !== null)
+        .map((point) => ({
+          date: point.date,
+          value: Number(point.value),
+        }))
+        .filter((point) => !Number.isNaN(point.value))
+        .sort((a, b) => a.date.localeCompare(b.date));
+      byKey.set(series.key, points);
+    });
+    return byKey;
+  }, [performanceKpisQuery.data]);
+
+  const financeMixRows = useMemo(() => {
+    const revenue = performanceSeries.get("revenue_daily") ?? [];
+    const expenses = performanceSeries.get("expenses_daily") ?? [];
+    const expenseByDate = new Map(expenses.map((item) => [item.date, item.value]));
+
+    return revenue.slice(-6).map((item) => {
+      const expense = expenseByDate.get(item.date) ?? 0;
+      const net = item.value - expense;
+      const margin = item.value > 0 ? (net / item.value) * 100 : 0;
+      return {
+        date: item.date,
+        revenue: item.value,
+        expenses: expense,
+        net,
+        margin,
+      };
+    });
+  }, [performanceSeries]);
+
+  const totalRevenue = useMemo(
+    () => financeMixRows.reduce((sum, row) => sum + row.revenue, 0),
+    [financeMixRows]
+  );
+  const totalExpenses = useMemo(
+    () => financeMixRows.reduce((sum, row) => sum + row.expenses, 0),
+    [financeMixRows]
+  );
+  const totalNet = totalRevenue - totalExpenses;
+
+  const financeMixBars = useMemo(() => {
+    const maxValue = Math.max(
+      ...financeMixRows.flatMap((row) => [row.revenue, row.expenses]),
+      1
+    );
+    return financeMixRows.map((row) => ({
+      ...row,
+      revenueHeight: Math.max(8, Math.round((row.revenue / maxValue) * 100)),
+      expenseHeight: Math.max(8, Math.round((row.expenses / maxValue) * 100)),
+    }));
+  }, [financeMixRows]);
+
+  const hrMetrics = useMemo(() => {
+    const absenceSeries = performanceSeries.get("absence_rate_daily") ?? [];
+    const latenessSeries = performanceSeries.get("lateness_rate_daily") ?? [];
+    const overtimeSeries = performanceSeries.get("overtime_hours_daily") ?? [];
+
+    const avg = (values: number[]) =>
+      values.length
+        ? values.reduce((sum, value) => sum + value, 0) / values.length
+        : null;
+
+    const absenceAvg = avg(absenceSeries.map((item) => item.value));
+    const latenessAvg = avg(latenessSeries.map((item) => item.value));
+    const overtimeTotal = overtimeSeries.reduce((sum, item) => sum + item.value, 0);
+
+    const availabilityScore = Math.max(
+      0,
+      Math.min(
+        100,
+        100 - (absenceAvg ?? 0) * 100 - (latenessAvg ?? 0) * 100 * 0.5
+      )
+    );
+
+    return {
+      absenceAvg,
+      latenessAvg,
+      overtimeTotal,
+      availabilityScore,
+    };
+  }, [performanceSeries]);
+
+  const gaugeStyle = useMemo(() => {
+    const angle = Math.round((hrMetrics.availabilityScore / 100) * 180);
+    return {
+      background: `conic-gradient(from 270deg, var(--accent) 0deg, var(--secondary) ${angle}deg, rgba(127, 136, 170, 0.2) ${angle}deg 180deg)`,
+    };
+  }, [hrMetrics.availabilityScore]);
+
+  const riskDistribution = useMemo(() => {
+    const source = alertsQuery.data ?? [];
+    const high = source.filter((item) => item.severity === "high").length;
+    const medium = source.filter((item) => item.severity === "medium").length;
+    const low = source.filter((item) => item.severity === "low").length;
+    const total = high + medium + low;
+    return [
+      {
+        label: content.severityHigh,
+        value: high,
+        ratio: total ? (high / total) * 100 : 0,
+      },
+      {
+        label: content.severityMedium,
+        value: medium,
+        ratio: total ? (medium / total) * 100 : 0,
+      },
+      {
+        label: content.severityLow,
+        value: low,
+        ratio: total ? (low / total) * 100 : 0,
+      },
+    ];
+  }, [alertsQuery.data, content.severityHigh, content.severityLow, content.severityMedium]);
+
+  const commandCards = useMemo(() => {
+    const expectedOutflows = Number(forecastSnapshot?.expected_outflows ?? 0);
+    const netExpected = Number(forecastSnapshot?.net_expected ?? 0);
+    const currentCash = Number(summaryQuery.data?.cash_balance_latest ?? 0);
+    const runwayMonths = expectedOutflows > 0
+      ? (currentCash + Math.max(netExpected, 0)) / expectedOutflows
+      : null;
+
+    return [
+      {
+        label: content.inflowLabel,
+        value: formatCurrency(forecastSnapshot?.expected_inflows ?? null),
+      },
+      {
+        label: content.outflowLabel,
+        value: formatCurrency(forecastSnapshot?.expected_outflows ?? null),
+      },
+      {
+        label: content.netExpectedLabel,
+        value: formatCurrency(forecastSnapshot?.net_expected ?? null),
+      },
+      {
+        label: content.runwayLabel,
+        value: runwayMonths === null ? "-" : `${formatNumber(runwayMonths.toString())} ${isArabic ? "شهر" : "months"}`,
+      },
+      {
+        label: content.absenceLabel,
+        value: formatPercent(hrMetrics.absenceAvg?.toString() ?? null),
+      },
+      {
+        label: content.openAlertsLabel,
+        value: formatNumber(String(alertsQuery.data?.length ?? 0)),
+      },
+    ];
+  }, [
+    alertsQuery.data?.length,
+    content.absenceLabel,
+    content.inflowLabel,
+    content.netExpectedLabel,
+    content.openAlertsLabel,
+    content.outflowLabel,
+    content.runwayLabel,
+    forecastSnapshot?.expected_inflows,
+    forecastSnapshot?.expected_outflows,
+    forecastSnapshot?.net_expected,
+    hrMetrics.absenceAvg,
+    isArabic,
+    summaryQuery.data?.cash_balance_latest,
+  ]);
+
   const searchResults = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) {
@@ -418,6 +664,13 @@ export function DashboardPage() {
       });
     });
 
+    commandCards.forEach((card) => {
+      results.push({
+        label: card.label,
+        description: card.value,
+      });
+    });
+
     activityItems.forEach((alert) => {
       results.push({
         label: alert.title,
@@ -435,6 +688,7 @@ export function DashboardPage() {
     });
   }, [
     activityItems,
+    commandCards,
     content.stats,
     forecastCards,
     isArabic,
@@ -809,6 +1063,24 @@ export function DashboardPage() {
             </div>
           </section>
 
+          <section className="panel panel--command-center">
+            <div className="panel__header">
+              <div>
+                <h2>{content.commandCenterTitle}</h2>
+                <p>{content.commandCenterSubtitle}</p>
+              </div>
+              <span className="pill pill--accent">{content.generatedLabel}</span>
+            </div>
+            <div className="command-center-grid">
+              {commandCards.map((card) => (
+                <div key={card.label} className="command-center-card">
+                  <span>{card.label}</span>
+                  <strong>{card.value}</strong>
+                </div>
+              ))}
+            </div>
+          </section>
+
           {searchTerm.trim().length > 0 && (
             <section className="search-results" aria-live="polite">
               <div className="search-results__header">
@@ -890,6 +1162,96 @@ export function DashboardPage() {
                     <strong>-</strong>
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className="panel panel--finance-mix">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.financeMixTitle}</h2>
+                  <p>{content.financeMixSubtitle}</p>
+                </div>
+                <span className="pill">{financeMixRows.length || 0}</span>
+              </div>
+              <div className="finance-mix-chart">
+                {financeMixBars.length ? (
+                  financeMixBars.map((row) => (
+                    <div key={row.date} className="finance-mix-chart__row" title={`${row.date} • ${content.stats.revenue}: ${formatCurrency(row.revenue.toString())} • ${content.stats.expenses}: ${formatCurrency(row.expenses.toString())}`}>
+                      <div className="finance-mix-chart__bars">
+                        <span style={{ height: `${row.revenueHeight}%` }} className="finance-mix-chart__bar finance-mix-chart__bar--revenue" />
+                        <span style={{ height: `${row.expenseHeight}%` }} className="finance-mix-chart__bar finance-mix-chart__bar--expense" />
+                      </div>
+                      <small>{new Date(row.date).toLocaleDateString(isArabic ? "ar" : "en", { month: "short", day: "numeric" })}</small>
+                    </div>
+                  ))
+                ) : (
+                  <div className="search-results__empty">
+                    <strong>{content.noDataLabel}</strong>
+                    <span>{content.financeMixSubtitle}</span>
+                  </div>
+                )}
+              </div>
+              <div className="finance-mix-totals">
+                <span>{content.stats.revenue}: <strong>{formatCurrency(totalRevenue.toString())}</strong></span>
+                <span>{content.stats.expenses}: <strong>{formatCurrency(totalExpenses.toString())}</strong></span>
+                <span>{content.stats.netProfit}: <strong>{formatCurrency(totalNet.toString())}</strong></span>
+              </div>
+            </div>
+
+            <div className="panel panel--hr-health">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.hrHealthTitle}</h2>
+                  <p>{content.hrHealthSubtitle}</p>
+                </div>
+                <span className="pill pill--accent">{formatNumber(hrMetrics.availabilityScore.toString())}%</span>
+              </div>
+              <div className="hr-health-layout">
+                <div className="gauge-wrap">
+                  <div className="gauge" style={gaugeStyle}>
+                    <div className="gauge__center">
+                      <strong>{formatNumber(hrMetrics.availabilityScore.toString())}%</strong>
+                      <span>{isArabic ? "جاهزية الفريق" : "Team readiness"}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="hr-health-metrics">
+                  <div>
+                    <span>{content.absenceLabel}</span>
+                    <strong>{formatPercent(hrMetrics.absenceAvg?.toString() ?? null)}</strong>
+                  </div>
+                  <div>
+                    <span>{content.latenessLabel}</span>
+                    <strong>{formatPercent(hrMetrics.latenessAvg?.toString() ?? null)}</strong>
+                  </div>
+                  <div>
+                    <span>{content.overtimeLabel}</span>
+                    <strong>{formatNumber(hrMetrics.overtimeTotal.toString())}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="panel panel--signals">
+              <div className="panel__header">
+                <div>
+                  <h2>{content.signalsTitle}</h2>
+                  <p>{content.signalsSubtitle}</p>
+                </div>
+                <span className="pill">{alertsQuery.data?.length ?? 0}</span>
+              </div>
+              <div className="signal-bars">
+                {riskDistribution.map((item) => (
+                  <div key={item.label} className="signal-bar-item">
+                    <div className="signal-bar-item__meta">
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </div>
+                    <div className="signal-bar-track">
+                      <span style={{ width: `${Math.max(item.ratio, item.value ? 8 : 0)}%` }} />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
