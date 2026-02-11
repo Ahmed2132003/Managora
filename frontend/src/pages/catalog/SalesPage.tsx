@@ -36,6 +36,8 @@ export function SalesPage() {
   const [costCenter, setCostCenter] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("auto");
   const [expenseVendorName, setExpenseVendorName] = useState("");
+  const [savedInvoiceDateFilter, setSavedInvoiceDateFilter] = useState("");
+  const [showAllSavedInvoices, setShowAllSavedInvoices] = useState(false);
 
   const [lines, setLines] = useState<SaleLine[]>([{ item: 0, quantity: "1", unit_price: "0" }]);
 
@@ -51,6 +53,13 @@ export function SalesPage() {
     [lines]
   );
   const total = subtotal + Number(taxAmount || 0);
+  const filteredSavedInvoices = useMemo(() => {
+    const allInvoices = invoices.data ?? [];
+    if (!savedInvoiceDateFilter) return allInvoices;
+    return allInvoices.filter((inv) => inv.issue_date === savedInvoiceDateFilter);
+  }, [invoices.data, savedInvoiceDateFilter]);
+  const visibleSavedInvoices = showAllSavedInvoices ? filteredSavedInvoices : filteredSavedInvoices.slice(0, 10);
+  const hasMoreSavedInvoices = filteredSavedInvoices.length > 10;
 
   async function submitSale() {
     let selectedCustomer = customerId ? Number(customerId) : undefined;
@@ -99,41 +108,51 @@ export function SalesPage() {
           <section className="panel">
             <div className="panel__header"><h2>{language === "ar" ? "العميل" : "Customer"}</h2></div>
             <div className="filters-grid">
-              <select value={mode} onChange={(e) => setMode(e.target.value as "existing" | "new" | "by_name") }>
-                <option value="existing">{language === "ar" ? "اختيار عميل موجود" : "Select existing customer"}</option>
-                <option value="new">{language === "ar" ? "إضافة عميل جديد" : "Add new customer"}</option>
-                <option value="by_name">{language === "ar" ? "اختيار/بحث بالاسم" : "Search by name"}</option>
-              </select>
-              {mode === "existing" ? (
-                <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-                  <option value="">{language === "ar" ? "اختر عميل" : "Select customer"}</option>
-                  {(customers.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
+              <label className="sales-page__input-group">
+                <span>{language === "ar" ? "نوع اختيار العميل" : "Customer selection mode"}</span>
+                <select value={mode} onChange={(e) => setMode(e.target.value as "existing" | "new" | "by_name") }>
+                  <option value="existing">{language === "ar" ? "اختيار عميل موجود" : "Select existing customer"}</option>
+                  <option value="new">{language === "ar" ? "إضافة عميل جديد" : "Add new customer"}</option>
+                  <option value="by_name">{language === "ar" ? "اختيار/بحث بالاسم" : "Search by name"}</option>
                 </select>
+              </label>
+              {mode === "existing" ? (
+                <label className="sales-page__input-group">
+                  <span>{language === "ar" ? "العميل" : "Customer"}</span>
+                  <select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+                    <option value="">{language === "ar" ? "اختر عميل" : "Select customer"}</option>
+                    {(customers.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
+                  </select>
+                </label>
               ) : null}
-              {mode === "by_name" ? <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder={language === "ar" ? "اسم العميل" : "Customer name"} /> : null}
+              {mode === "by_name" ? (
+                <label className="sales-page__input-group">
+                  <span>{language === "ar" ? "اسم العميل" : "Customer name"}</span>
+                  <input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder={language === "ar" ? "اسم العميل" : "Customer name"} />
+                </label>
+              ) : null}
               {mode === "new" ? (
                 <>
-                  <input placeholder={language === "ar" ? "كود العميل" : "Customer code"} value={newCustomer.code} onChange={(e) => setNewCustomer((s) => ({ ...s, code: e.target.value }))} />
-                  <input placeholder={language === "ar" ? "اسم العميل" : "Customer name"} value={newCustomer.name} onChange={(e) => setNewCustomer((s) => ({ ...s, name: e.target.value }))} />
-                  <input placeholder={language === "ar" ? "البريد الإلكتروني" : "Email"} value={newCustomer.email} onChange={(e) => setNewCustomer((s) => ({ ...s, email: e.target.value }))} />
-                  <input placeholder={language === "ar" ? "الهاتف" : "Phone"} value={newCustomer.phone} onChange={(e) => setNewCustomer((s) => ({ ...s, phone: e.target.value }))} />
-                  <input placeholder={language === "ar" ? "العنوان" : "Address"} value={newCustomer.address} onChange={(e) => setNewCustomer((s) => ({ ...s, address: e.target.value }))} />
-                  <input placeholder={language === "ar" ? "الحد الائتماني" : "Credit limit"} value={newCustomer.credit_limit} onChange={(e) => setNewCustomer((s) => ({ ...s, credit_limit: e.target.value }))} />
-                  <input placeholder={language === "ar" ? "مدة السداد بالأيام" : "Payment terms days"} type="number" value={newCustomer.payment_terms_days} onChange={(e) => setNewCustomer((s) => ({ ...s, payment_terms_days: Number(e.target.value) }))} />
+                  <label className="sales-page__input-group"><span>{language === "ar" ? "كود العميل" : "Customer code"}</span><input placeholder={language === "ar" ? "كود العميل" : "Customer code"} value={newCustomer.code} onChange={(e) => setNewCustomer((s) => ({ ...s, code: e.target.value }))} /></label>
+                  <label className="sales-page__input-group"><span>{language === "ar" ? "اسم العميل" : "Customer name"}</span><input placeholder={language === "ar" ? "اسم العميل" : "Customer name"} value={newCustomer.name} onChange={(e) => setNewCustomer((s) => ({ ...s, name: e.target.value }))} /></label>
+                  <label className="sales-page__input-group"><span>{language === "ar" ? "البريد الإلكتروني" : "Email"}</span><input placeholder={language === "ar" ? "البريد الإلكتروني" : "Email"} value={newCustomer.email} onChange={(e) => setNewCustomer((s) => ({ ...s, email: e.target.value }))} /></label>
+                  <label className="sales-page__input-group"><span>{language === "ar" ? "الهاتف" : "Phone"}</span><input placeholder={language === "ar" ? "الهاتف" : "Phone"} value={newCustomer.phone} onChange={(e) => setNewCustomer((s) => ({ ...s, phone: e.target.value }))} /></label>
+                  <label className="sales-page__input-group"><span>{language === "ar" ? "العنوان" : "Address"}</span><input placeholder={language === "ar" ? "العنوان" : "Address"} value={newCustomer.address} onChange={(e) => setNewCustomer((s) => ({ ...s, address: e.target.value }))} /></label>
+                  <label className="sales-page__input-group"><span>{language === "ar" ? "الحد الائتماني" : "Credit limit"}</span><input placeholder={language === "ar" ? "الحد الائتماني" : "Credit limit"} value={newCustomer.credit_limit} onChange={(e) => setNewCustomer((s) => ({ ...s, credit_limit: e.target.value }))} /></label>
+                  <label className="sales-page__input-group"><span>{language === "ar" ? "مدة السداد بالأيام" : "Payment terms days"}</span><input placeholder={language === "ar" ? "مدة السداد بالأيام" : "Payment terms days"} type="number" value={newCustomer.payment_terms_days} onChange={(e) => setNewCustomer((s) => ({ ...s, payment_terms_days: Number(e.target.value) }))} /></label>
                 </>
               ) : null}
-            </div>
+            </div>            
           </section>
 
           <section className="panel">
             <div className="panel__header"><h2>{language === "ar" ? "بيانات الفاتورة" : "Invoice details"}</h2></div>
             <div className="filters-grid">
-              <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder={language === "ar" ? "رقم الفاتورة" : "Invoice number"} />
-              <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-              <input value={taxAmount} onChange={(e) => setTaxAmount(e.target.value)} placeholder={language === "ar" ? "الضريبة" : "Tax"} />
-              <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={language === "ar" ? "ملاحظات" : "Notes"} />
-            </div>
+              <label className="sales-page__input-group"><span>{language === "ar" ? "رقم الفاتورة" : "Invoice number"}</span><input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder={language === "ar" ? "رقم الفاتورة" : "Invoice number"} /></label>
+              <label className="sales-page__input-group"><span>{language === "ar" ? "تاريخ الإصدار" : "Issue date"}</span><input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} /></label>
+              <label className="sales-page__input-group"><span>{language === "ar" ? "تاريخ الاستحقاق" : "Due date"}</span><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
+              <label className="sales-page__input-group"><span>{language === "ar" ? "الضريبة" : "Tax"}</span><input value={taxAmount} onChange={(e) => setTaxAmount(e.target.value)} placeholder={language === "ar" ? "الضريبة" : "Tax"} /></label>
+              <label className="sales-page__input-group"><span>{language === "ar" ? "ملاحظات" : "Notes"}</span><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={language === "ar" ? "ملاحظات" : "Notes"} /></label>            </div>
 
             <h3>{language === "ar" ? "بنود الفاتورة" : "Invoice items"}</h3>
             <div className="table-wrapper">
@@ -144,7 +163,8 @@ export function SalesPage() {
                     <tr key={idx}>
                       <td>
                         <select
-                          value={line.item || ""}
+                          className="sales-page__table-field"
+                          value={line.item || ""}                          
                           onChange={(e) => {
                             const id = Number(e.target.value);
                             setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, item: id, unit_price: itemMap.get(id)?.sale ?? "0" } : l)));
@@ -154,8 +174,8 @@ export function SalesPage() {
                           {(catalog.data ?? []).map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
                         </select>
                       </td>
-                      <td><input value={line.quantity} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, quantity: e.target.value } : l)))} /></td>
-                      <td><input value={line.unit_price} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, unit_price: e.target.value } : l)))} /></td>
+                      <td><input className="sales-page__table-field" value={line.quantity} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, quantity: e.target.value } : l)))} /></td>
+                      <td><input className="sales-page__table-field" value={line.unit_price} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, unit_price: e.target.value } : l)))} /></td>                      
                       <td>{(Number(line.quantity || 0) * Number(line.unit_price || 0)).toFixed(2)}</td>
                     </tr>
                   ))}
@@ -172,28 +192,51 @@ export function SalesPage() {
           <section className="panel">
             <div className="panel__header"><h2>{language === "ar" ? "تكامل المصروف" : "Expense integration"}</h2></div>
             <div className="filters-grid">
-              <select value={expenseAccount} onChange={(e) => setExpenseAccount(e.target.value)}>
+              <label className="sales-page__input-group"><span>{language === "ar" ? "حساب المصروف" : "Expense account"}</span><select value={expenseAccount} onChange={(e) => setExpenseAccount(e.target.value)}>
                 <option value="">{language === "ar" ? "حساب المصروف" : "Expense account"}</option>
                 {(accounts.data ?? []).map((a) => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
-              </select>
-              <select value={paidFromAccount} onChange={(e) => setPaidFromAccount(e.target.value)}>
+              </select></label>
+              <label className="sales-page__input-group"><span>{language === "ar" ? "حساب السداد" : "Paid from account"}</span><select value={paidFromAccount} onChange={(e) => setPaidFromAccount(e.target.value)}>
                 <option value="">{language === "ar" ? "حساب السداد" : "Paid from account"}</option>
                 {(accounts.data ?? []).map((a) => <option key={a.id} value={a.id}>{a.code} - {a.name}</option>)}
-              </select>
-              <select value={costCenter} onChange={(e) => setCostCenter(e.target.value)}>
+              </select></label>
+              <label className="sales-page__input-group"><span>{language === "ar" ? "مركز التكلفة" : "Cost center"}</span><select value={costCenter} onChange={(e) => setCostCenter(e.target.value)}>
                 <option value="">{language === "ar" ? "مركز التكلفة" : "Cost center"}</option>
                 {(costCenters.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
-              </select>
-              <input value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} placeholder={language === "ar" ? "طريقة السداد" : "Payment method"} />
-              <input value={expenseVendorName} onChange={(e) => setExpenseVendorName(e.target.value)} placeholder={language === "ar" ? "المورد/الجهة" : "Vendor / provider"} />
+              </select></label>
+              <label className="sales-page__input-group"><span>{language === "ar" ? "طريقة السداد" : "Payment method"}</span><input value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} placeholder={language === "ar" ? "طريقة السداد" : "Payment method"} /></label>
+              <label className="sales-page__input-group"><span>{language === "ar" ? "المورد/الجهة" : "Vendor / provider"}</span><input value={expenseVendorName} onChange={(e) => setExpenseVendorName(e.target.value)} placeholder={language === "ar" ? "المورد/الجهة" : "Vendor / provider"} /></label>
             </div>
             <button className="action-button" onClick={submitSale}>{recordSale.isPending ? (language === "ar" ? "جارٍ الحفظ..." : "Saving...") : (language === "ar" ? "تنفيذ البيع" : "Record sale")}</button>
           </section>
 
           <section className="panel">
-            <div className="panel__header"><h2>{language === "ar" ? "الفواتير المحفوظة" : "Saved invoices"}</h2></div>
-            <div className="table-wrapper"><table className="data-table"><thead><tr><th>#</th><th>{language === "ar" ? "العميل" : "Customer"}</th><th>{language === "ar" ? "التاريخ" : "Issue date"}</th><th>{language === "ar" ? "الإجمالي" : "Total"}</th></tr></thead><tbody>{(invoices.data ?? []).map((inv) => <tr key={inv.id}><td>{inv.invoice_number}</td><td>{inv.customer}</td><td>{inv.issue_date}</td><td>{inv.total_amount}</td></tr>)}</tbody></table></div>
-          </section>
+            <div className="panel__header">
+              <h2>{language === "ar" ? "الفواتير المحفوظة" : "Saved invoices"}</h2>
+              <div className="sales-page__saved-filters">
+                <label className="sales-page__input-group sales-page__input-group--compact">
+                  <span>{language === "ar" ? "فلتر التاريخ" : "Date filter"}</span>
+                  <input
+                    type="date"
+                    value={savedInvoiceDateFilter}
+                    onChange={(e) => {
+                      setSavedInvoiceDateFilter(e.target.value);
+                      setShowAllSavedInvoices(false);
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="table-wrapper"><table className="data-table"><thead><tr><th>#</th><th>{language === "ar" ? "العميل" : "Customer"}</th><th>{language === "ar" ? "التاريخ" : "Issue date"}</th><th>{language === "ar" ? "الإجمالي" : "Total"}</th></tr></thead><tbody>{visibleSavedInvoices.map((inv) => <tr key={inv.id}><td>{inv.invoice_number}</td><td>{inv.customer}</td><td>{inv.issue_date}</td><td>{inv.total_amount}</td></tr>)}</tbody></table></div>
+            <div className="sales-page__saved-footer">
+              <span className="helper-text">{language === "ar" ? `إجمالي الفواتير: ${filteredSavedInvoices.length}` : `Total invoices: ${filteredSavedInvoices.length}`}</span>
+              {hasMoreSavedInvoices ? (
+                <button className="table-action" onClick={() => setShowAllSavedInvoices((prev) => !prev)}>
+                  {showAllSavedInvoices ? (language === "ar" ? "عرض أقل" : "Show less") : (language === "ar" ? "قراءة المزيد" : "Read more")}
+                </button>
+              ) : null}
+            </div>
+          </section>          
         </>
       )}
     </DashboardShell>
