@@ -50,6 +50,7 @@ type Content = {
   filters: {
     dateFrom: string;
     dateTo: string;
+    dateExact: string;
     referenceType: string;
     referenceAll: string;
   };
@@ -62,6 +63,7 @@ type Content = {
     view: string;
     edit: string;
     remove: string;
+    readMore: string;
     empty: string;
     loading: string;
   };
@@ -163,6 +165,7 @@ const contentMap: Record<Language, Content> = {
     filters: {
       dateFrom: "Date from",
       dateTo: "Date to",
+      dateExact: "Entry date",
       referenceType: "Reference type",
       referenceAll: "All references",
     },
@@ -175,6 +178,7 @@ const contentMap: Record<Language, Content> = {
       view: "View",
       edit: "Edit",
       remove: "Delete",
+      readMore: "Read more",
       empty: "No journal entries yet.",
       loading: "Loading journal entries...",
     },
@@ -279,6 +283,7 @@ const contentMap: Record<Language, Content> = {
     filters: {
       dateFrom: "من تاريخ",
       dateTo: "إلى تاريخ",
+      dateExact: "تاريخ القيد",
       referenceType: "نوع المرجع",
       referenceAll: "كل المراجع",
     },
@@ -291,6 +296,7 @@ const contentMap: Record<Language, Content> = {
       view: "عرض",
       edit: "تعديل",
       remove: "حذف",
+      readMore: "عرض المزيد",
       empty: "لا توجد قيود بعد.",
       loading: "جاري تحميل القيود...",
     },
@@ -389,8 +395,10 @@ export function JournalEntriesPage() {
   });
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [entryDate, setEntryDate] = useState("");
   const [referenceType, setReferenceType] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [visibleEntriesCount, setVisibleEntriesCount] = useState(10);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -670,6 +678,49 @@ export function JournalEntriesPage() {
   const draftEntries =  
     entriesQuery.data?.filter((entry) => entry.status === "draft").length ?? 0;
 
+  const filteredEntries = useMemo(() => {
+    const entries = entriesQuery.data ?? [];
+    if (!entryDate) {
+      return entries;
+    }
+    return entries.filter((entry) => entry.date === entryDate);
+  }, [entriesQuery.data, entryDate]);
+
+  const visibleEntries = useMemo(
+    () => filteredEntries.slice(0, visibleEntriesCount),
+    [filteredEntries, visibleEntriesCount]
+  );
+
+  const resetVisibleEntries = () => {
+    setVisibleEntriesCount(10);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    resetVisibleEntries();
+  };
+
+  const handleDateFromChange = (value: string) => {
+    setDateFrom(value);
+    resetVisibleEntries();
+  };
+
+  const handleDateToChange = (value: string) => {
+    setDateTo(value);
+    resetVisibleEntries();
+  };
+
+  const handleEntryDateChange = (value: string) => {
+    setEntryDate(value);
+    resetVisibleEntries();
+  };
+
+  const handleReferenceTypeChange = (value: string) => {
+    setReferenceType(value || null);
+    resetVisibleEntries();
+  };
+
+
   const nextLineId = () => {
     lineIdRef.current += 1;
     return lineIdRef.current;
@@ -867,7 +918,7 @@ export function JournalEntriesPage() {
             placeholder={content.searchPlaceholder}
             aria-label={content.searchPlaceholder}
             value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
+            onChange={(event) => handleSearchChange(event.target.value)}
           />
         </div>
       </header>
@@ -988,7 +1039,7 @@ export function JournalEntriesPage() {
                 <input
                   type="date"
                   value={dateFrom}
-                  onChange={(event) => setDateFrom(event.target.value)}
+                  onChange={(event) => handleDateFromChange(event.target.value)}
                 />
               </label>
               <label className="field">
@@ -996,7 +1047,15 @@ export function JournalEntriesPage() {
                 <input
                   type="date"
                   value={dateTo}
-                  onChange={(event) => setDateTo(event.target.value)}
+                  onChange={(event) => handleDateToChange(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>{content.filters.dateExact}</span>
+                <input
+                  type="date"
+                  value={entryDate}
+                  onChange={(event) => handleEntryDateChange(event.target.value)}
                 />
               </label>
               <label className="field">
@@ -1004,7 +1063,7 @@ export function JournalEntriesPage() {
                 <select
                   value={referenceType ?? ""}
                   onChange={(event) =>
-                    setReferenceType(event.target.value || null)
+                    handleReferenceTypeChange(event.target.value)
                   }
                 >
                   <option value="">{content.filters.referenceAll}</option>
@@ -1037,7 +1096,7 @@ export function JournalEntriesPage() {
             <div className="table-wrapper">
               {entriesQuery.isLoading ? (
                 <p className="helper-text">{content.table.loading}</p>
-              ) : entriesQuery.data && entriesQuery.data.length > 0 ? (
+              ) : filteredEntries.length > 0 ? (
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -1049,7 +1108,7 @@ export function JournalEntriesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {entriesQuery.data.map((entry) => (
+                    {visibleEntries.map((entry) => (
                       <tr key={entry.id}>
                         <td>{entry.date}</td>
                         <td>{entry.reference_type}</td>
@@ -1087,6 +1146,20 @@ export function JournalEntriesPage() {
                 </table>
               ) : (
                 <p className="helper-text">{content.table.empty}</p>
+              )}
+
+              {visibleEntries.length < filteredEntries.length && (
+                <div className="panel-actions panel-actions--right">
+                  <button
+                    type="button"
+                    className="action-button action-button--ghost"
+                    onClick={() =>
+                      setVisibleEntriesCount((prev) => prev + 10)
+                    }
+                  >
+                    {content.table.readMore}
+                  </button>
+                </div>
               )}
             </div>
           </section>
