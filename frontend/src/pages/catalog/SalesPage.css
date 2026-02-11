@@ -1,0 +1,22 @@
+@import "../DashboardPage.css";
+
+.sales-page .hero-panel {
+  align-items: flex-start;
+}
+
+.sales-page .filters-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.sales-page__totals {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .sales-page .filters-grid {
+    grid-template-columns: 1fr;
+  }
+}

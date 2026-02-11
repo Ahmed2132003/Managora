@@ -159,6 +159,8 @@ export function InvoicesPage() {
   const pageContent = {
     en: {
       newInvoice: "New Invoice",
+      catalog: "Products & Services",
+      sales: "Sales",
       loading: "Loading invoices...",
       empty: "No invoices found.",
       stats: {
@@ -182,6 +184,8 @@ export function InvoicesPage() {
     },
     ar: {
       newInvoice: "فاتورة جديدة",
+      catalog: "الخدمات والمنتجات",
+      sales: "المبيعات",
       loading: "جاري تحميل الفواتير...",
       empty: "لا توجد فواتير.",
       stats: {

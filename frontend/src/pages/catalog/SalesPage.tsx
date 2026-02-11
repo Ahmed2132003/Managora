@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { DashboardShell } from "../DashboardShell";
+import "./SalesPage.css";
 import { useAccounts, useCostCenters } from "../../shared/accounting/hooks";
 import { useCatalogItems } from "../../shared/catalog/hooks";
 import { useCreateCustomer, useCustomers } from "../../shared/customers/hooks";
@@ -91,6 +92,7 @@ export function SalesPage() {
         en: { title: "Sales (Products & Services)", subtitle: "Create sale invoices integrated with customers/expenses/revenue", tags: ["Sales", "Invoices"] },
         ar: { title: "بيع الخدمات والمنتجات", subtitle: "إنشاء بيع متكامل مع العملاء والفواتير والمصروفات والإيرادات", tags: ["مبيعات", "فواتير"] },
       }}
+      className="sales-page"
     >
       {({ language }) => (
         <>
@@ -162,7 +164,7 @@ export function SalesPage() {
             </div>
             <button className="action-button" onClick={() => setLines((prev) => [...prev, { item: 0, quantity: "1", unit_price: "0" }])}>{language === "ar" ? "إضافة بند" : "Add line"}</button>
 
-            <div style={{ marginTop: 12 }}>
+            <div className="sales-page__totals">
               <strong>{language === "ar" ? "الإجمالي الفرعي" : "Subtotal"}</strong>: {subtotal.toFixed(2)} | <strong>{language === "ar" ? "الإجمالي" : "Total"}</strong>: {total.toFixed(2)}
             </div>
           </section>

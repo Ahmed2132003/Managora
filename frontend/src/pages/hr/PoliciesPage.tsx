@@ -111,12 +111,13 @@ type Content = {
     newCustomer: string;
     invoices: string;
     newInvoice: string;
+    catalog: string;
+    sales: string;
     alertsCenter: string;
     cashForecast: string;
     ceoDashboard: string;
     financeDashboard: string;
     hrDashboard: string;
-    copilot: string;
     auditLogs: string;
     setupTemplates: string;
     setupProgress: string;
@@ -210,12 +211,13 @@ const contentMap: Record<Language, Content> = {
       newCustomer: "New Customer",
       invoices: "Invoices",
       newInvoice: "New Invoice",
+      catalog: "Products & Services",
+      sales: "Sales",
       alertsCenter: "Alerts Center",
       cashForecast: "Cash Forecast",
       ceoDashboard: "CEO Dashboard",
       financeDashboard: "Finance Dashboard",
       hrDashboard: "HR Dashboard",
-      copilot: "Copilot",
       auditLogs: "Audit Logs",
       setupTemplates: "Setup Templates",
       setupProgress: "Setup Progress",
@@ -307,12 +309,13 @@ const contentMap: Record<Language, Content> = {
       newCustomer: "عميل جديد",
       invoices: "الفواتير",
       newInvoice: "فاتورة جديدة",
+      catalog: "الخدمات والمنتجات",
+      sales: "المبيعات",
       alertsCenter: "مركز التنبيهات",
       cashForecast: "توقعات النقد",
       ceoDashboard: "لوحة CEO",
       financeDashboard: "لوحة المالية",
       hrDashboard: "لوحة الموارد البشرية",
-      copilot: "المساعد",
       auditLogs: "سجل التدقيق",
       setupTemplates: "قوالب الإعداد",
       setupProgress: "تقدم الإعداد",
@@ -587,6 +590,18 @@ export function PoliciesPage() {
         permissions: ["invoices.*"],
       },
       {
+        path: "/catalog",
+        label: content.nav.catalog,
+        icon: "📦",
+        permissions: ["catalog.*", "invoices.*"],
+      },
+      {
+        path: "/sales",
+        label: content.nav.sales,
+        icon: "🛒",
+        permissions: ["invoices.*"],
+      },
+      {
         path: "/analytics/alerts",
         label: content.nav.alertsCenter,
         icon: "🚨",
@@ -600,7 +615,6 @@ export function PoliciesPage() {
         icon: "💹",
       },
       { path: "/analytics/hr", label: content.nav.hrDashboard, icon: "🧑‍💻" },
-      { path: "/copilot", label: content.nav.copilot, icon: "🤖" },
       {
         path: "/admin/audit-logs",
         label: content.nav.auditLogs,

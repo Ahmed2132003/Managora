@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { DashboardShell } from "../DashboardShell";
+import "./CatalogPage.css";
 import {
   useAddStock,
   useCatalogItems,
@@ -61,6 +62,7 @@ export function CatalogPage() {
         en: { title: "Products & Services", subtitle: "Manage catalog and inventory", helper: "Add products/services and control stock.", tags: ["Catalog", "Inventory"] },
         ar: { title: "الخدمات والمنتجات", subtitle: "إدارة الكتالوج والمخزون", helper: "إضافة المنتجات والخدمات ومتابعة المخزون.", tags: ["الكتالوج", "المخزون"] },
       }}
+      className="catalog-page"
     >
       {({ language }) => (
         <>
@@ -82,7 +84,7 @@ export function CatalogPage() {
 
           <section className="panel">
             <div className="panel__header"><h2>{language === "ar" ? "قائمة" : "Catalog list"}</h2></div>
-            <div style={{ marginBottom: 12 }}>
+            <div className="catalog-page__totals">
               <strong>{language === "ar" ? "إجمالي سعر التكلفة" : "Total cost value"}:</strong> {totals.cost.toFixed(2)} | <strong>{language === "ar" ? "إجمالي سعر البيع" : "Total sale value"}:</strong> {totals.sale.toFixed(2)}
             </div>
             <div className="table-wrapper">
@@ -103,7 +105,7 @@ export function CatalogPage() {
                             <>
                               <button className="table-action" onClick={() => addStock.mutate({ id: it.id, quantity: "1", memo: "Manual stock increment" })}>+1 Stock</button>
                               <input
-                                style={{ width: 140, marginInline: 4 }}
+                                className="catalog-page__reason-input"
                                 placeholder={language === "ar" ? "سبب التنقيص" : "Decrease reason"}
                                 value={stockReason[it.id] ?? ""}
                                 onChange={(e) => setStockReason((prev) => ({ ...prev, [it.id]: e.target.value }))}
