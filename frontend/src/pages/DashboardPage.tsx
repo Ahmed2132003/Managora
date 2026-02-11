@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { clearTokens } from "../shared/auth/tokens";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMe } from "../shared/auth/useMe.ts";
 import { hasPermission } from "../shared/auth/useCan";
 import { useAlerts } from "../shared/analytics/hooks";
-import { useAnalyticsSummary, useAnalyticsKpis } from "../shared/analytics/insights.ts";
+import { useAnalyticsKpis } from "../shared/analytics/insights.ts";
 import { useCashForecast } from "../shared/analytics/forecast";
+import { useAccountMappings, useGeneralLedger, useProfitLoss } from "../shared/accounting/hooks";
+import { endpoints } from "../shared/api/endpoints";
+import { http } from "../shared/api/http";
 import { formatCurrency, formatNumber, formatPercent } from "../shared/analytics/format.ts";
 import "./DashboardPage.css";
 
@@ -21,7 +25,9 @@ type Content = {
   themeLabel: string;
   navigationLabel: string;
   logoutLabel: string;
-  rangeLabel: string;  
+  rangeLabel: string;
+  dateFromLabel: string;
+  dateToLabel: string;  
   stats: {
     revenue: string;
     expenses: string;
@@ -121,7 +127,9 @@ const contentMap: Record<Language, Content> = {
     themeLabel: "Theme",
     navigationLabel: "Navigation",
     logoutLabel: "Logout",
-    rangeLabel: "Last 30 days",    
+    rangeLabel: "Last 30 days",
+    dateFromLabel: "From",
+    dateToLabel: "To",    
     stats: {
       revenue: "Total revenue",
       expenses: "Total expenses",
@@ -219,7 +227,9 @@ const contentMap: Record<Language, Content> = {
     themeLabel: "المظهر",
     navigationLabel: "التنقل",
     logoutLabel: "تسجيل الخروج",
-    rangeLabel: "آخر ٣٠ يوم",    
+    rangeLabel: "آخر ٣٠ يوم",
+    dateFromLabel: "من",
+    dateToLabel: "إلى",    
     stats: {
       revenue: "إجمالي الإيرادات",
       expenses: "إجمالي المصروفات",
@@ -349,7 +359,7 @@ export function DashboardPage() {
     }
     window.localStorage.setItem("managora-theme", theme);
   }, [theme]);  
-  const range = useMemo(() => {
+  const defaultRange = useMemo(() => {
     const end = new Date();
     const start = new Date();
     start.setDate(end.getDate() - 29);
@@ -358,12 +368,41 @@ export function DashboardPage() {
       end: end.toISOString().slice(0, 10),
     };
   }, []);
+  const [dateFrom, setDateFrom] = useState(defaultRange.start);
+  const [dateTo, setDateTo] = useState(defaultRange.end);
 
-  const summaryQuery = useAnalyticsSummary("30d");
+  const rangeDays = useMemo(() => {
+    const start = new Date(`${dateFrom}T00:00:00`);
+    const end = new Date(`${dateTo}T00:00:00`);
+    const diff = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    return Number.isNaN(diff) ? 30 : Math.max(diff + 1, 1);
+  }, [dateFrom, dateTo]);
+
+  const selectedRangeLabel = useMemo(() => {
+    if (dateFrom === defaultRange.start && dateTo === defaultRange.end) {
+      return content.rangeLabel;
+    }
+    return `${dateFrom} → ${dateTo}`;
+  }, [content.rangeLabel, dateFrom, dateTo, defaultRange.end, defaultRange.start]);
+
+  const profitLossQuery = useProfitLoss(dateFrom, dateTo);
+  const accountMappingsQuery = useAccountMappings();
+  const cashAccountId = useMemo(() => {
+    const cashMapping = (accountMappingsQuery.data ?? []).find((mapping) =>
+      ["payment_cash", "cash", "cash_on_hand"].includes(mapping.key)
+    );
+    return cashMapping?.account ?? undefined;
+  }, [accountMappingsQuery.data]);
+  const cashLedgerQuery = useGeneralLedger(cashAccountId, dateFrom, dateTo);
+  const cashBalance = useMemo(() => {
+    const lines = cashLedgerQuery.data?.lines ?? [];
+    return lines.length ? lines[lines.length - 1]?.running_balance ?? null : null;
+  }, [cashLedgerQuery.data?.lines]);
+
   const kpisQuery = useAnalyticsKpis(
     ["revenue_daily", "expenses_daily"],
-    range.start,
-    range.end
+    dateFrom,
+    dateTo    
   );
   const performanceKpisQuery = useAnalyticsKpis(
     [
@@ -376,11 +415,35 @@ export function DashboardPage() {
       "lateness_rate_daily",
       "overtime_hours_daily",
     ],
-    range.start,
-    range.end
+    dateFrom,
+    dateTo
   );
-  const alertsQuery = useAlerts({ status: "open", range: "30d" });
+  const alertsQuery = useAlerts({ status: "open", range: `${rangeDays}d` });
   const forecastQuery = useCashForecast();
+  const payrollOpenPeriodsTotalQuery = useQuery({
+    queryKey: ["dashboard-open-payroll-total", dateFrom, dateTo],
+    queryFn: async () => {
+      const periodsResponse = await http.get<Array<{ id: number; status: string; start_date: string; end_date: string }>>(
+        endpoints.hr.payrollPeriods
+      );
+      const openPeriods = (periodsResponse.data ?? []).filter(
+        (period) => period.status === "draft" && period.start_date <= dateTo && period.end_date >= dateFrom
+      );
+      if (!openPeriods.length) {
+        return 0;
+      }
+      const runs = await Promise.all(
+        openPeriods.map(async (period) => {
+          const response = await http.get<Array<{ net_total: string }>>(
+            endpoints.hr.payrollPeriodRuns(period.id)
+          );
+          return response.data;
+        })
+      );
+
+      return runs.flat().reduce((sum, run) => sum + Number(run.net_total ?? 0), 0);
+    },
+  });
 
   const barValues = useMemo(() => {
     if (!kpisQuery.data) {
@@ -442,7 +505,7 @@ export function DashboardPage() {
       },
       {
         label: content.forecastLabels.payroll,
-        value: formatCurrency(outflows.payroll),
+        value: formatCurrency(payrollOpenPeriodsTotalQuery.data?.toString() ?? null),        
       },
       {
         label: content.forecastLabels.recurring,
@@ -453,7 +516,7 @@ export function DashboardPage() {
         value: formatCurrency(topCategory?.amount ?? null),
       },
     ];
-  }, [content.forecastLabels, forecastSnapshot]);
+  }, [content.forecastLabels, forecastSnapshot, payrollOpenPeriodsTotalQuery.data]);
 
   const activityItems = useMemo(() => {
     return (alertsQuery.data ?? []).slice(0, 4);
@@ -494,15 +557,9 @@ export function DashboardPage() {
     });
   }, [performanceSeries]);
 
-  const totalRevenue = useMemo(
-    () => financeMixRows.reduce((sum, row) => sum + row.revenue, 0),
-    [financeMixRows]
-  );
-  const totalExpenses = useMemo(
-    () => financeMixRows.reduce((sum, row) => sum + row.expenses, 0),
-    [financeMixRows]
-  );
-  const totalNet = totalRevenue - totalExpenses;
+  const totalRevenue = useMemo(() => Number(profitLossQuery.data?.income_total ?? 0), [profitLossQuery.data?.income_total]);
+  const totalExpenses = useMemo(() => Number(profitLossQuery.data?.expense_total ?? 0), [profitLossQuery.data?.expense_total]);
+  const totalNet = useMemo(() => Number(profitLossQuery.data?.net_profit ?? 0), [profitLossQuery.data?.net_profit]);
 
   const financeMixBars = useMemo(() => {
     const maxValue = Math.max(
@@ -579,25 +636,26 @@ export function DashboardPage() {
   }, [alertsQuery.data, content.severityHigh, content.severityLow, content.severityMedium]);
 
   const commandCards = useMemo(() => {
-    const expectedOutflows = Number(forecastSnapshot?.expected_outflows ?? 0);
-    const netExpected = Number(forecastSnapshot?.net_expected ?? 0);
-    const currentCash = Number(summaryQuery.data?.cash_balance_latest ?? 0);
-    const runwayMonths = expectedOutflows > 0
-      ? (currentCash + Math.max(netExpected, 0)) / expectedOutflows
+    const expectedInflows = Number(profitLossQuery.data?.income_total ?? 0);
+    const expectedOutflows = Number(profitLossQuery.data?.expense_total ?? 0);
+    const netExpected = Number(profitLossQuery.data?.net_profit ?? 0);
+    const currentCash = Number(cashBalance ?? 0);
+    const runwayMonths = netExpected !== 0
+      ? currentCash / Math.abs(netExpected)
       : null;
 
     return [
       {
         label: content.inflowLabel,
-        value: formatCurrency(forecastSnapshot?.expected_inflows ?? null),
+        value: formatCurrency(expectedInflows.toString()),        
       },
       {
         label: content.outflowLabel,
-        value: formatCurrency(forecastSnapshot?.expected_outflows ?? null),
+        value: formatCurrency(expectedOutflows.toString()),        
       },
       {
         label: content.netExpectedLabel,
-        value: formatCurrency(forecastSnapshot?.net_expected ?? null),
+        value: formatCurrency(netExpected.toString()),        
       },
       {
         label: content.runwayLabel,
@@ -620,12 +678,12 @@ export function DashboardPage() {
     content.openAlertsLabel,
     content.outflowLabel,
     content.runwayLabel,
-    forecastSnapshot?.expected_inflows,
-    forecastSnapshot?.expected_outflows,
-    forecastSnapshot?.net_expected,
+    cashBalance,
     hrMetrics.absenceAvg,
     isArabic,
-    summaryQuery.data?.cash_balance_latest,
+    profitLossQuery.data?.expense_total,
+    profitLossQuery.data?.income_total,
+    profitLossQuery.data?.net_profit,    
   ]);
 
   const searchResults = useMemo(() => {
@@ -636,23 +694,23 @@ export function DashboardPage() {
 
     const results: Array<{ label: string; description: string }> = [];
 
-    if (summaryQuery.data) {
+    if (profitLossQuery.data || cashBalance !== null) {      
       results.push(
         {
           label: content.stats.revenue,
-          description: formatCurrency(summaryQuery.data.revenue_total),
+          description: formatCurrency(profitLossQuery.data?.income_total ?? null),          
         },
         {
           label: content.stats.expenses,
-          description: formatCurrency(summaryQuery.data.expenses_total),
+          description: formatCurrency(profitLossQuery.data?.expense_total ?? null),          
         },
         {
           label: content.stats.netProfit,
-          description: formatCurrency(summaryQuery.data.net_profit_est),
+          description: formatCurrency(profitLossQuery.data?.net_profit ?? null),          
         },
         {
           label: content.stats.cashBalance,
-          description: formatCurrency(summaryQuery.data.cash_balance_latest),
+          description: formatCurrency(cashBalance),          
         }
       );
     }
@@ -693,7 +751,8 @@ export function DashboardPage() {
     forecastCards,
     isArabic,
     searchTerm,
-    summaryQuery.data,
+    cashBalance,
+    profitLossQuery.data,
   ]);
 
   function handleLogout() {
@@ -1020,43 +1079,63 @@ export function DashboardPage() {
               </h1>
               <p>{content.subtitle}</p>
               <div className="hero-tags">
-                <span className="pill">{content.rangeLabel}</span>
+                <span className="pill">{selectedRangeLabel}</span>
                 <span className="pill pill--accent">
-                  {forecastSnapshot?.as_of_date ?? range.end}
+                  {forecastSnapshot?.as_of_date ?? dateTo}
                 </span>
+                <label className="date-filter-pill">
+                  <span>{content.dateFromLabel}</span>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    max={dateTo}
+                    onChange={(event) => setDateFrom(event.target.value)}
+                  />
+                </label>
+                <label className="date-filter-pill">
+                  <span>{content.dateToLabel}</span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    min={dateFrom}
+                    onChange={(event) => setDateTo(event.target.value)}
+                  />
+                </label>
               </div>
             </div>
             <div className="hero-panel__stats">
               {[
                 {
                   label: content.stats.revenue,
-                  value: formatCurrency(summaryQuery.data?.revenue_total ?? null),
-                  change: content.rangeLabel,
+                  value: formatCurrency(profitLossQuery.data?.income_total ?? null),
+                  change: selectedRangeLabel,
                 },
                 {
                   label: content.stats.expenses,
-                  value: formatCurrency(summaryQuery.data?.expenses_total ?? null),
-                  change: content.rangeLabel,
+                  value: formatCurrency(profitLossQuery.data?.expense_total ?? null),
+                  change: selectedRangeLabel,
                 },
                 {
                   label: content.stats.netProfit,
-                  value: formatCurrency(summaryQuery.data?.net_profit_est ?? null),
-                  change: content.rangeLabel,
+                  value: formatCurrency(profitLossQuery.data?.net_profit ?? null),
+                  change: selectedRangeLabel,
                 },
                 {
                   label: content.stats.cashBalance,
-                  value: formatCurrency(summaryQuery.data?.cash_balance_latest ?? null),
-                  change: content.rangeLabel,
+                  value: formatCurrency(cashBalance),
+                  change: selectedRangeLabel,
                 },
-              ].map((stat) => (
+              ].map((stat) => (                
                 <div key={stat.label} className="stat-card">
                   <div className="stat-card__top">
                     <span>{stat.label}</span>
                     <span className="stat-card__change">{stat.change}</span>
                   </div>
                   <strong>
-                    {summaryQuery.isLoading ? content.loadingLabel : stat.value}
-                  </strong>
+                    {profitLossQuery.isLoading || cashLedgerQuery.isLoading
+                      ? content.loadingLabel
+                      : stat.value}
+                  </strong>                  
                   <div className="stat-card__spark" aria-hidden="true" />
                 </div>
               ))}
