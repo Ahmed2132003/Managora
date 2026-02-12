@@ -1,4 +1,4 @@
-import { Component, type PropsWithChildren } from "react";
+import { Component, type ErrorInfo, type PropsWithChildren } from "react";
 import { Button, Center, Stack, Text, Title } from "@mantine/core";
 
 function ErrorFallback() {
@@ -18,6 +18,12 @@ class LocalErrorBoundary extends Component<PropsWithChildren, { hasError: boolea
 
   static getDerivedStateFromError() {
     return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    if (import.meta.env.DEV) {
+      console.error("[AppErrorBoundary]", error, errorInfo);
+    }
   }
 
   render() {
