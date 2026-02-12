@@ -20,12 +20,24 @@ export type AuditLogResponse = {
   results: AuditLogItem[];
 };
 
-export function useAuditLogs(limit = 50, offset = 0) {
+export type AuditLogFilters = {
+  action_type?: "create" | "update" | "delete" | "";
+  entity?: string;
+  q?: string;
+};
+
+export function useAuditLogs(limit = 50, offset = 0, filters: AuditLogFilters = {}) {
   return useQuery({
-    queryKey: ["audit-logs", limit, offset],
+    queryKey: ["audit-logs", limit, offset, filters],
     queryFn: async () => {
       const response = await http.get<AuditLogResponse>(endpoints.auditLogs, {
-        params: { limit, offset },
+        params: {
+          limit,
+          offset,
+          ...(filters.action_type ? { action_type: filters.action_type } : {}),
+          ...(filters.entity ? { entity: filters.entity } : {}),
+          ...(filters.q ? { q: filters.q } : {}),
+        },
       });
       return response.data;
     },
