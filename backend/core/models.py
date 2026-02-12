@@ -264,6 +264,44 @@ class ExportLog(models.Model):
     def __str__(self):
         return f"{self.company.name} - {self.export_type} - {self.created_at:%Y-%m-%d}"
 
+
+
+class CompanyBackup(models.Model):
+    class Status(models.TextChoices):
+        READY = "ready", "Ready"
+        FAILED = "failed", "Failed"
+        RESTORED = "restored", "Restored"
+
+    class BackupType(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        AUTOMATIC = "automatic", "Automatic"
+
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="backups",
+    )
+    created_by = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_backups",
+    )
+    backup_type = models.CharField(max_length=20, choices=BackupType.choices, default=BackupType.MANUAL)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.READY)
+    file_path = models.TextField()
+    row_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["company", "created_at"], name="core_backup_cmp_created_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.company.name} - backup {self.created_at:%Y-%m-%d %H:%M}"
+
 class CopilotQueryLog(models.Model):
     class Status(models.TextChoices):
         OK = "ok", "OK"

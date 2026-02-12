@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from core.api_views.auth import LoginView
+from core.api_views.backups import BackupDownloadView, BackupListCreateView, BackupRestoreView
 from core.api_views.audit import AuditLogListView
 from core.api_views.copilot import CopilotQueryView
 from core.api_views.companies import CompanyListCreateView
@@ -34,6 +35,12 @@ urlpatterns = [
 
     # Companies
     path("companies/", CompanyListCreateView.as_view(), name="companies"),
+
+
+    # Backups
+    path("backups/", BackupListCreateView.as_view(), name="backups"),
+    path("backups/<int:backup_id>/download/", BackupDownloadView.as_view(), name="backup-download"),
+    path("backups/<int:backup_id>/restore/", BackupRestoreView.as_view(), name="backup-restore"),
 
     # Setup        
     path("setup/templates/", SetupTemplateListView.as_view(), name="setup-templates"),

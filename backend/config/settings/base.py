@@ -187,6 +187,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "analytics.tasks.backfill_last_30_days",
         "schedule": crontab(hour=3, minute=0, day_of_week="mon"),
     },
+    "backups-daily-company": {
+        "task": "core.tasks.create_daily_company_backups",
+        "schedule": crontab(hour=1, minute=0),
+    },
 }
 
 # Structured logging
