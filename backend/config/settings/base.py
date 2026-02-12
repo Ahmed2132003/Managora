@@ -52,7 +52,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "core.middleware.AuditContextMiddleware",
     "core.middleware.RequestLoggingMiddleware",
-    "core.error_handlers.GlobalExceptionMiddleware",
+    "core.middleware.GlobalExceptionMiddleware",    
     "django.contrib.messages.middleware.MessageMiddleware",    
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
