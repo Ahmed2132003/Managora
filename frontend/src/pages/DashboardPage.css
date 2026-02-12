@@ -207,6 +207,9 @@
 
 .sidebar-footer {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .pill-button {
@@ -220,6 +223,19 @@
   cursor: pointer;
 }
 
+
+.sidebar-action-button {
+  background: linear-gradient(120deg, #2f7cf8, #4ea6ff);
+}
+
+.sidebar-action-button--secondary {
+  background: linear-gradient(120deg, #6a5acd, #8a7cff);
+}
+
+.pill-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
 .dashboard-main {
   display: flex;
   flex-direction: column;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { clearTokens } from "../shared/auth/tokens";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMe } from "../shared/auth/useMe.ts";
@@ -26,6 +26,8 @@ type Content = {
   themeLabel: string;
   navigationLabel: string;
   logoutLabel: string;
+  backupNowLabel: string;
+  restoreBackupLabel: string;
   rangeLabel: string;
   dateFromLabel: string;
   dateToLabel: string;  
@@ -127,6 +129,8 @@ const contentMap: Record<Language, Content> = {
     themeLabel: "Theme",
     navigationLabel: "Navigation",
     logoutLabel: "Logout",
+    backupNowLabel: "Download backup",
+    restoreBackupLabel: "Restore backup",
     rangeLabel: "Last 30 days",
     dateFromLabel: "From",
     dateToLabel: "To",    
@@ -226,6 +230,8 @@ const contentMap: Record<Language, Content> = {
     themeLabel: "المظهر",
     navigationLabel: "التنقل",
     logoutLabel: "تسجيل الخروج",
+    backupNowLabel: "تحميل نسخة احتياطية",
+    restoreBackupLabel: "استرجاع نسخة احتياطية",
     rangeLabel: "آخر ٣٠ يوم",
     dateFromLabel: "من",
     dateToLabel: "إلى",    
@@ -840,6 +846,89 @@ export function DashboardPage() {
     navigate("/login", { replace: true });
   }
 
+
+    type CompanyBackup = {
+    id: number;
+    created_at: string;
+  };
+
+  const backupsQuery = useQuery({
+    queryKey: ["company-backups"],
+    queryFn: async () => {
+      const response = await http.get<CompanyBackup[]>(endpoints.backups.listCreate);
+      return response.data;
+    },
+  });
+
+  const downloadBackupMutation = useMutation({
+    mutationFn: async () => {
+      const createResponse = await http.post<CompanyBackup>(endpoints.backups.listCreate, {});
+      const backupId = createResponse.data.id;
+      const downloadResponse = await http.get<Blob>(endpoints.backups.download(backupId), {
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(downloadResponse.data);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `backup-${backupId}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+      await backupsQuery.refetch();
+    },
+    onError: () => {
+      window.alert(isArabic ? "تعذر إنشاء النسخة الاحتياطية." : "Unable to create backup.");
+    },
+  });
+
+  const restoreBackupMutation = useMutation({
+    mutationFn: async () => {
+      const latestBackup = backupsQuery.data?.[0];
+      if (!latestBackup) {
+        throw new Error("no-backups");
+      }
+      await http.post(endpoints.backups.restore(latestBackup.id), {});
+      await backupsQuery.refetch();
+    },
+    onSuccess: () => {
+      window.alert(
+        isArabic
+          ? "تم استرجاع آخر نسخة احتياطية بنجاح."
+          : "Latest backup restored successfully."
+      );
+    },
+    onError: (error) => {
+      if (error instanceof Error && error.message === "no-backups") {
+        window.alert(isArabic ? "لا توجد نسخ احتياطية للاسترجاع." : "No backups available to restore.");
+        return;
+      }
+      window.alert(isArabic ? "تعذر استرجاع النسخة الاحتياطية." : "Unable to restore backup.");
+    },
+  });
+
+  function handleDownloadBackup() {
+    if (downloadBackupMutation.isPending) {
+      return;
+    }
+    void downloadBackupMutation.mutateAsync();
+  }
+
+  function handleRestoreBackup() {
+    if (restoreBackupMutation.isPending) {
+      return;
+    }
+    const confirmed = window.confirm(
+      isArabic
+        ? "سيتم استرجاع آخر نسخة احتياطية متاحة. هل تريد المتابعة؟"
+        : "This will restore the latest available backup. Continue?"
+    );
+    if (!confirmed) {
+      return;
+    }
+    void restoreBackupMutation.mutateAsync();
+  }
+
   type NavLink = {
     path: string;
     label: string;
@@ -1145,6 +1234,22 @@ export function DashboardPage() {
             </div>
           </nav>          
           <div className="sidebar-footer">
+            <button
+              type="button"
+              className="pill-button sidebar-action-button"
+              onClick={handleDownloadBackup}
+              disabled={downloadBackupMutation.isPending}
+            >
+              {content.backupNowLabel}
+            </button>
+            <button
+              type="button"
+              className="pill-button sidebar-action-button sidebar-action-button--secondary"
+              onClick={handleRestoreBackup}
+              disabled={restoreBackupMutation.isPending || backupsQuery.isLoading}
+            >
+              {content.restoreBackupLabel}
+            </button>
             <button type="button" className="pill-button" onClick={handleLogout}>
               {content.logoutLabel}
             </button>            

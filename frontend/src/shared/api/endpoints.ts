@@ -32,6 +32,11 @@ export const endpoints = {
     applyTemplate: api("/setup/apply-template/"),
   },
 
+  backups: {
+    listCreate: api("/backups/"),
+    download: (id: number) => api(`/backups/${id}/download/`),
+    restore: (id: number) => api(`/backups/${id}/restore/`),
+  },
   hr: {
     departments: api("/departments/"),
     department: (id: number) => api(`/departments/${id}/`),
