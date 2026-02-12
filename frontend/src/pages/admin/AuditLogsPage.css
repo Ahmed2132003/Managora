@@ -1,0 +1,34 @@
+@import "../DashboardPage.css";
+
+.audit-logs-page .hero-panel {
+  align-items: flex-start;
+}
+
+.audit-logs-page .hero-panel__intro {
+  max-width: 680px;
+}
+
+.audit-logs-page__filters-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.audit-logs-page .status-pill {
+  text-transform: capitalize;
+}
+
+.audit-logs-page__pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+}
+
+.audit-logs-page .panel--compact {
+  padding-block: 14px;
+}
+
+@media (max-width: 720px) {
+  .audit-logs-page__filters-grid {
+    grid-template-columns: 1fr;
+  }
+}
