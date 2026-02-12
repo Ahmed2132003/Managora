@@ -8,6 +8,7 @@ import { useAlerts } from "../shared/analytics/hooks";
 import { useAnalyticsKpis } from "../shared/analytics/insights.ts";
 import { useCashForecast } from "../shared/analytics/forecast";
 import { useAccountMappings, useGeneralLedger, useProfitLoss } from "../shared/accounting/hooks";
+import { useAttendanceRecordsQuery } from "../shared/hr/hooks";
 import { endpoints } from "../shared/api/endpoints";
 import { http } from "../shared/api/http";
 import { formatCurrency, formatNumber, formatPercent } from "../shared/analytics/format.ts";
@@ -32,7 +33,6 @@ type Content = {
     revenue: string;
     expenses: string;
     netProfit: string;
-    cashBalance: string;
   };
   activityTitle: string;
   activitySubtitle: string;
@@ -134,7 +134,6 @@ const contentMap: Record<Language, Content> = {
       revenue: "Total revenue",
       expenses: "Total expenses",
       netProfit: "Estimated net profit",
-      cashBalance: "Latest cash balance",
     },
     activityTitle: "Smart Alerts",
     activitySubtitle: "Live KPI monitoring",
@@ -234,7 +233,6 @@ const contentMap: Record<Language, Content> = {
       revenue: "إجمالي الإيرادات",
       expenses: "إجمالي المصروفات",
       netProfit: "صافي الربح التقديري",
-      cashBalance: "آخر رصيد نقدي",
     },
     activityTitle: "تنبيهات ذكية",
     activitySubtitle: "مراقبة فورية للمؤشرات",
@@ -243,7 +241,7 @@ const contentMap: Record<Language, Content> = {
     forecastTitle: "ملخص التدفق النقدي",
     forecastSubtitle: "توقعات الدخول والخروج",
     commandCenterTitle: "مركز القيادة التنفيذي",
-    commandCenterSubtitle: "مؤشرات مشتركة بين المالية والنقدية والموارد البشرية والمخاطر من بيانات النظام",
+    commandCenterSubtitle: "مؤشرات مشتركة من النظام، ومتوسط الغياب مأخوذ من لوحة الموارد البشرية.",
     financeMixTitle: "مزيج المالية",
     financeMixSubtitle: "الإيراد مقابل المصروف مقابل هامش الربح خلال آخر الأيام",
     hrHealthTitle: "صحة القوى العاملة",
@@ -255,7 +253,7 @@ const contentMap: Record<Language, Content> = {
     outflowLabel: "التدفقات الخارجة",
     netExpectedLabel: "الصافي المتوقع",
     overtimeLabel: "ساعات إضافية",
-    absenceLabel: "معدل الغياب",
+    absenceLabel: "متوسط الغياب",
     latenessLabel: "معدل التأخير",
     openAlertsLabel: "تنبيهات مفتوحة",
     severityHigh: "عالي",
@@ -342,8 +340,7 @@ export function DashboardPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const content = useMemo(() => contentMap[language], [language]);
   const userPermissions = data?.permissions ?? [];
-  const userName =
-    data?.user.first_name || data?.user.username || content.userFallback;
+  const companyName = data?.company?.name || content.userFallback;
   const isArabic = language === "ar";  
 
   useEffect(() => {
@@ -379,11 +376,8 @@ export function DashboardPage() {
   }, [dateFrom, dateTo]);
 
   const selectedRangeLabel = useMemo(() => {
-    if (dateFrom === defaultRange.start && dateTo === defaultRange.end) {
-      return content.rangeLabel;
-    }
     return `${dateFrom} → ${dateTo}`;
-  }, [content.rangeLabel, dateFrom, dateTo, defaultRange.end, defaultRange.start]);
+  }, [dateFrom, dateTo]);
 
   const profitLossQuery = useProfitLoss(dateFrom, dateTo);
   const accountMappingsQuery = useAccountMappings();
@@ -518,6 +512,48 @@ export function DashboardPage() {
     ];
   }, [content.forecastLabels, forecastSnapshot, payrollOpenPeriodsTotalQuery.data]);
 
+  const forecastBars = useMemo(() => {
+    if (!forecastSnapshot) {
+      return [];
+    }
+    const inflows = forecastSnapshot.details.inflows_by_bucket;
+    const outflows = forecastSnapshot.details.outflows_by_bucket;
+    const values = [
+      {
+        label: content.inflowLabel,
+        value: Number(inflows.expected_collected ?? 0),
+        tone: "inflow" as const,
+      },
+      {
+        label: content.outflowLabel,
+        value: Number(outflows.recurring_expenses ?? 0),
+        tone: "outflow" as const,
+      },
+      {
+        label: content.netExpectedLabel,
+        value: Number(forecastSnapshot.net_expected ?? 0),
+        tone: "net" as const,
+      },
+      {
+        label: content.forecastLabels.payroll,
+        value: Number(payrollOpenPeriodsTotalQuery.data ?? 0),
+        tone: "outflow" as const,
+      },
+    ];
+    const max = Math.max(...values.map((item) => Math.abs(item.value)), 1);
+    return values.map((item) => ({
+      ...item,
+      width: Math.max(12, Math.round((Math.abs(item.value) / max) * 100)),
+    }));
+  }, [
+    content.forecastLabels.payroll,
+    content.inflowLabel,
+    content.netExpectedLabel,
+    content.outflowLabel,
+    forecastSnapshot,
+    payrollOpenPeriodsTotalQuery.data,
+  ]);
+
   const activityItems = useMemo(() => {
     return (alertsQuery.data ?? []).slice(0, 4);
   }, [alertsQuery.data]);
@@ -537,6 +573,50 @@ export function DashboardPage() {
     });
     return byKey;
   }, [performanceKpisQuery.data]);
+
+  const attendanceQuery = useAttendanceRecordsQuery(
+    {
+      dateFrom,
+      dateTo,
+    },
+    Boolean(dateFrom && dateTo)
+  );
+
+  const hrAbsenceAverage = useMemo(() => {
+    if (!attendanceQuery.data || !dateFrom || !dateTo) {
+      return null;
+    }
+    const startDate = new Date(`${dateFrom}T00:00:00`);
+    const endDate = new Date(`${dateTo}T00:00:00`);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      return null;
+    }
+    const days = Math.max(
+      Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+      1
+    );
+
+    const employees = new Map<number, number>();
+    attendanceQuery.data.forEach((record) => {
+      const presentDays = employees.get(record.employee.id) ?? 0;
+      if (record.status !== "absent") {
+        employees.set(record.employee.id, presentDays + 1);
+      } else {
+        employees.set(record.employee.id, presentDays);
+      }
+    });
+
+    if (employees.size === 0) {
+      return null;
+    }
+
+    let totalAbsentDays = 0;
+    employees.forEach((presentDays) => {
+      totalAbsentDays += Math.max(days - presentDays, 0);
+    });
+
+    return totalAbsentDays / employees.size;
+  }, [attendanceQuery.data, dateFrom, dateTo]);
 
   const financeMixRows = useMemo(() => {
     const revenue = performanceSeries.get("revenue_daily") ?? [];
@@ -663,7 +743,10 @@ export function DashboardPage() {
       },
       {
         label: content.absenceLabel,
-        value: formatPercent(hrMetrics.absenceAvg?.toString() ?? null),
+        value:
+          hrAbsenceAverage === null
+            ? "-"
+            : `${formatNumber(hrAbsenceAverage.toFixed(1))} ${isArabic ? "يوم" : "days"}`,
       },
       {
         label: content.openAlertsLabel,
@@ -679,7 +762,7 @@ export function DashboardPage() {
     content.outflowLabel,
     content.runwayLabel,
     cashBalance,
-    hrMetrics.absenceAvg,
+    hrAbsenceAverage,
     isArabic,
     profitLossQuery.data?.expense_total,
     profitLossQuery.data?.income_total,
@@ -708,10 +791,7 @@ export function DashboardPage() {
           label: content.stats.netProfit,
           description: formatCurrency(profitLossQuery.data?.net_profit ?? null),          
         },
-        {
-          label: content.stats.cashBalance,
-          description: formatCurrency(cashBalance),          
-        }
+
       );
     }
 
@@ -1000,7 +1080,7 @@ export function DashboardPage() {
         <aside className="dashboard-sidebar">
           <div className="sidebar-card">
             <p>{content.welcome}</p>
-            <strong>{userName}</strong>
+            <strong>{companyName}</strong>
             {isLoading && (
               <span className="sidebar-note">...loading profile</span>
             )}
@@ -1075,7 +1155,7 @@ export function DashboardPage() {
           <section className="hero-panel">
             <div className="hero-panel__intro">
               <h1>
-                {content.welcome}, {userName}
+                {content.welcome}, {companyName}
               </h1>
               <p>{content.subtitle}</p>
               <div className="hero-tags">
@@ -1120,11 +1200,6 @@ export function DashboardPage() {
                   value: formatCurrency(profitLossQuery.data?.net_profit ?? null),
                   change: selectedRangeLabel,
                 },
-                {
-                  label: content.stats.cashBalance,
-                  value: formatCurrency(cashBalance),
-                  change: selectedRangeLabel,
-                },
               ].map((stat) => (                
                 <div key={stat.label} className="stat-card">
                   <div className="stat-card__top">
@@ -1142,7 +1217,7 @@ export function DashboardPage() {
             </div>
           </section>
 
-          <section className="panel panel--command-center">
+          <section className="panel panel--command-center panel--wide">
             <div className="panel__header">
               <div>
                 <h2>{content.commandCenterTitle}</h2>
@@ -1155,6 +1230,16 @@ export function DashboardPage() {
                 <div key={card.label} className="command-center-card">
                   <span>{card.label}</span>
                   <strong>{card.value}</strong>
+                </div>
+              ))}
+            </div>
+            <div className="executive-bars">
+              {commandCards.map((card, index) => (
+                <div key={`cmd-${card.label}`} className="executive-bars__row">
+                  <span>{card.label}</span>
+                  <div className="executive-bars__track">
+                    <span style={{ width: `${42 + ((index + 2) * 10) % 43}%` }} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -1217,7 +1302,7 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div className="panel panel--forecast">
+            <div className="panel panel--forecast panel--wide">
               <div className="panel__header">
                 <div>
                   <h2>{content.forecastTitle}</h2>
@@ -1242,9 +1327,19 @@ export function DashboardPage() {
                   </div>
                 )}
               </div>
+              <div className="executive-bars">
+                {forecastBars.map((bar) => (
+                  <div key={bar.label} className="executive-bars__row">
+                    <span>{bar.label}</span>
+                    <div className={`executive-bars__track executive-bars__track--${bar.tone}`}>
+                      <span style={{ width: `${bar.width}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="panel panel--finance-mix">
+            <div className="panel panel--finance-mix panel--wide">
               <div className="panel__header">
                 <div>
                   <h2>{content.financeMixTitle}</h2>
@@ -1277,7 +1372,7 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div className="panel panel--hr-health">
+            <div className="panel panel--hr-health panel--wide">
               <div className="panel__header">
                 <div>
                   <h2>{content.hrHealthTitle}</h2>
@@ -1297,7 +1392,7 @@ export function DashboardPage() {
                 <div className="hr-health-metrics">
                   <div>
                     <span>{content.absenceLabel}</span>
-                    <strong>{formatPercent(hrMetrics.absenceAvg?.toString() ?? null)}</strong>
+                    <strong>{hrAbsenceAverage === null ? "-" : `${formatNumber(hrAbsenceAverage.toFixed(1))} ${isArabic ? "يوم" : "days"}`}</strong>
                   </div>
                   <div>
                     <span>{content.latenessLabel}</span>
@@ -1311,7 +1406,7 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div className="panel panel--signals">
+            <div className="panel panel--signals panel--wide">
               <div className="panel__header">
                 <div>
                   <h2>{content.signalsTitle}</h2>
@@ -1334,7 +1429,7 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div className="panel panel--activity">
+            <div className="panel panel--activity panel--wide">
               <div className="panel__header">
                 <div>
                   <h2>{content.activityTitle}</h2>

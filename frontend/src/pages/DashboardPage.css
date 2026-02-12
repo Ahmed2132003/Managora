@@ -486,7 +486,7 @@
 
 .forecast-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
 }
 
@@ -797,6 +797,53 @@
 }
 
 
+
+.panel--wide {
+  grid-column: 1 / -1;
+}
+
+.executive-bars {
+  display: grid;
+  gap: 10px;
+}
+
+.executive-bars__row {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.executive-bars__row span {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.executive-bars__track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(127, 136, 170, 0.2);
+  overflow: hidden;
+}
+
+.executive-bars__track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(120deg, var(--secondary), var(--accent));
+}
+
+.executive-bars__track--inflow span {
+  background: linear-gradient(120deg, #29d0ff, #2f6bff);
+}
+
+.executive-bars__track--outflow span {
+  background: linear-gradient(120deg, #ff8b8b, #ef4444);
+}
+
+.executive-bars__track--net span {
+  background: linear-gradient(120deg, #35d39a, #20b486);
+}
 .panel--command-center {
   position: relative;
   overflow: hidden;
@@ -1053,6 +1100,11 @@
 }
 
 @media (max-width: 720px) {
+  .executive-bars__row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
   .dashboard-page {
     padding: 20px;
   }
