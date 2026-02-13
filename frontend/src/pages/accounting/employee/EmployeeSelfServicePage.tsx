@@ -517,7 +517,7 @@ export function EmployeeSelfServicePage() {
                     <div className="employee-self-service__actions">
                       <button
                         type="button"
-                        className="btn btn--ghost"
+                        className="ghost-button"                        
                         onClick={() =>
                           setExpandedRunId((current) =>
                             current === run.id ? null : run.id,
@@ -661,13 +661,13 @@ export function EmployeeSelfServicePage() {
               <div className="panel__header">
                 <h2>{copy.sections.leaves}</h2>
               </div>
-              <Link className="btn btn--primary" to="/leaves/request">
+              <Link className="primary-button" to="/leaves/request">              
                 {copy.actions.requestLeave}
               </Link>
               <div className="panel__header">
                 <h2>{copy.sections.attendance}</h2>
               </div>
-              <Link className="btn btn--ghost" to="/attendance/self">
+              <Link className="ghost-button" to="/attendance/self">              
                 {copy.actions.viewAttendance}
               </Link>
             </section>
@@ -701,7 +701,7 @@ export function EmployeeSelfServicePage() {
                   />
                 </label>
                 <button
-                  className="btn btn--primary"                  
+                  className="primary-button"                               
                   type="button"
                   disabled={!file || uploadMutation.isPending}
                   onClick={() => handleUpload(copy)}
@@ -723,15 +723,16 @@ export function EmployeeSelfServicePage() {
                     </p>
                     <div className="employee-self-service__actions">
                       <a
+                        className="ghost-button"
                         href={endpoints.hr.documentDownload(doc.id)}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noreferrer"                        
                       >
                         {copy.labels.file}
                       </a>
                       <button
                         type="button"
-                        className="btn btn--ghost"
+                        className="ghost-button"                        
                         onClick={() => handleDelete(doc.id, copy)}
                       >
                         {copy.actions.delete}
