@@ -1,63 +1,82 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
+import { useQueries } from "@tanstack/react-query";
 
 import { DashboardShell } from "../../DashboardShell";
 import {
   useDeleteEmployeeDocument,
   useMyEmployeeDocuments,
   useMyPayrollRuns,
+  type PayrollRunDetail,
   useUploadMyEmployeeDocument,
 } from "../../../shared/hr/hooks";
+import { http } from "../../../shared/api/http";
 import { endpoints } from "../../../shared/api/endpoints";
 import "./EmployeeSelfServicePage.css";
 
 type Language = "en" | "ar";
 
-type Copy = Record<Language, {
-  title: string;
-  subtitle: string;
-  helper: string;
-  sections: { payroll: string; leaves: string; attendance: string; documents: string };
-  actions: {
-    requestLeave: string;
-    viewAttendance: string;
-    upload: string;
-    uploading: string;
-    delete: string;
-    payslipPng: string;
-    payslipPdf: string;
-  };
-  labels: {
-    status: string;
-    net: string;
-    emptyPayroll: string;
-    emptyDocuments: string;
-    docType: string;
-    docTitle: string;
-    file: string;
-  };
-  notifications: { uploadSuccess: string; uploadError: string; deleteSuccess: string; deleteError: string };
-}>;
+type Copy = Record<
+  Language,
+  {
+    title: string;
+    subtitle: string;
+    helper: string;
+    sections: {
+      payroll: string;
+      leaves: string;
+      attendance: string;
+      documents: string;
+    };
+    actions: {
+      requestLeave: string;
+      viewAttendance: string;
+      upload: string;
+      uploading: string;
+      delete: string;
+      viewPayslip: string;
+    };
+    labels: {
+      status: string;
+      net: string;
+      emptyPayroll: string;
+      emptyDocuments: string;
+      docType: string;
+      docTitle: string;
+      file: string;
+    };
+    notifications: {
+      uploadSuccess: string;
+      uploadError: string;
+      deleteSuccess: string;
+      deleteError: string;
+    };
+  }
+>;
 
 const pageCopy: Copy = {
   en: {
     title: "Employee Self Service",
     subtitle: "Manage payroll, leaves, documents, and attendance in one place.",
     helper: "For all employees",
-    sections: { payroll: "My Salary", leaves: "Leave Request", attendance: "Attendance", documents: "My Documents" },
+    sections: {
+      payroll: "My Salary",
+      leaves: "Leave Request",
+      attendance: "Attendance",
+      documents: "My Documents",
+    },
     actions: {
       requestLeave: "Create Leave Request",
       viewAttendance: "View My Attendance",
       upload: "Upload Document",
       uploading: "Uploading...",
       delete: "Delete",
-      payslipPng: "Payslip PNG",
-      payslipPdf: "Payslip PDF",
+      viewPayslip: "View Payslip",
     },
     labels: {
       status: "Status",
-      net: "Net Salary",
+      net: "Total Due",
       emptyPayroll: "No payroll runs yet.",
       emptyDocuments: "No uploaded documents yet.",
       docType: "Document Type",
@@ -75,19 +94,23 @@ const pageCopy: Copy = {
     title: "بوابة الخدمات الذاتية للموظف",
     subtitle: "تابع الراتب والإجازات والمستندات والحضور من مكان واحد.",
     helper: "متاحة لجميع الموظفين",
-    sections: { payroll: "راتبي", leaves: "طلب إجازة", attendance: "الحضور", documents: "مستنداتي" },
+    sections: {
+      payroll: "راتبي",
+      leaves: "طلب إجازة",
+      attendance: "الحضور",
+      documents: "مستنداتي",
+    },
     actions: {
       requestLeave: "إنشاء طلب إجازة",
       viewAttendance: "عرض حضوري",
       upload: "رفع مستند",
       uploading: "جاري الرفع...",
       delete: "حذف",
-      payslipPng: "قسيمة PNG",
-      payslipPdf: "قسيمة PDF",
+      viewPayslip: "عرض القسيمة",
     },
     labels: {
       status: "الحالة",
-      net: "صافي الراتب",
+      net: "الإجمالي المستحق",
       emptyPayroll: "لا توجد مسيرات رواتب حتى الآن.",
       emptyDocuments: "لا توجد مستندات مرفوعة.",
       docType: "نوع المستند",
@@ -105,6 +128,18 @@ const pageCopy: Copy = {
 
 export function EmployeeSelfServicePage() {
   const runsQuery = useMyPayrollRuns();
+  const runDetailsQueries = useQueries({
+    queries: (runsQuery.data ?? []).map((run) => ({
+      queryKey: ["payroll", "runs", run.id, "self-service"],
+      queryFn: async () => {
+        const response = await http.get<PayrollRunDetail>(
+          endpoints.hr.payrollRun(run.id),
+        );
+        return response.data;
+      },
+      enabled: runsQuery.isSuccess,
+    })),
+  });
   const docsQuery = useMyEmployeeDocuments();
   const uploadMutation = useUploadMyEmployeeDocument();
   const deleteMutation = useDeleteEmployeeDocument();
@@ -120,9 +155,15 @@ export function EmployeeSelfServicePage() {
       setTitle("");
       setFile(null);
       await docsQuery.refetch();
-      notifications.show({ color: "teal", message: copy.notifications.uploadSuccess });
+      notifications.show({
+        color: "teal",
+        message: copy.notifications.uploadSuccess,
+      });
     } catch {
-      notifications.show({ color: "red", message: copy.notifications.uploadError });
+      notifications.show({
+        color: "red",
+        message: copy.notifications.uploadError,
+      });
     }
   }
 
@@ -130,65 +171,155 @@ export function EmployeeSelfServicePage() {
     try {
       await deleteMutation.mutateAsync(id);
       await docsQuery.refetch();
-      notifications.show({ color: "teal", message: copy.notifications.deleteSuccess });
+      notifications.show({
+        color: "teal",
+        message: copy.notifications.deleteSuccess,
+      });
     } catch {
-      notifications.show({ color: "red", message: copy.notifications.deleteError });
+      notifications.show({
+        color: "red",
+        message: copy.notifications.deleteError,
+      });
     }
   }
 
   return (
     <DashboardShell
       copy={{
-        en: { title: pageCopy.en.title, subtitle: pageCopy.en.subtitle, helper: pageCopy.en.helper },
-        ar: { title: pageCopy.ar.title, subtitle: pageCopy.ar.subtitle, helper: pageCopy.ar.helper },
+        en: {
+          title: pageCopy.en.title,
+          subtitle: pageCopy.en.subtitle,
+          helper: pageCopy.en.helper,
+        },
+        ar: {
+          title: pageCopy.ar.title,
+          subtitle: pageCopy.ar.subtitle,
+          helper: pageCopy.ar.helper,
+        },
       }}
       className="employee-self-service"
     >
       {({ language, isArabic }) => {
         const copy = pageCopy[language];
+        const runDetailsById = new Map(
+          runDetailsQueries
+            .map((query) => query.data)
+            .filter((run): run is PayrollRunDetail => Boolean(run))
+            .map((run) => [run.id, run]),
+        );
+
         return (
-          <div className="employee-self-service__content" dir={isArabic ? "rtl" : "ltr"}>
+          <div
+            className="employee-self-service__content"
+            dir={isArabic ? "rtl" : "ltr"}
+          >
             <section className="panel">
-              <div className="panel__header"><h2>{copy.sections.payroll}</h2></div>
-              {runsQuery.data?.length ? runsQuery.data.map((run) => (
-                <article key={run.id} className="employee-self-service__card">
-                  <p><strong>{copy.labels.status}:</strong> {run.status}</p>
-                  <p><strong>{copy.labels.net}:</strong> {run.net_total}</p>
-                  <div className="employee-self-service__actions">
-                    <a href={endpoints.hr.payrollRunPayslipPng(run.id)} target="_blank" rel="noreferrer">{copy.actions.payslipPng}</a>
-                    <a href={endpoints.hr.payrollRunPayslipPdf(run.id)} target="_blank" rel="noreferrer">{copy.actions.payslipPdf}</a>
-                  </div>
-                </article>
-              )) : <p className="helper-text">{copy.labels.emptyPayroll}</p>}
+              <div className="panel__header">
+                <h2>{copy.sections.payroll}</h2>
+              </div>
+              {runsQuery.data?.length ? (
+                runsQuery.data.map((run) => (
+                  <article key={run.id} className="employee-self-service__card">
+                    <p>
+                      <strong>{copy.labels.status}:</strong> {run.status}
+                    </p>
+                    <p>
+                      <strong>{copy.labels.net}:</strong>{" "}
+                      {runDetailsById.get(run.id)?.net_total ?? run.net_total}
+                    </p>
+                    <div className="employee-self-service__actions">
+                      <a
+                        className="btn btn--ghost"
+                        href={endpoints.hr.payrollRunPayslipPng(run.id)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {copy.actions.viewPayslip}
+                      </a>
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <p className="helper-text">{copy.labels.emptyPayroll}</p>
+              )}
             </section>
 
             <section className="panel employee-self-service__shortcuts">
-              <div className="panel__header"><h2>{copy.sections.leaves}</h2></div>
-              <Link className="btn btn--primary" to="/leaves/request">{copy.actions.requestLeave}</Link>
-              <div className="panel__header"><h2>{copy.sections.attendance}</h2></div>
-              <Link className="btn btn--ghost" to="/attendance/self">{copy.actions.viewAttendance}</Link>
+              <div className="panel__header">
+                <h2>{copy.sections.leaves}</h2>
+              </div>
+              <Link className="btn btn--primary" to="/leaves/request">
+                {copy.actions.requestLeave}
+              </Link>
+              <div className="panel__header">
+                <h2>{copy.sections.attendance}</h2>
+              </div>
+              <Link className="btn btn--ghost" to="/attendance/self">
+                {copy.actions.viewAttendance}
+              </Link>
             </section>
 
             <section className="panel">
-              <div className="panel__header"><h2>{copy.sections.documents}</h2></div>
+              <div className="panel__header">
+                <h2>{copy.sections.documents}</h2>
+              </div>
               <div className="employee-self-service__upload">
-                <input value={docType} onChange={(event) => setDocType(event.target.value)} placeholder={copy.labels.docType} />
-                <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={copy.labels.docTitle} />
-                <input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-                <button className="btn btn--primary" type="button" disabled={!file || uploadMutation.isPending} onClick={() => handleUpload(copy)}>
-                  {uploadMutation.isPending ? copy.actions.uploading : copy.actions.upload}
+                <input
+                  value={docType}
+                  onChange={(event) => setDocType(event.target.value)}
+                  placeholder={copy.labels.docType}
+                />
+                <input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder={copy.labels.docTitle}
+                />
+                <input
+                  type="file"
+                  onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                />
+                <button
+                  className="btn btn--primary"
+                  type="button"
+                  disabled={!file || uploadMutation.isPending}
+                  onClick={() => handleUpload(copy)}
+                >
+                  {uploadMutation.isPending
+                    ? copy.actions.uploading
+                    : copy.actions.upload}
                 </button>
               </div>
-              {docsQuery.data?.length ? docsQuery.data.map((doc) => (
-                <article key={doc.id} className="employee-self-service__card">
-                  <p><strong>{copy.labels.docType}:</strong> {doc.doc_type}</p>
-                  <p><strong>{copy.labels.docTitle}:</strong> {doc.title || "-"}</p>
-                  <div className="employee-self-service__actions">
-                    <a href={endpoints.hr.documentDownload(doc.id)} target="_blank" rel="noreferrer">{copy.labels.file}</a>
-                    <button type="button" className="btn btn--ghost" onClick={() => handleDelete(doc.id, copy)}>{copy.actions.delete}</button>
-                  </div>
-                </article>
-              )) : <p className="helper-text">{copy.labels.emptyDocuments}</p>}
+              {docsQuery.data?.length ? (
+                docsQuery.data.map((doc) => (
+                  <article key={doc.id} className="employee-self-service__card">
+                    <p>
+                      <strong>{copy.labels.docType}:</strong> {doc.doc_type}
+                    </p>
+                    <p>
+                      <strong>{copy.labels.docTitle}:</strong>{" "}
+                      {doc.title || "-"}
+                    </p>
+                    <div className="employee-self-service__actions">
+                      <a
+                        href={endpoints.hr.documentDownload(doc.id)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {copy.labels.file}
+                      </a>
+                      <button
+                        type="button"
+                        className="btn btn--ghost"
+                        onClick={() => handleDelete(doc.id, copy)}
+                      >
+                        {copy.actions.delete}
+                      </button>
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <p className="helper-text">{copy.labels.emptyDocuments}</p>
+              )}
             </section>
           </div>
         );
