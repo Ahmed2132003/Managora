@@ -127,7 +127,8 @@ const pageCopy: Copy = {
 };
 
 export function EmployeeSelfServicePage() {
-  const runsQuery = useMyPayrollRuns();
+  const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
+  const runsQuery = useMyPayrollRuns();  
   const runDetailsQueries = useQueries({
     queries: (runsQuery.data ?? []).map((run) => ({
       queryKey: ["payroll", "runs", run.id, "self-service"],
@@ -183,6 +184,30 @@ export function EmployeeSelfServicePage() {
     }
   }
 
+  function parseAmount(value: unknown) {
+    if (typeof value === "number") return value;
+    if (typeof value === "string" && value.trim() !== "") {
+      const parsed = Number(value);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
+  }
+
+  function formatMoney(value: unknown) {
+    return parseAmount(value).toFixed(2);
+  }
+
+  function getRunNetTotal(run: PayrollRunDetail | undefined, fallback: string) {
+    if (!run?.lines?.length) {
+      return parseAmount(run?.net_total ?? fallback);
+    }
+
+    return run.lines.reduce((total, line) => {
+      const amount = parseAmount(line.amount);
+      return line.type === "deduction" ? total - amount : total + amount;
+    }, 0);
+  }
+
   return (
     <DashboardShell
       copy={{
@@ -225,20 +250,62 @@ export function EmployeeSelfServicePage() {
                     </p>
                     <p>
                       <strong>{copy.labels.net}:</strong>{" "}
-                      {runDetailsById.get(run.id)?.net_total ?? run.net_total}
+                      {formatMoney(getRunNetTotal(runDetailsById.get(run.id), run.net_total))}
                     </p>
                     <div className="employee-self-service__actions">
-                      <a
+                      <button
+                        type="button"
                         className="btn btn--ghost"
-                        href={endpoints.hr.payrollRunPayslipPng(run.id)}
-                        target="_blank"
-                        rel="noreferrer"
+                        onClick={() =>
+                          setExpandedRunId((current) =>
+                            current === run.id ? null : run.id,
+                          )
+                        }
                       >
                         {copy.actions.viewPayslip}
-                      </a>
+                      </button>
                     </div>
+                    {expandedRunId === run.id && runDetailsById.get(run.id) && (
+                      <div className="employee-self-service__payslip-preview">
+                        <div className="table-wrapper">
+                          <table className="data-table">
+                            <thead>
+                              <tr>
+                                <th>{language === "ar" ? "البند" : "Line"}</th>
+                                <th>{language === "ar" ? "النوع" : "Type"}</th>
+                                <th>{language === "ar" ? "القيمة" : "Amount"}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {runDetailsById.get(run.id)?.lines.map((line) => (
+                                <tr key={line.id}>
+                                  <td>{line.name}</td>
+                                  <td>{line.type}</td>
+                                  <td>{formatMoney(line.amount)}</td>
+                                </tr>
+                              ))}
+                              <tr>
+                                <td colSpan={2}>
+                                  <strong>{copy.labels.net}</strong>
+                                </td>
+                                <td>
+                                  <strong>
+                                    {formatMoney(
+                                      getRunNetTotal(
+                                        runDetailsById.get(run.id),
+                                        run.net_total,
+                                      ),
+                                    )}
+                                  </strong>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </article>
-                ))
+                ))                
               ) : (
                 <p className="helper-text">{copy.labels.emptyPayroll}</p>
               )}
