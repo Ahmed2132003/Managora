@@ -1,8 +1,14 @@
 import { useMemo, useState } from "react";
-import { useAlerts, useAgingReport } from "../../shared/accounting/hooks";
+import {
+  type AgingCustomerRow,
+  type AlertItem,
+  useAlerts,
+  useAgingReport,
+} from "../../shared/accounting/hooks";
 import { useInvoices } from "../../shared/invoices/hooks";
 import { DashboardShell } from "../DashboardShell";
-import { TablePagination, useClientPagination } from "../../shared/ui";
+import { TablePagination } from "../../shared/ui/TablePagination";
+import { useClientPagination } from "../../shared/ui/useClientPagination";
 import "./AgingReportPage.css";
 
 const bucketColors: Record<string, string> = {
@@ -27,7 +33,8 @@ export function AgingReportPage() {
 
   const selectedCustomerName = useMemo(() => {
     return (
-      agingQuery.data?.find((row) => row.customer.id === selectedCustomerId)?.customer
+      agingQuery.data?.find((row: AgingCustomerRow) => row.customer.id === selectedCustomerId)
+        ?.customer      
         .name ?? ""
     );
   }, [agingQuery.data, selectedCustomerId]);
@@ -205,7 +212,7 @@ export function AgingReportPage() {
                           </td>
                         </tr>
                       ) : (
-                        paginatedAgingRows.map((row) => (
+                        paginatedAgingRows.map((row: AgingCustomerRow) => (                          
                           <tr key={row.customer.id}>
                             <td>
                               <button
@@ -236,8 +243,8 @@ export function AgingReportPage() {
                   <TablePagination
                     page={agingPage}
                     totalPages={agingTotalPages}
-                    onPreviousPage={() => setAgingPage((prev) => prev - 1)}
-                    onNextPage={() => setAgingPage((prev) => prev + 1)}
+                    onPreviousPage={() => setAgingPage((prev: number) => prev - 1)}
+                    onNextPage={() => setAgingPage((prev: number) => prev + 1)}                    
                     disabled={!agingRows.length || agingQuery.isLoading}
                   />
                 </div>
@@ -276,7 +283,7 @@ export function AgingReportPage() {
                           </td>
                         </tr>
                       ) : (
-                        paginatedAlertsRows.map((alert) => (
+                        paginatedAlertsRows.map((alert: AlertItem) => (                          
                           <tr key={alert.id}>
                             <td>
                               <span
@@ -298,8 +305,8 @@ export function AgingReportPage() {
                   <TablePagination
                     page={alertsPage}
                     totalPages={alertsTotalPages}
-                    onPreviousPage={() => setAlertsPage((prev) => prev - 1)}
-                    onNextPage={() => setAlertsPage((prev) => prev + 1)}
+                    onPreviousPage={() => setAlertsPage((prev: number) => prev - 1)}
+                    onNextPage={() => setAlertsPage((prev: number) => prev + 1)}                    
                     disabled={!alertRows.length || alertsQuery.isLoading}
                   />
                 </div>
