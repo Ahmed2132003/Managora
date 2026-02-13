@@ -9,6 +9,70 @@ import { TablePagination } from "../../shared/ui/TablePagination";
 import { useClientPagination } from "../../shared/ui/useClientPagination";
 import "./BalanceSheetPage.css";
 
+
+type BalanceSheetSectionProps = {
+  title: string;
+  rows: BalanceSheetLine[];
+  tableLabels: { account: string; name: string; balance: string };
+  helperText: string;
+  noDataText: string;
+  renderBalance: (value: string | number) => string;
+};
+
+function BalanceSheetSection({
+  title,
+  rows,
+  tableLabels,
+  helperText,
+  noDataText,
+  renderBalance,
+}: BalanceSheetSectionProps) {
+  const { page, setPage, totalPages, paginatedRows } = useClientPagination(rows, 10);
+
+  return (
+    <section className="panel balance-sheet-section">
+      <div className="panel__header">
+        <div>
+          <h2>{title}</h2>
+          <p className="helper-text">{helperText}</p>
+        </div>
+      </div>
+
+      <div className="table-wrapper">
+        {rows.length === 0 ? (
+          <p className="helper-text">{noDataText}</p>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{tableLabels.account}</th>
+                <th>{tableLabels.name}</th>
+                <th style={{ textAlign: "end" }}>{tableLabels.balance}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedRows.map((row) => (
+                <tr key={`${title}-${row.code}-${row.name}`}>
+                  <td>{row.code}</td>
+                  <td>{row.name}</td>
+                  <td style={{ textAlign: "end" }}>{renderBalance(row.balance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <TablePagination
+          page={page}
+          totalPages={totalPages}
+          onPreviousPage={() => setPage((prev) => prev - 1)}
+          onNextPage={() => setPage((prev) => prev + 1)}
+          disabled={!rows.length}
+        />
+      </div>
+    </section>
+  );
+}
+
 export function BalanceSheetPage() {
   const [asOf, setAsOf] = useState("");
   const balanceSheetQuery = useBalanceSheet(asOf || undefined);
@@ -152,65 +216,6 @@ export function BalanceSheetPage() {
     []
   );
 
-  const renderSection = (
-    title: string,
-    rows: BalanceSheetLine[],
-    tableLabels: { account: string; name: string; balance: string },
-    helperText: string,
-    noDataText: string
-  ) => {
-    const {
-      page,
-      setPage,
-      totalPages,
-      paginatedRows,
-    } = useClientPagination(rows, 10);
-
-    return (
-      <section className="panel balance-sheet-section">
-        <div className="panel__header">
-          <div>
-            <h2>{title}</h2>
-            <p className="helper-text">{helperText}</p>
-          </div>
-        </div>
-
-        <div className="table-wrapper">
-          {rows.length === 0 ? (
-            <p className="helper-text">{noDataText}</p>
-          ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{tableLabels.account}</th>
-                  <th>{tableLabels.name}</th>
-                  <th style={{ textAlign: "end" }}>{tableLabels.balance}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedRows.map((row) => (
-                  <tr key={`${title}-${row.code}-${row.name}`}>
-                    <td>{row.code}</td>
-                    <td>{row.name}</td>
-                    <td style={{ textAlign: "end" }}>
-                      {formatAbsAmount(row.balance)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <TablePagination
-            page={page}
-            totalPages={totalPages}
-            onPreviousPage={() => setPage((prev) => prev - 1)}
-            onNextPage={() => setPage((prev) => prev + 1)}
-            disabled={!rows.length}
-          />
-        </div>
-      </section>
-    );
-  };
   if (balanceSheetQuery.error && isForbiddenError(balanceSheetQuery.error)) {
     return (
       <DashboardShell copy={headerCopy} className="balance-sheet-page">
@@ -262,27 +267,30 @@ export function BalanceSheetPage() {
               </section>
             ) : balanceSheetQuery.data ? (
               <div className="grid-panels balance-sheet-grid">                
-                {renderSection(
-                  labels.assets,
-                  balanceSheetQuery.data.assets,
-                  labels.table,
-                  labels.assetsHelper,
-                  labels.noData
-                )}
-                {renderSection(
-                  labels.liabilities,
-                  balanceSheetQuery.data.liabilities,
-                  labels.table,
-                  labels.liabilitiesHelper,
-                  labels.noData
-                )}
-                {renderSection(
-                  labels.equity,
-                  balanceSheetQuery.data.equity,
-                  labels.table,
-                  labels.equityHelper,
-                  labels.noData
-                )}
+                <BalanceSheetSection
+                  title={labels.assets}
+                  rows={balanceSheetQuery.data.assets}
+                  tableLabels={labels.table}
+                  helperText={labels.assetsHelper}
+                  noDataText={labels.noData}
+                  renderBalance={formatAbsAmount}
+                />
+                <BalanceSheetSection
+                  title={labels.liabilities}
+                  rows={balanceSheetQuery.data.liabilities}
+                  tableLabels={labels.table}
+                  helperText={labels.liabilitiesHelper}
+                  noDataText={labels.noData}
+                  renderBalance={formatAbsAmount}
+                />
+                <BalanceSheetSection
+                  title={labels.equity}
+                  rows={balanceSheetQuery.data.equity}
+                  tableLabels={labels.table}
+                  helperText={labels.equityHelper}
+                  noDataText={labels.noData}
+                  renderBalance={formatAbsAmount}
+                />
 
                 {(() => {
                   const dt = getDisplayTotals(balanceSheetQuery.data.totals);

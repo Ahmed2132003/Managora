@@ -137,12 +137,10 @@ export function AgingReportPage() {
     paginatedRows: paginatedAlertsRows,
   } = useClientPagination(alertRows, 10);
 
-  const totalSummary = useMemo(() => {
-    const rows = agingRows;
-    const totalDue = rows.reduce((sum, row) => sum + Number(row.total_due), 0);
-    const customers = rows.length;
-    return { totalDue, customers };
-  }, [agingQuery.data]);
+  const totalSummary = {
+    totalDue: agingRows.reduce((sum, row) => sum + Number(row.total_due), 0),
+    customers: agingRows.length,
+  };
 
   return (
     <DashboardShell copy={headerCopy} className="aging-report-page">
