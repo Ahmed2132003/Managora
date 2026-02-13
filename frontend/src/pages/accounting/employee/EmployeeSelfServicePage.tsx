@@ -355,12 +355,15 @@ export function EmployeeSelfServicePage() {
             const details = runDetailsQueries
               .map((query) => query.data)
               .find((item): item is PayrollRunDetail => item?.id === run.id);
-            if (!details?.period?.start_date || !details?.period?.end_date) {
-              return { id: run.id, payable: parseAmount(details?.net_total ?? run.net_total) };
+            if (!details) {
+              return null;
+            }
+            if (!details.period?.start_date || !details.period?.end_date) {
+              return { id: run.id, payable: parseAmount(details.net_total ?? run.net_total) };
             }
             const attendanceResponse = await http.get<AttendanceRecord[]>(
               endpoints.hr.attendanceRecords,
-              {
+              {                
                 params: {
                   date_from: details.period.start_date,
                   date_to: details.period.end_date,
@@ -394,10 +397,13 @@ export function EmployeeSelfServicePage() {
       setRunPayables((prev) => {
         const next = { ...prev };
         results.forEach((result) => {
+          if (!result) {
+            return;
+          }
           next[result.id] = result.payable;
         });
         return next;
-      });
+      });      
     }
 
     loadPayables();
