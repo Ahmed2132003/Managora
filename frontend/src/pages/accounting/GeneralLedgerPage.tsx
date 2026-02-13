@@ -6,6 +6,8 @@ import { useCan, hasPermission } from "../../shared/auth/useCan";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
+import { TablePagination } from "../../shared/ui/TablePagination";
+import { useClientPagination } from "../../shared/ui/useClientPagination";
 import { downloadCsv, formatAmount } from "../../shared/accounting/reporting.ts";
 import "../DashboardPage.css";
 
@@ -349,6 +351,13 @@ export function GeneralLedgerPage() {
       );
     });
   }, [ledgerQuery.data?.lines, searchTerm]);
+
+  const {
+    page,
+    setPage,
+    totalPages,
+    paginatedRows,
+  } = useClientPagination(filteredLines, 10);
 
   const totals = useMemo(() => {
     return filteredLines.reduce(
@@ -800,7 +809,7 @@ export function GeneralLedgerPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredLines.map((line) => (
+                    {paginatedRows.map((line) => (
                       <tr key={line.id}>
                         <td>{line.date}</td>
                         <td>{line.description || "-"}</td>
@@ -818,6 +827,13 @@ export function GeneralLedgerPage() {
               ) : (
                 <p className="helper-text">{content.table.empty}</p>
               )}
+              <TablePagination
+                page={page}
+                totalPages={totalPages}
+                onPreviousPage={() => setPage((prev) => prev - 1)}
+                onNextPage={() => setPage((prev) => prev + 1)}
+                disabled={!filteredLines.length || ledgerQuery.isLoading}
+              />
             </div>
           </section>
         </main>

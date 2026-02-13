@@ -416,7 +416,9 @@ export function useTrialBalance(dateFrom?: string, dateTo?: string) {
   return useQuery({    
     queryKey: ["trial-balance", dateFrom, dateTo],
     enabled: Boolean(dateFrom && dateTo),
-    queryFn: async () => {
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    queryFn: async () => {      
       const params = new URLSearchParams({
         date_from: dateFrom ?? "",
         date_to: dateTo ?? "",
@@ -432,7 +434,9 @@ export function useGeneralLedger(accountId?: number, dateFrom?: string, dateTo?:
   return useQuery({
     queryKey: ["general-ledger", accountId, dateFrom, dateTo],
     enabled: Boolean(accountId && dateFrom && dateTo),
-    queryFn: async () => {
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    queryFn: async () => {      
       const params = new URLSearchParams({
         account_id: String(accountId ?? ""),
         date_from: dateFrom ?? "",
@@ -449,7 +453,9 @@ export function useProfitLoss(dateFrom?: string, dateTo?: string) {
   return useQuery({
     queryKey: ["profit-loss", dateFrom, dateTo],
     enabled: Boolean(dateFrom && dateTo),
-    queryFn: async () => {
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    queryFn: async () => {      
       const params = new URLSearchParams({
         date_from: dateFrom ?? "",
         date_to: dateTo ?? "",
@@ -465,7 +471,9 @@ export function useBalanceSheet(asOf?: string) {
   return useQuery({
     queryKey: ["balance-sheet", asOf],
     enabled: Boolean(asOf),
-    queryFn: async () => {
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    queryFn: async () => {      
       const params = new URLSearchParams({ as_of: asOf ?? "" });
       const url = `${endpoints.reports.balanceSheet}?${params.toString()}`;
       const response = await http.get<BalanceSheetResponse>(url);
@@ -477,7 +485,9 @@ export function useBalanceSheet(asOf?: string) {
 export function useAgingReport() {
   return useQuery({
     queryKey: ["ar-aging"],
-    queryFn: async () => {
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    queryFn: async () => {      
       const response = await http.get<AgingCustomerRow[]>(endpoints.reports.arAging);
       return response.data;
     },

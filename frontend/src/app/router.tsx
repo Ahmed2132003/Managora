@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppLayout } from "../shared/ui/AppLayout.tsx";
 import { LoginPage } from "../pages/LoginPage.tsx";
@@ -22,11 +23,6 @@ import { AccountingSetupWizardPage } from "../pages/accounting/AccountingSetupWi
 import { JournalEntriesPage } from "../pages/accounting/JournalEntriesPage.tsx";
 import { JournalEntryDetailsPage } from "../pages/accounting/JournalEntryDetailsPage.tsx";
 import { ExpensesPage } from "../pages/accounting/ExpensesPage";
-import { TrialBalancePage } from "../pages/accounting/TrialBalancePage.tsx";
-import { GeneralLedgerPage } from "../pages/accounting/GeneralLedgerPage.tsx";
-import { ProfitLossPage } from "../pages/accounting/ProfitLossPage.tsx";
-import { BalanceSheetPage } from "../pages/accounting/BalanceSheetPage.tsx";
-import { AgingReportPage } from "../pages/accounting/AgingReportPage";
 import { CollectionsPage } from "../pages/accounting/CollectionsPage.tsx";
 import { CustomersPage } from "../pages/customers/CustomersPage";
 import { CustomerFormPage } from "../pages/customers/CustomerFormPage.tsx";
@@ -45,6 +41,36 @@ import { AuditLogsPage } from "../pages/admin/AuditLogsPage";
 import { AdminPanelPage } from "../pages/admin/AdminPanelPage";
 import { CatalogPage } from "../pages/catalog/CatalogPage";
 import { SalesPage } from "../pages/catalog/SalesPage.tsx";
+const TrialBalancePage = lazy(() =>
+  import("../pages/accounting/TrialBalancePage.tsx").then((module) => ({
+    default: module.TrialBalancePage,
+  }))
+);
+const GeneralLedgerPage = lazy(() =>
+  import("../pages/accounting/GeneralLedgerPage.tsx").then((module) => ({
+    default: module.GeneralLedgerPage,
+  }))
+);
+const ProfitLossPage = lazy(() =>
+  import("../pages/accounting/ProfitLossPage.tsx").then((module) => ({
+    default: module.ProfitLossPage,
+  }))
+);
+const BalanceSheetPage = lazy(() =>
+  import("../pages/accounting/BalanceSheetPage.tsx").then((module) => ({
+    default: module.BalanceSheetPage,
+  }))
+);
+const AgingReportPage = lazy(() =>
+  import("../pages/accounting/AgingReportPage").then((module) => ({
+    default: module.AgingReportPage,
+  }))
+);
+
+function withLazyLoad(element: JSX.Element) {
+  return <Suspense fallback={<p className="helper-text">Loading...</p>}>{element}</Suspense>;
+}
+
 export const router = createBrowserRouter([           
   {    
     path: "/login",
@@ -80,11 +106,11 @@ export const router = createBrowserRouter([
       { path: "accounting/journal-entries/:id", element: <JournalEntryDetailsPage /> },
       { path: "accounting/expenses", element: <ExpensesPage /> },
       { path: "collections", element: <CollectionsPage /> },      
-      { path: "accounting/reports/trial-balance", element: <TrialBalancePage /> },
-      { path: "accounting/reports/general-ledger", element: <GeneralLedgerPage /> },
-      { path: "accounting/reports/pnl", element: <ProfitLossPage /> },
-      { path: "accounting/reports/balance-sheet", element: <BalanceSheetPage /> },
-      { path: "accounting/reports/ar-aging", element: <AgingReportPage /> },      
+      { path: "accounting/reports/trial-balance", element: withLazyLoad(<TrialBalancePage />) },
+      { path: "accounting/reports/general-ledger", element: withLazyLoad(<GeneralLedgerPage />) },
+      { path: "accounting/reports/pnl", element: withLazyLoad(<ProfitLossPage />) },
+      { path: "accounting/reports/balance-sheet", element: withLazyLoad(<BalanceSheetPage />) },
+      { path: "accounting/reports/ar-aging", element: withLazyLoad(<AgingReportPage />) },      
       { path: "customers", element: <CustomersPage /> },
       { path: "customers/new", element: <CustomerFormPage /> },
       { path: "customers/:id/edit", element: <CustomerFormPage /> },

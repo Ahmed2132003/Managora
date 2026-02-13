@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { useAlerts, useAgingReport } from "../../shared/accounting/hooks";
 import { useInvoices } from "../../shared/invoices/hooks";
 import { DashboardShell } from "../DashboardShell";
+import { TablePagination } from "../../shared/ui/TablePagination";
+import { useClientPagination } from "../../shared/ui/useClientPagination";
 import "./AgingReportPage.css";
 
 const bucketColors: Record<string, string> = {
@@ -118,8 +120,25 @@ export function AgingReportPage() {
     },
   } as const;
 
+  const agingRows = agingQuery.data ?? [];
+  const alertRows = alertsQuery.data ?? [];
+
+  const {
+    page: agingPage,
+    setPage: setAgingPage,
+    totalPages: agingTotalPages,
+    paginatedRows: paginatedAgingRows,
+  } = useClientPagination(agingRows, 10);
+
+  const {
+    page: alertsPage,
+    setPage: setAlertsPage,
+    totalPages: alertsTotalPages,
+    paginatedRows: paginatedAlertsRows,
+  } = useClientPagination(alertRows, 10);
+
   const totalSummary = useMemo(() => {
-    const rows = agingQuery.data ?? [];
+    const rows = agingRows;
     const totalDue = rows.reduce((sum, row) => sum + Number(row.total_due), 0);
     const customers = rows.length;
     return { totalDue, customers };
@@ -182,14 +201,14 @@ export function AgingReportPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(agingQuery.data ?? []).length === 0 ? (
+                      {agingRows.length === 0 ? (
                         <tr>
                           <td colSpan={6}>
                             <span className="helper-text">{labels.empty}</span>
                           </td>
                         </tr>
                       ) : (
-                        (agingQuery.data ?? []).map((row) => (
+                        paginatedAgingRows.map((row) => (
                           <tr key={row.customer.id}>
                             <td>
                               <button
@@ -217,6 +236,13 @@ export function AgingReportPage() {
                       )}
                     </tbody>
                   </table>
+                  <TablePagination
+                    page={agingPage}
+                    totalPages={agingTotalPages}
+                    onPreviousPage={() => setAgingPage((prev) => prev - 1)}
+                    onNextPage={() => setAgingPage((prev) => prev + 1)}
+                    disabled={!agingRows.length || agingQuery.isLoading}
+                  />
                 </div>
               )}
             </section>
@@ -246,14 +272,14 @@ export function AgingReportPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(alertsQuery.data ?? []).length === 0 ? (
+                      {alertRows.length === 0 ? (
                         <tr>
                           <td colSpan={4}>
                             <span className="helper-text">{labels.alertsEmpty}</span>
                           </td>
                         </tr>
                       ) : (
-                        (alertsQuery.data ?? []).map((alert) => (
+                        paginatedAlertsRows.map((alert) => (
                           <tr key={alert.id}>
                             <td>
                               <span
@@ -272,6 +298,13 @@ export function AgingReportPage() {
                       )}
                     </tbody>
                   </table>
+                  <TablePagination
+                    page={alertsPage}
+                    totalPages={alertsTotalPages}
+                    onPreviousPage={() => setAlertsPage((prev) => prev - 1)}
+                    onNextPage={() => setAlertsPage((prev) => prev + 1)}
+                    disabled={!alertRows.length || alertsQuery.isLoading}
+                  />
                 </div>
               )}
             </section>

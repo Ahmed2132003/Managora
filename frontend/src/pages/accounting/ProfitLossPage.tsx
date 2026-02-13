@@ -6,6 +6,8 @@ import { useCan, hasPermission } from "../../shared/auth/useCan";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
+import { TablePagination } from "../../shared/ui/TablePagination";
+import { useClientPagination } from "../../shared/ui/useClientPagination";
 import { downloadCsv, formatAmount } from "../../shared/accounting/reporting.ts";
 import "../DashboardPage.css";
 
@@ -353,6 +355,13 @@ export function ProfitLossPage() {
     }
     return (netProfit / incomeTotal) * 100;
   }, [incomeTotal, netProfit]);
+
+  const {
+    page,
+    setPage,
+    totalPages,
+    paginatedRows,
+  } = useClientPagination(filteredRows, 10);
 
   function handleExport() {
     if (!pnlQuery.data) {
@@ -775,7 +784,7 @@ export function ProfitLossPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRows.map((row) => (
+                    {paginatedRows.map((row) => (
                       <tr key={row.account_id}>
                         <td>{row.code}</td>
                         <td>{row.name}</td>
@@ -790,6 +799,13 @@ export function ProfitLossPage() {
               ) : (
                 <p className="helper-text">{content.table.empty}</p>
               )}
+              <TablePagination
+                page={page}
+                totalPages={totalPages}
+                onPreviousPage={() => setPage((prev) => prev - 1)}
+                onNextPage={() => setPage((prev) => prev + 1)}
+                disabled={!filteredRows.length || pnlQuery.isLoading}
+              />
             </div>
           </section>
         </main>

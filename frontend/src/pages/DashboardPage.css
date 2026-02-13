@@ -726,6 +726,14 @@
   cursor: not-allowed;
 }
 
+.table-pagination {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 .status-pill {
   padding: 6px 12px;
   border-radius: 999px;

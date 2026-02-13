@@ -5,6 +5,8 @@ import { useCan } from "../../shared/auth/useCan";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { downloadCsv, formatAmount } from "../../shared/accounting/reporting";
 import { DashboardShell } from "../DashboardShell";
+import { TablePagination } from "../../shared/ui/TablePagination";
+import { useClientPagination } from "../../shared/ui/useClientPagination";
 import "./BalanceSheetPage.css";
 
 export function BalanceSheetPage() {
@@ -157,6 +159,13 @@ export function BalanceSheetPage() {
     helperText: string,
     noDataText: string
   ) => {
+    const {
+      page,
+      setPage,
+      totalPages,
+      paginatedRows,
+    } = useClientPagination(rows, 10);
+
     return (
       <section className="panel balance-sheet-section">
         <div className="panel__header">
@@ -179,7 +188,7 @@ export function BalanceSheetPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {paginatedRows.map((row) => (
                   <tr key={`${title}-${row.code}-${row.name}`}>
                     <td>{row.code}</td>
                     <td>{row.name}</td>
@@ -191,6 +200,13 @@ export function BalanceSheetPage() {
               </tbody>
             </table>
           )}
+          <TablePagination
+            page={page}
+            totalPages={totalPages}
+            onPreviousPage={() => setPage((prev) => prev - 1)}
+            onNextPage={() => setPage((prev) => prev + 1)}
+            disabled={!rows.length}
+          />
         </div>
       </section>
     );

@@ -6,6 +6,8 @@ import { useCan, hasPermission } from "../../shared/auth/useCan";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
+import { TablePagination } from "../../shared/ui/TablePagination";
+import { useClientPagination } from "../../shared/ui/useClientPagination";
 import { downloadCsv, formatAmount } from "../../shared/accounting/reporting.ts";
 import "../DashboardPage.css";
 
@@ -330,6 +332,13 @@ export function TrialBalancePage() {
       );
     });
   }, [rows, searchTerm]);
+
+  const {
+    page,
+    setPage,
+    totalPages,
+    paginatedRows,
+  } = useClientPagination(filteredRows, 10);
 
   const totals = useMemo(() => {
     return rows.reduce(
@@ -749,7 +758,7 @@ export function TrialBalancePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRows.map((row) => (
+                    {paginatedRows.map((row) => (
                       <tr key={row.account_id}>
                         <td>{row.code}</td>
                         <td>{row.name}</td>
@@ -763,6 +772,13 @@ export function TrialBalancePage() {
               ) : (
                 <p className="helper-text">{content.table.empty}</p>
               )}
+              <TablePagination
+                page={page}
+                totalPages={totalPages}
+                onPreviousPage={() => setPage((prev) => prev - 1)}
+                onNextPage={() => setPage((prev) => prev + 1)}
+                disabled={!filteredRows.length || trialBalanceQuery.isLoading}
+              />
             </div>
           </section>
         </main>
