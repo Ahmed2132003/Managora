@@ -436,15 +436,42 @@ class EmployeeDocumentListCreateView(ListCreateAPIView):
 
 @extend_schema(
     tags=["Employee Documents"],
+    summary="List or create my employee documents",
+)
+class MyEmployeeDocumentListCreateView(ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_employee(self):
+        employee = getattr(self.request.user, "employee_profile", None)
+        if not employee or employee.company_id != self.request.user.company_id:
+            raise PermissionDenied("Employee profile is required.")
+        if employee.is_deleted:
+            raise PermissionDenied("Deleted employee profiles cannot upload documents.")
+        return employee
+
+    def get_queryset(self):
+        employee = self.get_employee()
+        return EmployeeDocument.objects.filter(
+            company=self.request.user.company, employee=employee
+        ).order_by("id")
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return EmployeeDocumentCreateSerializer
+        return EmployeeDocumentSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["employee"] = self.get_employee()
+        return context
+
+
+@extend_schema(
+    tags=["Employee Documents"],
     summary="Download employee document",
 )
 class EmployeeDocumentDownloadView(APIView):
     permission_classes = [IsAuthenticated]
-
-    def get_permissions(self):
-        permissions = [permission() for permission in self.permission_classes]
-        permissions.append(HasAnyPermission(["hr.employees.view", "hr.documents.view"]))
-        return permissions
 
     def get(self, request, pk=None):
         document = get_object_or_404(EmployeeDocument.all_objects, pk=pk)
@@ -452,6 +479,13 @@ class EmployeeDocumentDownloadView(APIView):
             raise Http404
         if document.is_deleted:
             raise Http404
+        employee = getattr(request.user, "employee_profile", None)
+        has_document_access = user_has_permission(request.user, "hr.employees.view") or user_has_permission(
+            request.user, "hr.documents.view"
+        )
+        is_owner = employee and employee.id == document.employee_id
+        if not has_document_access and not is_owner:
+            raise PermissionDenied("You do not have permission to download this document.")
         return FileResponse(document.file.open("rb"), as_attachment=True)
 
 
@@ -462,16 +496,19 @@ class EmployeeDocumentDownloadView(APIView):
 class EmployeeDocumentDeleteView(DestroyAPIView):
     permission_classes = [IsAuthenticated]
 
-    def get_permissions(self):
-        permissions = [permission() for permission in self.permission_classes]
-        permissions.append(
-            HasAnyPermission(["hr.employees.edit", "hr.documents.delete"])
-        )
-        return permissions
 
     def get_queryset(self):
-        return EmployeeDocument.objects.filter(company=self.request.user.company)
-
+        employee = getattr(self.request.user, "employee_profile", None)
+        has_delete_access = user_has_permission(
+            self.request.user, "hr.employees.edit"
+        ) or user_has_permission(self.request.user, "hr.documents.delete")
+        queryset = EmployeeDocument.objects.filter(company=self.request.user.company)
+        if has_delete_access:
+            return queryset
+        if employee:
+            return queryset.filter(employee=employee)
+        return queryset.none()
+    
 
 def _parse_date_param(value, label):
     if not value:
@@ -1636,6 +1673,25 @@ class PayrollPeriodRunsListView(ListAPIView):
             PayrollRun.objects.filter(period=period)
             .select_related("employee")
             .order_by("employee__full_name")
+        )
+
+@extend_schema(
+    tags=["Payroll"],
+    summary="List my payroll runs",
+    responses={200: PayrollRunListSerializer(many=True)},
+)
+class PayrollRunMyListView(ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = PayrollRunListSerializer
+
+    def get_queryset(self):
+        employee = getattr(self.request.user, "employee_profile", None)
+        if not employee or employee.company_id != self.request.user.company_id:
+            return PayrollRun.objects.none()
+        return (
+            PayrollRun.objects.filter(company=self.request.user.company, employee=employee)
+            .select_related("employee")
+            .order_by("-generated_at", "-id")
         )
 
 

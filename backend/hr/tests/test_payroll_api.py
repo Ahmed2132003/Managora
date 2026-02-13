@@ -202,6 +202,23 @@ class PayrollApiTests(APITestCase):
         response = self.client.get(list_url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_employee_can_list_own_payroll_runs(self):
+        self._auth(self.hr_user)
+        period = PayrollPeriod.objects.create(
+            company=self.company,
+            year=2026,
+            month=1,
+        )
+        generate_url = reverse("payroll-period-generate", kwargs={"id": period.id})
+        self.client.post(generate_url, format="json")
+
+        self._auth(self.employee_user)
+        my_runs_url = reverse("payroll-run-my")
+        response = self.client.get(my_runs_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["employee"]["id"], self.employee.id)
+        
     def test_generate_blocked_after_lock(self):
         self._auth(self.hr_user)
         period = PayrollPeriod.objects.create(

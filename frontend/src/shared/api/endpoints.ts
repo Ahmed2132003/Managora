@@ -53,6 +53,7 @@ export const endpoints = {
     employeeSelectableUsers: api("/employees/selectable-users/"),
 
     employeeDocuments: (employeeId: number) => api(`/employees/${employeeId}/documents/`),
+    myEmployeeDocuments: api("/employees/my/documents/"),
     documentDownload: (id: number) => api(`/documents/${id}/download/`),
     documentDelete: (id: number) => api(`/documents/${id}/`),
 
@@ -96,7 +97,8 @@ export const endpoints = {
     payrollPeriodRuns: (id: number) => api(`/payroll/periods/${id}/runs/`),
     payrollPeriodLock: (id: number) => api(`/payroll/periods/${id}/lock/`),
     payrollRun: (id: number) => api(`/payroll/runs/${id}/`),
-    payrollRunMarkPaid: (id: number) => api(`/payroll/runs/${id}/mark-paid/`),
+    payrollRunsMy: api("/payroll/runs/my/"),
+    payrollRunMarkPaid: (id: number) => api(`/payroll/runs/${id}/mark-paid/`),    
     payrollRunPayslipPng: (id: number) => api(`/payroll/runs/${id}/payslip.png`),
     payrollRunPayslipPdf: (id: number) => api(`/payroll/runs/${id}/payslip.pdf`),
   },

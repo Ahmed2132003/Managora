@@ -544,6 +544,16 @@ export function useEmployeeDocuments(employeeId: number | null) {
   });
 }
 
+export function useMyEmployeeDocuments() {
+  return useQuery({
+    queryKey: ["hr", "employeeDocuments", "my"],
+    queryFn: async () => {
+      const response = await http.get<EmployeeDocument[]>(endpoints.hr.myEmployeeDocuments);
+      return response.data;
+    },
+  });
+}
+
 export function useSalaryStructures(params?: { employeeId?: number | null; enabled?: boolean }) {
   return useQuery({
     queryKey: ["hr", "salary-structures", params],
@@ -805,6 +815,27 @@ export function useUploadEmployeeDocument() {
       formData.append("file", payload.file);
       const response = await http.post<EmployeeDocument>(
         endpoints.hr.employeeDocuments(payload.employeeId),
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useUploadMyEmployeeDocument() {
+  return useMutation({
+    mutationFn: async (payload: Omit<UploadDocumentPayload, "employeeId">) => {
+      const formData = new FormData();
+      formData.append("doc_type", payload.doc_type);
+      formData.append("title", payload.title);
+      formData.append("file", payload.file);
+      const response = await http.post<EmployeeDocument>(
+        endpoints.hr.myEmployeeDocuments,
         formData,
         {
           headers: {
@@ -1203,6 +1234,16 @@ export function usePayrollRun(runId: number | null) {
       return response.data;
     },
     enabled: Boolean(runId),
+  });
+}
+
+export function useMyPayrollRuns() {
+  return useQuery({
+    queryKey: ["payroll", "runs", "my"],
+    queryFn: async () => {
+      const response = await http.get<PayrollRun[]>(endpoints.hr.payrollRunsMy);
+      return response.data;
+    },
   });
 }
 

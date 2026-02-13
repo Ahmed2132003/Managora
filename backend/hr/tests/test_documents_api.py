@@ -37,7 +37,12 @@ class EmployeeDocumentApiTests(APITestCase):
             password="pass12345",
             company=self.c2,
         )
-
+        self.employee_user = User.objects.create_user(
+            username="employee",
+            password="pass12345",
+            company=self.c1,
+        )
+        
         self.hr_role = Role.objects.create(company=self.c1, name="HR")
         self.manager_role = Role.objects.create(company=self.c1, name="Manager")
         self.other_role = Role.objects.create(company=self.c2, name="HR")
@@ -80,7 +85,8 @@ class EmployeeDocumentApiTests(APITestCase):
             full_name="Alice Smith",
             hire_date="2022-01-01",
             status=Employee.Status.ACTIVE,
-        )
+            user=self.employee_user,
+        )        
         self.other_employee = Employee.objects.create(
             company=self.c2,
             employee_code="EMP-2",
@@ -165,3 +171,29 @@ class EmployeeDocumentApiTests(APITestCase):
         self.auth("other")
         res = self.client.get(download_url)
         self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_employee_can_manage_own_documents_without_hr_permissions(self):
+        upload = SimpleUploadedFile(
+            "id.pdf", b"id-content", content_type="application/pdf"
+        )
+        document = EmployeeDocument.objects.create(
+            company=self.c1,
+            employee=self.employee,
+            doc_type=EmployeeDocument.DocumentType.ID,
+            file=upload,
+            uploaded_by=self.hr_user,
+        )
+
+        self.auth("employee")
+        my_docs_url = reverse("my-employee-documents")
+        list_res = self.client.get(my_docs_url)
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_res.data), 1)
+
+        download_url = reverse("employee-document-download", kwargs={"pk": document.id})
+        download_res = self.client.get(download_url)
+        self.assertEqual(download_res.status_code, status.HTTP_200_OK)
+
+        delete_url = reverse("employee-document-delete", kwargs={"pk": document.id})
+        delete_res = self.client.delete(delete_url)
+        self.assertEqual(delete_res.status_code, status.HTTP_204_NO_CONTENT)

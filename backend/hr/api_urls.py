@@ -33,6 +33,7 @@ from hr.views import (
     EmployeeDocumentDeleteView,
     EmployeeDocumentDownloadView,
     EmployeeDocumentListCreateView,
+    MyEmployeeDocumentListCreateView,    
     EmployeeDefaultsView,
     EmployeeSelectableUsersView,
     EmployeeViewSet,          
@@ -43,6 +44,7 @@ from hr.views import (
     PayrollPeriodRunsListView,
     PayrollRunDetailView,
     PayrollRunMarkPaidView,
+    PayrollRunMyListView,    
     PayrollRunPayslipPNGView,
     PayrollRunPayslipPDFView,
     PolicyRuleViewSet,
@@ -74,7 +76,8 @@ urlpatterns = [
     path("employees/defaults/", EmployeeDefaultsView.as_view(), name="employee-defaults"),
 
     path("employees/<int:employee_id>/documents/", EmployeeDocumentListCreateView.as_view(), name="employee-documents"),
-    path("documents/<int:pk>/download/", EmployeeDocumentDownloadView.as_view(), name="employee-document-download"),
+    path("employees/my/documents/", MyEmployeeDocumentListCreateView.as_view(), name="my-employee-documents"),
+    path("documents/<int:pk>/download/", EmployeeDocumentDownloadView.as_view(), name="employee-document-download"),    
     path("documents/<int:pk>/", EmployeeDocumentDeleteView.as_view(), name="employee-document-delete"),
 
     # =========================
@@ -121,6 +124,7 @@ urlpatterns = [
     path("payroll/periods/<int:id>/runs/", PayrollPeriodRunsListView.as_view(), name="payroll-period-runs"),
     path("payroll/periods/<int:id>/lock/", PayrollPeriodLockView.as_view(), name="payroll-period-lock"),
     path("payroll/runs/<int:id>/", PayrollRunDetailView.as_view(), name="payroll-run-detail"),
+    path("payroll/runs/my/", PayrollRunMyListView.as_view(), name="payroll-run-my"),    
     path("payroll/runs/<int:id>/mark-paid/", PayrollRunMarkPaidView.as_view(), name="payroll-run-mark-paid"),
     path("payroll/runs/<int:id>/payslip.png", PayrollRunPayslipPNGView.as_view(), name="payroll-run-payslip-png"),
     path("payroll/runs/<int:id>/payslip.pdf", PayrollRunPayslipPDFView.as_view(), name="payroll-run-payslip-pdf"),
