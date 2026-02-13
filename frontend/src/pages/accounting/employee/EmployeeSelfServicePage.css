@@ -1,33 +1,67 @@
 .employee-self-service__content {
   display: grid;
-  gap: 1rem;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .employee-self-service__card {
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: 12px;
-  padding: 0.75rem;
-  margin-bottom: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 12px;
+  background: var(--bg-alt);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
 }
 
 .employee-self-service__actions {
   display: flex;
-  gap: 0.75rem;
+  gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .employee-self-service__upload {
   display: grid;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: end;
+}
+
+.employee-self-service .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.employee-self-service .form-field > span {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.employee-self-service .form-field input,
+.employee-self-service .form-field select {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: var(--bg-alt);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.employee-self-service .form-field input[type="file"] {
+  cursor: pointer;
+  padding: 8px 10px;
 }
 
 .employee-self-service__shortcuts {
   display: grid;
-  gap: 0.75rem;
+  gap: 12px;
 }
+
 .employee-self-service__payslip-preview {
-  margin-top: 0.75rem;
+  margin-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -37,6 +71,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 16px;
+  
 }
 
 .employee-self-service__payslip-preview .payroll-period-details__summary-grid {
@@ -61,4 +96,14 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .employee-self-service__upload {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .employee-self-service__card {
+    padding: 12px;
+  }
 }

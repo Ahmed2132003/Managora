@@ -48,7 +48,8 @@ type Copy = Record<
       docType: string;
       docTitle: string;
       file: string;
-    };
+      uploadDocument: string;
+    };    
     notifications: {
       uploadSuccess: string;
       uploadError: string;
@@ -85,7 +86,8 @@ const pageCopy: Copy = {
       docType: "Document Type",
       docTitle: "Title",
       file: "File",
-    },
+      uploadDocument: "Upload employee document",
+    },    
     notifications: {
       uploadSuccess: "Document uploaded successfully.",
       uploadError: "Failed to upload document.",
@@ -119,7 +121,8 @@ const pageCopy: Copy = {
       docType: "نوع المستند",
       docTitle: "العنوان",
       file: "الملف",
-    },
+      uploadDocument: "رفع مستند الموظف",
+    },    
     notifications: {
       uploadSuccess: "تم رفع المستند بنجاح.",
       uploadError: "فشل رفع المستند.",
@@ -674,22 +677,31 @@ export function EmployeeSelfServicePage() {
                 <h2>{copy.sections.documents}</h2>
               </div>
               <div className="employee-self-service__upload">
-                <input
-                  value={docType}
-                  onChange={(event) => setDocType(event.target.value)}
-                  placeholder={copy.labels.docType}
-                />
-                <input
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder={copy.labels.docTitle}
-                />
-                <input
-                  type="file"
-                  onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                />
+                <label className="form-field">
+                  <span>{copy.labels.docType}</span>
+                  <input
+                    value={docType}
+                    onChange={(event) => setDocType(event.target.value)}
+                    placeholder={copy.labels.docType}
+                  />
+                </label>
+                <label className="form-field">
+                  <span>{copy.labels.docTitle}</span>
+                  <input
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    placeholder={copy.labels.docTitle}
+                  />
+                </label>
+                <label className="form-field">
+                  <span>{copy.labels.uploadDocument}</span>
+                  <input
+                    type="file"
+                    onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                  />
+                </label>
                 <button
-                  className="btn btn--primary"
+                  className="btn btn--primary"                  
                   type="button"
                   disabled={!file || uploadMutation.isPending}
                   onClick={() => handleUpload(copy)}
