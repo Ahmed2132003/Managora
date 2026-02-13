@@ -28,4 +28,37 @@
 }
 .employee-self-service__payslip-preview {
   margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.employee-self-service__payslip-preview .payroll-period-details__detail-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.employee-self-service__payslip-preview .payroll-period-details__summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.employee-self-service__payslip-preview .payroll-period-details__detail-summary div,
+.employee-self-service__payslip-preview .payroll-period-details__summary-grid div,
+.employee-self-service__payslip-preview .payroll-period-details__footer-grid div {
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.employee-self-service__payslip-preview .payroll-period-details__footer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
 }

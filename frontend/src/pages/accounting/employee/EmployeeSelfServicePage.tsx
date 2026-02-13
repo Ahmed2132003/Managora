@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
 import { useQueries } from "@tanstack/react-query";
@@ -8,11 +8,14 @@ import {
   useDeleteEmployeeDocument,
   useMyEmployeeDocuments,
   useMyPayrollRuns,
+  type AttendanceRecord,
   type PayrollRunDetail,
+  useAttendanceRecordsQuery,
   useUploadMyEmployeeDocument,
 } from "../../../shared/hr/hooks";
 import { http } from "../../../shared/api/http";
 import { endpoints } from "../../../shared/api/endpoints";
+import { useMe } from "../../../shared/auth/useMe";
 import "./EmployeeSelfServicePage.css";
 
 type Language = "en" | "ar";
@@ -128,7 +131,10 @@ const pageCopy: Copy = {
 
 export function EmployeeSelfServicePage() {
   const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
-  const runsQuery = useMyPayrollRuns();  
+  const [runPayables, setRunPayables] = useState<Record<number, number>>({});
+  const [hrName, setHrName] = useState("-");
+  const runsQuery = useMyPayrollRuns();
+  const meQuery = useMe();
   const runDetailsQueries = useQueries({
     queries: (runsQuery.data ?? []).map((run) => ({
       queryKey: ["payroll", "runs", run.id, "self-service"],
@@ -148,6 +154,42 @@ export function EmployeeSelfServicePage() {
   const [docType, setDocType] = useState("other");
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
+
+  const expandedRunDetails = useMemo(
+    () =>
+      expandedRunId != null
+        ? runDetailsQueries
+            .map((query) => query.data)
+            .find((run): run is PayrollRunDetail => run?.id === expandedRunId) ?? null
+        : null,
+    [expandedRunId, runDetailsQueries],
+  );
+
+  const expandedRunRange = useMemo(() => {
+    const dateFrom = expandedRunDetails?.period?.start_date;
+    const dateTo = expandedRunDetails?.period?.end_date;
+    if (!dateFrom || !dateTo) {
+      return null;
+    }
+    const start = new Date(dateFrom);
+    const end = new Date(dateTo);
+    const days = Math.max(
+      Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+      1,
+    );
+    return { dateFrom, dateTo, days };
+  }, [expandedRunDetails]);
+
+  const attendanceQuery = useAttendanceRecordsQuery(
+    {
+      dateFrom: expandedRunRange?.dateFrom,
+      dateTo: expandedRunRange?.dateTo,
+      employeeId: expandedRunDetails?.employee?.id
+        ? String(expandedRunDetails.employee.id)
+        : undefined,
+    },
+    Boolean(expandedRunDetails?.employee?.id && expandedRunRange),
+  );
 
   async function handleUpload(copy: Copy[Language]) {
     if (!file) return;
@@ -197,15 +239,217 @@ export function EmployeeSelfServicePage() {
     return parseAmount(value).toFixed(2);
   }
 
-  function getRunNetTotal(run: PayrollRunDetail | undefined, fallback: string) {
-    if (!run?.lines?.length) {
-      return parseAmount(run?.net_total ?? fallback);
+  function resolveDailyRateByPeriod(
+    periodType: "monthly" | "weekly" | "daily" | undefined,
+    basicSalary: number,
+  ) {
+    if (!basicSalary) return null;
+    if (periodType === "daily") return basicSalary;
+    if (periodType === "weekly") return basicSalary / 7;
+    return basicSalary / 30;
+  }
+
+  function buildRunSummary(
+    run: PayrollRunDetail | null | undefined,
+    attendanceRecords: AttendanceRecord[],
+    periodRange: { dateFrom: string; dateTo: string; days: number } | null,
+  ) {
+    if (!run || !periodRange) {
+      return null;
     }
 
-    return run.lines.reduce((total, line) => {
-      const amount = parseAmount(line.amount);
-      return line.type === "deduction" ? total - amount : total + amount;
-    }, 0);
+    const records = attendanceRecords ?? [];
+    const presentDays = records.filter((record) => record.status !== "absent").length;
+    const absentDays = Math.max(periodRange.days - presentDays, 0);
+    const lateMinutes = records.reduce(
+      (sum, record) => sum + (record.late_minutes ?? 0),
+      0,
+    );
+    const lines = run.lines ?? [];
+    const basicLine = lines.find((line) => line.code.toUpperCase() === "BASIC");
+    const basicAmount = basicLine ? parseAmount(basicLine.amount) : 0;
+    const metaRate = basicLine?.meta?.rate;
+    const dailyRate = metaRate
+      ? parseAmount(metaRate)
+      : resolveDailyRateByPeriod(run.period.period_type, basicAmount);
+
+    const bonuses = lines
+      .filter(
+        (line) =>
+          line.type === "earning" &&
+          line.code.toUpperCase() !== "BASIC" &&
+          !line.code.toUpperCase().startsWith("COMM-"),
+      )
+      .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+    const commissions = lines
+      .filter((line) => line.type === "earning" && line.code.toUpperCase().startsWith("COMM-"))
+      .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+    const deductions = lines
+      .filter(
+        (line) => line.type === "deduction" && !line.code.toUpperCase().startsWith("LOAN-"),
+      )
+      .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+    const advances = lines
+      .filter((line) => line.type === "deduction" && line.code.toUpperCase().startsWith("LOAN-"))
+      .reduce((sum, line) => sum + parseAmount(line.amount), 0);
+
+    return {
+      presentDays,
+      absentDays,
+      lateMinutes,
+      bonuses,
+      commissions,
+      deductions,
+      advances,
+      dailyRate: dailyRate ?? 0,
+    };
+  }
+
+  function calculatePayableTotal(summary: ReturnType<typeof buildRunSummary>) {
+    if (!summary) return null;
+    return (
+      summary.presentDays * summary.dailyRate +
+      summary.bonuses +
+      summary.commissions -
+      summary.deductions -
+      summary.advances
+    );
+  }
+
+  const expandedRunSummary = useMemo(
+    () => buildRunSummary(expandedRunDetails, attendanceQuery.data ?? [], expandedRunRange),
+    [attendanceQuery.data, expandedRunDetails, expandedRunRange],
+  );
+  const expandedRunPayable = useMemo(() => {
+    const calculated = calculatePayableTotal(expandedRunSummary);
+    return calculated ?? parseAmount(expandedRunDetails?.net_total ?? 0);
+  }, [expandedRunDetails?.net_total, expandedRunSummary]);
+
+  const currentUserName = useMemo(() => {
+    const user = meQuery.data?.user;
+    if (!user) {
+      return "-";
+    }
+    const fullName = `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim();
+    return fullName || user.username || "-";
+  }, [meQuery.data?.user]);
+
+  const roleNames = useMemo(() => {
+    const currentRoles = meQuery.data?.roles ?? [];
+    return currentRoles.map((role) => (role.slug || role.name).toLowerCase());
+  }, [meQuery.data?.roles]);
+
+  const isSuperUser = meQuery.data?.user.is_superuser ?? false;
+  const managerName = roleNames.includes("manager") || isSuperUser ? currentUserName : "-";
+
+  useEffect(() => {
+    const runs = runsQuery.data ?? [];
+    const missingRuns = runs.filter((run) => runPayables[run.id] == null);
+    if (missingRuns.length === 0) return;
+
+    let cancelled = false;
+    async function loadPayables() {
+      const results = await Promise.all(
+        missingRuns.map(async (run) => {
+          try {
+            const details = runDetailsQueries
+              .map((query) => query.data)
+              .find((item): item is PayrollRunDetail => item?.id === run.id);
+            if (!details?.period?.start_date || !details?.period?.end_date) {
+              return { id: run.id, payable: parseAmount(details?.net_total ?? run.net_total) };
+            }
+            const attendanceResponse = await http.get<AttendanceRecord[]>(
+              endpoints.hr.attendanceRecords,
+              {
+                params: {
+                  date_from: details.period.start_date,
+                  date_to: details.period.end_date,
+                  employee_id: run.employee.id,
+                },
+              },
+            );
+            const start = new Date(details.period.start_date);
+            const end = new Date(details.period.end_date);
+            const periodRange = {
+              dateFrom: details.period.start_date,
+              dateTo: details.period.end_date,
+              days: Math.max(
+                Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+                1,
+              ),
+            };
+            const summary = buildRunSummary(details, attendanceResponse.data ?? [], periodRange);
+            const calculated = calculatePayableTotal(summary);
+            return {
+              id: run.id,
+              payable: calculated ?? parseAmount(details.net_total ?? run.net_total),
+            };
+          } catch {
+            return { id: run.id, payable: parseAmount(run.net_total) };
+          }
+        }),
+      );
+
+      if (cancelled) return;
+      setRunPayables((prev) => {
+        const next = { ...prev };
+        results.forEach((result) => {
+          next[result.id] = result.payable;
+        });
+        return next;
+      });
+    }
+
+    loadPayables();
+    return () => {
+      cancelled = true;
+    };
+  }, [runDetailsQueries, runPayables, runsQuery.data]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHrUser() {
+      try {
+        const response = await http.get<
+          {
+            id: number;
+            username: string;
+            first_name?: string | null;
+            last_name?: string | null;
+            roles?: { name?: string | null; slug?: string | null }[];
+          }[]
+        >(endpoints.users);
+        const users = response.data ?? [];
+        const hrUser = users.find((user) =>
+          (user.roles ?? []).some(
+            (role) => (role.slug || role.name || "").toLowerCase() === "hr",
+          ),
+        );
+        if (!cancelled) {
+          const first = hrUser?.first_name?.trim() ?? "";
+          const last = hrUser?.last_name?.trim() ?? "";
+          const fullName = `${first} ${last}`.trim();
+          setHrName(fullName || hrUser?.username || "-");
+        }
+      } catch {
+        if (!cancelled) {
+          setHrName("-");
+        }
+      }
+    }
+
+    loadHrUser();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function getRunNetTotal(runId: number, fallback: string) {
+    if (runPayables[runId] != null) {
+      return runPayables[runId];
+    }
+    return parseAmount(fallback);
   }
 
   return (
@@ -250,7 +494,7 @@ export function EmployeeSelfServicePage() {
                     </p>
                     <p>
                       <strong>{copy.labels.net}:</strong>{" "}
-                      {formatMoney(getRunNetTotal(runDetailsById.get(run.id), run.net_total))}
+                      {formatMoney(getRunNetTotal(run.id, run.net_total))}
                     </p>
                     <div className="employee-self-service__actions">
                       <button
@@ -267,6 +511,75 @@ export function EmployeeSelfServicePage() {
                     </div>
                     {expandedRunId === run.id && runDetailsById.get(run.id) && (
                       <div className="employee-self-service__payslip-preview">
+                        <div className="payroll-period-details__detail-summary">
+                          <div>
+                            <span className="helper-text">
+                              {language === "ar" ? "الأساسي" : "Basic"}
+                            </span>
+                            <strong>
+                              {formatMoney(
+                                runDetailsById
+                                  .get(run.id)
+                                  ?.lines.find((line) => line.code.toUpperCase() === "BASIC")
+                                  ?.amount ?? run.earnings_total,
+                              )}
+                            </strong>
+                          </div>
+                          <div>
+                            <span className="helper-text">{copy.labels.net}</span>
+                            <strong>{formatMoney(expandedRunPayable)}</strong>
+                          </div>
+                        </div>
+                        {expandedRunSummary && (
+                          <div className="payroll-period-details__summary-grid">
+                            <div>
+                              <span className="helper-text">
+                                {language === "ar" ? "أيام الحضور" : "Attendance days"}
+                              </span>
+                              <strong>{expandedRunSummary.presentDays}</strong>
+                            </div>
+                            <div>
+                              <span className="helper-text">
+                                {language === "ar" ? "أيام الغياب" : "Absence days"}
+                              </span>
+                              <strong>{expandedRunSummary.absentDays}</strong>
+                            </div>
+                            <div>
+                              <span className="helper-text">
+                                {language === "ar" ? "دقائق التأخير" : "Late minutes"}
+                              </span>
+                              <strong>{expandedRunSummary.lateMinutes}</strong>
+                            </div>
+                            <div>
+                              <span className="helper-text">
+                                {language === "ar" ? "المكافآت" : "Bonuses"}
+                              </span>
+                              <strong>{formatMoney(expandedRunSummary.bonuses)}</strong>
+                            </div>
+                            <div>
+                              <span className="helper-text">
+                                {language === "ar" ? "العمولات" : "Commissions"}
+                              </span>
+                              <strong>{formatMoney(expandedRunSummary.commissions)}</strong>
+                            </div>
+                            <div>
+                              <span className="helper-text">
+                                {language === "ar" ? "الخصومات" : "Deductions"}
+                              </span>
+                              <strong>{formatMoney(expandedRunSummary.deductions)}</strong>
+                            </div>
+                            <div>
+                              <span className="helper-text">
+                                {language === "ar" ? "السلف" : "Advances"}
+                              </span>
+                              <strong>{formatMoney(expandedRunSummary.advances)}</strong>
+                            </div>
+                            <div>
+                              <span className="helper-text">{copy.labels.net}</span>
+                              <strong>{formatMoney(expandedRunPayable)}</strong>
+                            </div>
+                          </div>
+                        )}
                         <div className="table-wrapper">
                           <table className="data-table">
                             <thead>
@@ -290,17 +603,32 @@ export function EmployeeSelfServicePage() {
                                 </td>
                                 <td>
                                   <strong>
-                                    {formatMoney(
-                                      getRunNetTotal(
-                                        runDetailsById.get(run.id),
-                                        run.net_total,
-                                      ),
-                                    )}
+                                    {formatMoney(expandedRunPayable)}
                                   </strong>
                                 </td>
                               </tr>
                             </tbody>
                           </table>
+                        </div>
+                        <div className="payroll-period-details__footer-grid">
+                          <div>
+                            <span className="helper-text">
+                              {language === "ar" ? "الشركة" : "Company"}
+                            </span>
+                            <strong>{meQuery.data?.company.name ?? "-"}</strong>
+                          </div>
+                          <div>
+                            <span className="helper-text">
+                              {language === "ar" ? "المدير" : "Manager"}
+                            </span>
+                            <strong>{managerName}</strong>
+                          </div>
+                          <div>
+                            <span className="helper-text">
+                              {language === "ar" ? "الموارد البشرية" : "HR"}
+                            </span>
+                            <strong>{hrName}</strong>
+                          </div>
                         </div>
                       </div>
                     )}
