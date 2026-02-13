@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { isForbiddenError } from "../../shared/api/errors";
-import { useProfitLoss } from "../../shared/accounting/hooks";
+import {
+  type ProfitLossAccount,
+  useProfitLoss,
+} from "../../shared/accounting/hooks";
 import { useCan, hasPermission } from "../../shared/auth/useCan";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
-import { TablePagination } from "../../shared/ui/TablePagination";
-import { useClientPagination } from "../../shared/ui/useClientPagination";
+import { TablePagination, useClientPagination } from "../../shared/ui";
 import { downloadCsv, formatAmount } from "../../shared/accounting/reporting.ts";
 import "../DashboardPage.css";
 
@@ -315,7 +317,7 @@ export function ProfitLossPage() {
   const pnlQuery = useProfitLoss(dateFrom || undefined, dateTo || undefined);
   const canExport = useCan("export.accounting");
 
-  const allRows = useMemo(() => {
+  const allRows = useMemo<ProfitLossAccount[]>(() => {    
     if (!pnlQuery.data) {
       return [];
     }
@@ -340,7 +342,7 @@ export function ProfitLossPage() {
     if (!query) {
       return allRows;      
     }
-    return allRows.filter((row) => {
+    return allRows.filter((row: ProfitLossAccount) => {      
       return (
         row.code.toLowerCase().includes(query) ||
         row.name.toLowerCase().includes(query) ||
@@ -784,7 +786,7 @@ export function ProfitLossPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedRows.map((row) => (
+                    {paginatedRows.map((row: ProfitLossAccount) => (                      
                       <tr key={row.account_id}>
                         <td>{row.code}</td>
                         <td>{row.name}</td>
@@ -802,8 +804,8 @@ export function ProfitLossPage() {
               <TablePagination
                 page={page}
                 totalPages={totalPages}
-                onPreviousPage={() => setPage((prev) => prev - 1)}
-                onNextPage={() => setPage((prev) => prev + 1)}
+                onPreviousPage={() => setPage((prev: number) => prev - 1)}
+                onNextPage={() => setPage((prev: number) => prev + 1)}                
                 disabled={!filteredRows.length || pnlQuery.isLoading}
               />
             </div>
