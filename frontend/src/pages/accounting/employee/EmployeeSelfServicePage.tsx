@@ -445,7 +445,14 @@ export function EmployeeSelfServicePage() {
     };
   }, []);
 
-  function getRunNetTotal(runId: number, fallback: string) {
+  function getRunNetTotal(
+    runId: number,
+    fallback: string,
+    expandedPayable: number | null,
+  ) {
+    if (expandedRunId === runId && expandedPayable != null) {
+      return expandedPayable;
+    }
     if (runPayables[runId] != null) {
       return runPayables[runId];
     }
@@ -494,8 +501,10 @@ export function EmployeeSelfServicePage() {
                     </p>
                     <p>
                       <strong>{copy.labels.net}:</strong>{" "}
-                      {formatMoney(getRunNetTotal(run.id, run.net_total))}
-                    </p>
+                      {formatMoney(
+                        getRunNetTotal(run.id, run.net_total, expandedRunPayable),
+                      )}
+                    </p>                    
                     <div className="employee-self-service__actions">
                       <button
                         type="button"
