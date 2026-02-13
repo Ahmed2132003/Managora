@@ -2,8 +2,7 @@ import { useMemo, useState } from "react";
 import { useAlerts, useAgingReport } from "../../shared/accounting/hooks";
 import { useInvoices } from "../../shared/invoices/hooks";
 import { DashboardShell } from "../DashboardShell";
-import { TablePagination } from "../../shared/ui/TablePagination";
-import { useClientPagination } from "../../shared/ui/useClientPagination";
+import { TablePagination, useClientPagination } from "../../shared/ui";
 import "./AgingReportPage.css";
 
 const bucketColors: Record<string, string> = {

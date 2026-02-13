@@ -5,8 +5,7 @@ import { useCan } from "../../shared/auth/useCan";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { downloadCsv, formatAmount } from "../../shared/accounting/reporting";
 import { DashboardShell } from "../DashboardShell";
-import { TablePagination } from "../../shared/ui/TablePagination";
-import { useClientPagination } from "../../shared/ui/useClientPagination";
+import { TablePagination, useClientPagination } from "../../shared/ui";
 import "./BalanceSheetPage.css";
 
 
