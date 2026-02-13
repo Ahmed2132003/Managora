@@ -1,5 +1,6 @@
 import datetime
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -51,19 +52,21 @@ class LeaveServicesTests(TestCase):
             used_days=Decimal("2"),
         )
 
-        leave_request = request_leave(
-            self.user,
-            {
-                "employee": self.employee,
-                "leave_type": self.leave_type,
-                "start_date": datetime.date(2025, 5, 1),
-                "end_date": datetime.date(2025, 5, 3),
-                "reason": "Vacation",
-            },
-        )
+        with patch("hr.services.leaves.send_role_aware_leave_notifications") as notify_mock:
+            leave_request = request_leave(
+                self.user,
+                {
+                    "employee": self.employee,
+                    "leave_type": self.leave_type,
+                    "start_date": datetime.date(2025, 5, 1),
+                    "end_date": datetime.date(2025, 5, 3),
+                    "reason": "Vacation",
+                },
+            )
 
         self.assertEqual(leave_request.days, Decimal("3"))
         self.assertEqual(leave_request.status, LeaveRequest.Status.PENDING)
+        notify_mock.assert_called_once_with(event="submitted", leave_request=leave_request, actor=self.user)
         balance.refresh_from_db()
         self.assertEqual(balance.used_days, Decimal("2"))
 
@@ -119,18 +122,20 @@ class LeaveServicesTests(TestCase):
             used_days=Decimal("1"),
         )
 
-        leave_request = request_leave(
-            self.user,
-            {
-                "employee": self.employee,
-                "leave_type": self.leave_type,
-                "start_date": datetime.date(2025, 8, 1),
-                "end_date": datetime.date(2025, 8, 2),
-            },
-        )
+        with patch("hr.services.leaves.send_role_aware_leave_notifications") as notify_mock:
+            leave_request = request_leave(
+                self.user,
+                {
+                    "employee": self.employee,
+                    "leave_type": self.leave_type,
+                    "start_date": datetime.date(2025, 8, 1),
+                    "end_date": datetime.date(2025, 8, 2),
+                },
+            )
+            approved = approve_leave(self.approver, leave_request.id)
 
-        approved = approve_leave(self.approver, leave_request.id)
         self.assertEqual(approved.status, LeaveRequest.Status.APPROVED)
+        self.assertEqual(notify_mock.call_count, 2)
 
         balance = LeaveBalance.objects.get(
             company=self.company,
@@ -149,17 +154,20 @@ class LeaveServicesTests(TestCase):
             allocated_days=Decimal("10"),
             used_days=Decimal("4"),
         )
-        leave_request = request_leave(
-            self.user,
-            {
-                "employee": self.employee,
-                "leave_type": self.leave_type,
-                "start_date": datetime.date(2025, 9, 1),
-                "end_date": datetime.date(2025, 9, 1),
-            },
-        )
 
-        rejected = reject_leave(self.approver, leave_request.id, "Not allowed")
+        with patch("hr.services.leaves.send_role_aware_leave_notifications") as notify_mock:
+            leave_request = request_leave(
+                self.user,
+                {
+                    "employee": self.employee,
+                    "leave_type": self.leave_type,
+                    "start_date": datetime.date(2025, 9, 1),
+                    "end_date": datetime.date(2025, 9, 1),
+                },
+            )
+            rejected = reject_leave(self.approver, leave_request.id, "Not allowed")
+
         self.assertEqual(rejected.status, LeaveRequest.Status.REJECTED)
+        self.assertEqual(notify_mock.call_count, 2)
         balance.refresh_from_db()
         self.assertEqual(balance.used_days, Decimal("4"))

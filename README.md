@@ -41,3 +41,21 @@ One platform for HR + Attendance + Payroll + Accounting + Dashboards (10–300 e
 9. Download the payslip PNG for an employee.
 10. Lock the payroll period.
 11. Attempt to generate again; it should fail due to the lock.
+
+## Notifications Integrations
+- Leave workflow now supports role-based notifications on key actions:
+  - Employee submits leave request → notify Manager + HR roles.
+  - Manager/HR approves or rejects leave request → notify employee.
+- Channels:
+  - Email automation (enabled by default).
+  - WhatsApp notifications (optional, enabled by environment settings).
+
+### Backend environment variables
+- `NOTIFICATIONS_EMAIL_ENABLED` (default `1`)
+- `NOTIFICATIONS_WHATSAPP_ENABLED` (default `0`)
+- `DEFAULT_FROM_EMAIL`
+- `WHATSAPP_API_URL`
+- `WHATSAPP_API_TOKEN`
+- `WHATSAPP_SENDER_ID`
+
+> WhatsApp delivery uses a provider webhook-style API with Bearer token auth.

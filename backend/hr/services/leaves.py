@@ -9,6 +9,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from hr.models import Employee, LeaveBalance, LeaveRequest, LeaveType
+from hr.services.notifications import send_role_aware_leave_notifications
 
 
 def calculate_leave_days(start_date, end_date) -> Decimal:
@@ -74,7 +75,7 @@ def request_leave(user, payload: dict[str, Any]) -> LeaveRequest:
     if leave_type.paid:
         get_or_create_balance(employee, leave_type, start_date.year)
                 
-    return LeaveRequest.objects.create(
+    leave_request = LeaveRequest.objects.create(
         company=user.company,
         employee=employee,
         leave_type=leave_type,
@@ -84,6 +85,8 @@ def request_leave(user, payload: dict[str, Any]) -> LeaveRequest:
         status=LeaveRequest.Status.PENDING,
         days=days,
     )
+    send_role_aware_leave_notifications(event="submitted", leave_request=leave_request, actor=user)
+    return leave_request
 
 
 def apply_balance_deduction(leave_request: LeaveRequest) -> LeaveBalance:
@@ -129,6 +132,7 @@ def approve_leave(approver_user, request_id: int) -> LeaveRequest:
         leave_request.decided_by = approver_user
         leave_request.decided_at = timezone.now()
         leave_request.save(update_fields=["status", "decided_by", "decided_at"])
+        send_role_aware_leave_notifications(event="approved", leave_request=leave_request, actor=approver_user)
         return leave_request
 
 
@@ -147,4 +151,5 @@ def reject_leave(approver_user, request_id: int, reason: str | None) -> LeaveReq
     leave_request.save(
         update_fields=["status", "decided_by", "decided_at", "reject_reason"]
     )
+    send_role_aware_leave_notifications(event="rejected", leave_request=leave_request, actor=approver_user)
     return leave_request

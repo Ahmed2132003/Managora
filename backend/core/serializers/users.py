@@ -25,6 +25,7 @@ class UserSerializer(serializers.ModelSerializer):
             "id",
             "username",
             "email",
+            "phone_number",
             "first_name",
             "last_name",
             "is_active",
@@ -49,6 +50,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             "id",
             "username",
             "email",
+            "phone_number",
             "is_active",
             "password",
             "role_ids",
@@ -179,7 +181,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("username", "email", "is_active", "password")
+        fields = ("username", "email", "phone_number", "is_active", "password")
 
     def validate_email(self, value):
         if not value:
