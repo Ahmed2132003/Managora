@@ -2,14 +2,14 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
 
-import { DashboardShell } from "../DashboardShell";
+import { DashboardShell } from "../../DashboardShell";
 import {
   useDeleteEmployeeDocument,
   useMyEmployeeDocuments,
   useMyPayrollRuns,
   useUploadMyEmployeeDocument,
-} from "../../shared/hr/hooks";
-import { endpoints } from "../../shared/api/endpoints";
+} from "../../../shared/hr/hooks";
+import { endpoints } from "../../../shared/api/endpoints";
 import "./EmployeeSelfServicePage.css";
 
 type Language = "en" | "ar";

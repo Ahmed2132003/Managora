@@ -41,7 +41,7 @@ import { AuditLogsPage } from "../pages/admin/AuditLogsPage";
 import { AdminPanelPage } from "../pages/admin/AdminPanelPage";
 import { CatalogPage } from "../pages/catalog/CatalogPage";
 import { SalesPage } from "../pages/catalog/SalesPage.tsx";
-import { EmployeeSelfServicePage } from "../pages/employee/EmployeeSelfServicePage";
+import { EmployeeSelfServicePage } from "../pages/accounting/employee/EmployeeSelfServicePage";
 const TrialBalancePage = lazy(() =>
   import("../pages/accounting/TrialBalancePage.tsx").then((module) => ({
     default: module.TrialBalancePage,
