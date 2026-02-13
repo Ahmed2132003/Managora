@@ -6,8 +6,7 @@ import { useCan, hasPermission } from "../../shared/auth/useCan";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
-import { TablePagination } from "../../shared/ui/TablePagination";
-import { useClientPagination } from "../../shared/ui/useClientPagination";
+import { TablePagination, useClientPagination } from "../../shared/ui";
 import { downloadCsv, formatAmount } from "../../shared/accounting/reporting.ts";
 import "../DashboardPage.css";
 
