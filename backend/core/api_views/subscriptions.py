@@ -58,23 +58,24 @@ class GenerateCompanyPaymentCodeView(APIView):
 
 
 class ActivateCompanySubscriptionView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     @extend_schema(
         tags=["Subscriptions"],
-        summary="Activate company subscription by payment code",
+        summary="Activate company subscription by username and payment code",
         request=ActivateSubscriptionSerializer,
     )
     def post(self, request):
-        serializer = ActivateSubscriptionSerializer(data=request.data, context={"request": request})
+        serializer = ActivateSubscriptionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         payment_code = serializer.context["subscription_code"]
+        target_user = serializer.context["target_user"]
         now = timezone.now()
         next_expiry = now + timedelta(days=90)
 
         payment_code.used_at = now
-        payment_code.consumed_by = request.user
+        payment_code.consumed_by = target_user
         payment_code.save(update_fields=["used_at", "consumed_by"])
 
         company = payment_code.company

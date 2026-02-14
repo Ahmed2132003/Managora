@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
 from core.models import Company, CompanySubscriptionCode
+
+User = get_user_model()
 
 
 class GenerateSubscriptionCodeSerializer(serializers.Serializer):
@@ -16,24 +19,35 @@ class GenerateSubscriptionCodeSerializer(serializers.Serializer):
 
 
 class ActivateSubscriptionSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150)
     code = serializers.CharField(max_length=32)
 
-    def validate_code(self, value: str) -> str:
-        normalized = value.strip().upper()
+    def validate(self, attrs):
+        raw_username = (attrs.get("username") or "").strip()
+        normalized_code = (attrs.get("code") or "").strip().upper()
         now = timezone.now()
+
         try:
-            token = CompanySubscriptionCode.objects.select_related("company").get(code=normalized)
+            user = User.objects.select_related("company").get(username=raw_username)
+        except User.DoesNotExist as exc:
+            raise serializers.ValidationError({"username": "User not found."}) from exc
+
+        if not user.is_active:
+            raise serializers.ValidationError({"username": "User account is disabled."})
+
+        try:
+            token = CompanySubscriptionCode.objects.select_related("company").get(code=normalized_code)
         except CompanySubscriptionCode.DoesNotExist as exc:
-            raise serializers.ValidationError("Invalid payment code.") from exc
+            raise serializers.ValidationError({"code": "Invalid payment code."}) from exc
 
         if token.used_at is not None:
-            raise serializers.ValidationError("Payment code already used.")
+            raise serializers.ValidationError({"code": "Payment code already used."})
         if token.expires_at <= now:
-            raise serializers.ValidationError("Payment code expired.")
+            raise serializers.ValidationError({"code": "Payment code expired."})
+        if token.company_id != user.company_id:
+            raise serializers.ValidationError({"code": "This code is not for this user company."})
 
-        request = self.context.get("request")
-        if request and request.user and token.company_id != getattr(request.user, "company_id", None):
-            raise serializers.ValidationError("This code is not for your company.")
-
+        attrs["code"] = normalized_code
         self.context["subscription_code"] = token
-        return normalized
+        self.context["target_user"] = user
+        return attrs

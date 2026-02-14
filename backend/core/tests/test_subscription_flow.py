@@ -49,19 +49,16 @@ class SubscriptionFlowTests(APITestCase):
         self.assertTrue(response.data["code"])
         self.assertEqual(response.data["company_id"], self.company.id)
 
-    def test_user_can_activate_company_by_valid_code(self):
+    def test_user_can_activate_company_by_valid_code_without_login(self):
         code = CompanySubscriptionCode.objects.create(
             company=self.company,
             code="ABC12345",
             expires_at=timezone.now() + timedelta(hours=24),
         )
 
-        access = self._login("u1", "pass12345")
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
-
         response = self.client.post(
             reverse("subscription-activate"),
-            {"code": code.code},
+            {"username": "u1", "code": code.code},
             format="json",
         )
 
@@ -71,6 +68,7 @@ class SubscriptionFlowTests(APITestCase):
         self.assertTrue(self.company.is_active)
         self.assertIsNotNone(self.company.subscription_expires_at)
         self.assertIsNotNone(code.used_at)
+        self.assertEqual(code.consumed_by_id, self.user.id)
 
     def test_login_blocked_when_company_subscription_expired(self):
         self.company.subscription_expires_at = timezone.now() - timedelta(minutes=1)
@@ -85,3 +83,29 @@ class SubscriptionFlowTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.company.refresh_from_db()
         self.assertFalse(self.company.is_active)
+
+    def test_expired_company_can_activate_then_login(self):
+        self.company.subscription_expires_at = timezone.now() - timedelta(minutes=1)
+        self.company.is_active = False
+        self.company.save(update_fields=["subscription_expires_at", "is_active"])
+
+        code = CompanySubscriptionCode.objects.create(
+            company=self.company,
+            code="ZXCV1234",
+            expires_at=timezone.now() + timedelta(hours=24),
+        )
+
+        activate_response = self.client.post(
+            reverse("subscription-activate"),
+            {"username": "u1", "code": code.code},
+            format="json",
+        )
+        self.assertEqual(activate_response.status_code, status.HTTP_200_OK)
+
+        login_response = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "u1", "password": "pass12345"},
+            format="json",
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+        self.assertIn("access", login_response.data)
