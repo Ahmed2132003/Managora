@@ -313,11 +313,15 @@
 }
 
 
-.messages-compose select option {
-  background: var(--surface);
-  color: var(--text);
+.messages-compose .field select,
+.messages-compose__select {
+  color-scheme: dark;
 }
 
+.messages-compose select option {
+  background: color-mix(in oklab, #0b1736, var(--surface) 25%);
+  color: #eef4ff;
+}
 .compose-actions {
   display: flex;
   align-items: center;
