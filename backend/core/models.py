@@ -449,6 +449,56 @@ class CompanySetupState(models.Model):
         return f"{self.company.name} setup state"
 
 
+class ChatGroup(models.Model):
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="chat_groups",
+    )
+    name = models.CharField(max_length=150)
+    description = models.TextField(blank=True, default="")
+    is_private = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        "core.User",
+        on_delete=models.CASCADE,
+        related_name="created_chat_groups",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["company", "name"], name="unique_chat_group_name_per_company"),
+        ]
+
+
+class ChatGroupMembership(models.Model):
+    group = models.ForeignKey(
+        "core.ChatGroup",
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    user = models.ForeignKey(
+        "core.User",
+        on_delete=models.CASCADE,
+        related_name="chat_group_memberships",
+    )
+    is_admin = models.BooleanField(default=False)
+    added_by = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="added_chat_group_memberships",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["group", "user"], name="unique_chat_group_member"),
+        ]
+
+
 class ChatConversation(models.Model):
     company = models.ForeignKey(
         "core.Company",
@@ -459,11 +509,22 @@ class ChatConversation(models.Model):
         "core.User",
         on_delete=models.CASCADE,
         related_name="chat_conversations_as_one",
+        null=True,
+        blank=True,
     )
     participant_two = models.ForeignKey(
         "core.User",
         on_delete=models.CASCADE,
         related_name="chat_conversations_as_two",
+        null=True,
+        blank=True,
+    )
+    group = models.ForeignKey(
+        "core.ChatGroup",
+        on_delete=models.CASCADE,
+        related_name="conversation",
+        null=True,
+        blank=True,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -471,13 +532,22 @@ class ChatConversation(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                check=~models.Q(participant_one=models.F("participant_two")),
+                check=(
+                    models.Q(group__isnull=False, participant_one__isnull=True, participant_two__isnull=True)
+                    |
+                    (
+                        models.Q(group__isnull=True, participant_one__isnull=False, participant_two__isnull=False)
+                        & ~models.Q(participant_one=models.F("participant_two"))
+                    )
+                ),                
                 name="chat_conversation_distinct_participants",
             ),
             models.UniqueConstraint(
                 fields=["company", "participant_one", "participant_two"],
                 name="unique_chat_conversation_pair",
+                condition=models.Q(group__isnull=True),
             ),
+            models.UniqueConstraint(fields=["group"], condition=models.Q(group__isnull=False), name="unique_chat_group_conversation"),
         ]
 
     def __str__(self):
@@ -504,6 +574,15 @@ class ChatMessage(models.Model):
         "core.User",
         on_delete=models.CASCADE,
         related_name="received_chat_messages",
+        null=True,
+        blank=True,
+    )
+    group = models.ForeignKey(
+        "core.ChatGroup",
+        on_delete=models.CASCADE,
+        related_name="messages",
+        null=True,
+        blank=True,
     )
     body = models.TextField()
     is_read = models.BooleanField(default=False)
@@ -514,7 +593,15 @@ class ChatMessage(models.Model):
             models.Index(fields=["company", "recipient", "is_read"], name="chat_msg_rec_unread_idx"),
             models.Index(fields=["conversation", "id"], name="chat_msg_conv_id_idx"),
         ]
-
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(group__isnull=False, recipient__isnull=True)
+                    | models.Q(group__isnull=True, recipient__isnull=False)
+                ),
+                name="chat_message_direct_or_group",
+            )
+        ]
 
 def chat_message_attachment_upload_to(instance, filename):
     return (

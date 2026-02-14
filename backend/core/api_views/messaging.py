@@ -6,28 +6,46 @@ from rest_framework.views import APIView
 
 from core.models import (
     ChatConversation,
+    ChatGroup,
+    ChatGroupMembership,
     ChatMessage,
     ChatMessageAttachment,
     InAppNotification,
     PushSubscription,
+    User,
 )
 from core.serializers import (
     ChatConversationSerializer,
+    ChatGroupSerializer,
     ChatMessageSerializer,
+    CreateChatGroupSerializer,
+    GroupMemberUpsertSerializer,
     InAppNotificationSerializer,
     PushSubscriptionSerializer,
     SendChatMessageSerializer,
+    UpdateChatGroupSerializer,
 )
 
 
-def _get_or_create_conversation(*, sender, recipient):
+def _get_or_create_direct_conversation(*, sender, recipient):
     first_id, second_id = sorted([sender.id, recipient.id])
     conversation, _ = ChatConversation.objects.get_or_create(
         company=sender.company,
         participant_one_id=first_id,
         participant_two_id=second_id,
+        group=None,
     )
     return conversation
+
+
+def _is_manager(user) -> bool:
+    if user.is_superuser:
+        return True
+    return user.roles.filter(name__iexact="manager").exists()
+
+
+def _is_group_admin(group: ChatGroup, user: User) -> bool:
+    return ChatGroupMembership.objects.filter(group=group, user=user, is_admin=True).exists()
 
 
 class ChatConversationListView(generics.ListAPIView):
@@ -36,10 +54,11 @@ class ChatConversationListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        group_ids = ChatGroupMembership.objects.filter(user=user).values_list("group_id", flat=True)
         return ChatConversation.objects.filter(
             company=user.company,
         ).filter(
-            Q(participant_one=user) | Q(participant_two=user)
+            Q(participant_one=user) | Q(participant_two=user) | Q(group_id__in=group_ids)
         ).order_by("-updated_at")
 
 
@@ -49,17 +68,29 @@ class ChatMessageListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        conversation_id = self.kwargs["conversation_id"]
-        qs = ChatMessage.objects.filter(
-            conversation_id=conversation_id,
+        conversation = ChatConversation.objects.filter(
+            id=self.kwargs["conversation_id"],
             company=user.company,
-        ).filter(Q(sender=user) | Q(recipient=user)).order_by("id")
+        ).first()
+        if not conversation:
+            return ChatMessage.objects.none()
+
+        if conversation.group_id:
+            is_member = ChatGroupMembership.objects.filter(group_id=conversation.group_id, user=user).exists()
+            if not is_member:
+                return ChatMessage.objects.none()
+            qs = ChatMessage.objects.filter(conversation=conversation, company=user.company).order_by("id")
+        else:
+            qs = ChatMessage.objects.filter(
+                conversation=conversation,
+                company=user.company,
+            ).filter(Q(sender=user) | Q(recipient=user)).order_by("id")
+            qs.filter(recipient=user, is_read=False).update(is_read=True)
 
         after_id = self.request.query_params.get("after_id")
         if after_id and after_id.isdigit():
             qs = qs.filter(id__gt=int(after_id))
 
-        qs.filter(recipient=user, is_read=False).update(is_read=True)
         return qs
 
 
@@ -70,13 +101,19 @@ class SendChatMessageView(APIView):
         serializer = SendChatMessageSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
 
-        recipient = serializer.validated_data["recipient"]
-        conversation = _get_or_create_conversation(sender=request.user, recipient=recipient)
+        recipient = serializer.validated_data.get("recipient")
+        group = serializer.validated_data.get("group")
+        if group:
+            conversation, _ = ChatConversation.objects.get_or_create(company=request.user.company, group=group)
+        else:
+            conversation = _get_or_create_direct_conversation(sender=request.user, recipient=recipient)
+
         message = ChatMessage.objects.create(
             conversation=conversation,
             company=request.user.company,
             sender=request.user,
             recipient=recipient,
+            group=group,
             body=serializer.validated_data["body"],
         )
 
@@ -90,20 +127,115 @@ class SendChatMessageView(APIView):
             )
 
         notification_body = message.body or "📎 Attachment"
-        InAppNotification.objects.create(
-            company=request.user.company,
-            sender=request.user,
-            recipient=recipient,
-            message=message,
-            title=f"New message from {request.user.username}",
-            body=notification_body,
-        )
+        if group:
+            memberships = ChatGroupMembership.objects.select_related("user").filter(group=group).exclude(user=request.user)
+            for membership in memberships:
+                InAppNotification.objects.create(
+                    company=request.user.company,
+                    sender=request.user,
+                    recipient=membership.user,
+                    message=message,
+                    title=f"New message in {group.name}",
+                    body=notification_body,
+                )
+        else:
+            InAppNotification.objects.create(
+                company=request.user.company,
+                sender=request.user,
+                recipient=recipient,
+                message=message,
+                title=f"New message from {request.user.username}",
+                body=notification_body,
+            )
+
         conversation.save(update_fields=["updated_at"])
 
         return Response(
             ChatMessageSerializer(message, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class ChatGroupListCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        groups = ChatGroup.objects.filter(company=request.user.company, memberships__user=request.user).distinct().order_by("name")
+        return Response(ChatGroupSerializer(groups, many=True).data)
+
+    def post(self, request):
+        if not _is_manager(request.user):
+            return Response({"detail": "Only managers can create groups."}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = CreateChatGroupSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        group = ChatGroup.objects.create(
+            company=request.user.company,
+            name=data["name"],
+            description=data.get("description", ""),
+            is_private=data.get("is_private", False),
+            created_by=request.user,
+        )
+        ChatGroupMembership.objects.create(group=group, user=request.user, is_admin=True, added_by=request.user)
+
+        member_ids = set(data.get("member_ids") or [])
+        if member_ids:
+            users = User.objects.filter(company=request.user.company, id__in=member_ids).exclude(id=request.user.id)
+            for user in users:
+                ChatGroupMembership.objects.get_or_create(group=group, user=user, defaults={"added_by": request.user})
+
+        ChatConversation.objects.get_or_create(company=request.user.company, group=group)
+        return Response(ChatGroupSerializer(group, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
+
+class ChatGroupDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, group_id):
+        group = ChatGroup.objects.filter(id=group_id, company=request.user.company).first()
+        if not group:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not _is_group_admin(group, request.user) and not _is_manager(request.user):
+            return Response({"detail": "Not allowed."}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = UpdateChatGroupSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        for field, value in serializer.validated_data.items():
+            setattr(group, field, value)
+        group.save()
+        return Response(ChatGroupSerializer(group, context={"request": request}).data)
+
+
+class ChatGroupMembersView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, group_id):
+        group = ChatGroup.objects.filter(id=group_id, company=request.user.company).first()
+        if not group:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not _is_group_admin(group, request.user) and not _is_manager(request.user):
+            return Response({"detail": "Not allowed."}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = GroupMemberUpsertSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user = User.objects.filter(id=data["user_id"], company=request.user.company).first()
+        if not user:
+            return Response({"user_id": "Invalid user."}, status=status.HTTP_400_BAD_REQUEST)
+
+        membership, created = ChatGroupMembership.objects.get_or_create(
+            group=group,
+            user=user,
+            defaults={"is_admin": data.get("is_admin", False), "added_by": request.user},
+        )
+        if not created:
+            membership.is_admin = data.get("is_admin", membership.is_admin)
+            membership.save(update_fields=["is_admin"])
+
+        return Response({"ok": True})
 
 
 class NotificationListView(generics.ListAPIView):
