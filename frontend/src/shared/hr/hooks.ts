@@ -224,11 +224,19 @@ export type EmployeeDetail = EmployeeSummary & {
   shift: ShiftSummary | null;
 };
 
+export type DocumentCategory = "employee_file" | "contract" | "invoice" | "other";
+
+export type LinkedEntityType = "employee" | "invoice" | "contract";
+
 export type EmployeeDocument = {
   id: number;
   employee: number;
   doc_type: string;
+  category: DocumentCategory;
   title: string;
+  linked_entity_type: LinkedEntityType | null;
+  linked_entity_id: string;
+  ocr_text: string;
   file: string;
   uploaded_by: number | null;
   created_at: string;
@@ -372,7 +380,10 @@ export type EmployeeDefaults = {
 export type UploadDocumentPayload = {
   employeeId: number;
   doc_type: string;
+  category: DocumentCategory;
   title: string;
+  linked_entity_type?: LinkedEntityType | "";
+  linked_entity_id?: string;
   file: File;
 };
 
@@ -528,27 +539,44 @@ export function useEmployeeSelectableUsers() {
   });
 }
 
-export function useEmployeeDocuments(employeeId: number | null) {
+export function useEmployeeDocuments(
+  employeeId: number | null,
+  params?: { category?: DocumentCategory | ""; query?: string }
+) {
   return useQuery({
-    queryKey: ["hr", "employeeDocuments", employeeId],
+    queryKey: ["hr", "employeeDocuments", employeeId, params],
     enabled: Boolean(employeeId),
     queryFn: async () => {
       if (!employeeId) {
         throw new Error("Employee id is required.");
       }
       const response = await http.get<EmployeeDocument[]>(
-        endpoints.hr.employeeDocuments(employeeId)
+        endpoints.hr.employeeDocuments(employeeId),
+        {
+          params: {
+            category: params?.category || undefined,
+            q: params?.query?.trim() || undefined,
+          },
+        }
       );
       return response.data;
     },
   });
 }
 
-export function useMyEmployeeDocuments() {
+export function useMyEmployeeDocuments(params?: {
+  category?: DocumentCategory | "";
+  query?: string;
+}) {
   return useQuery({
-    queryKey: ["hr", "employeeDocuments", "my"],
+    queryKey: ["hr", "employeeDocuments", "my", params],
     queryFn: async () => {
-      const response = await http.get<EmployeeDocument[]>(endpoints.hr.myEmployeeDocuments);
+      const response = await http.get<EmployeeDocument[]>(endpoints.hr.myEmployeeDocuments, {
+        params: {
+          category: params?.category || undefined,
+          q: params?.query?.trim() || undefined,
+        },
+      });
       return response.data;
     },
   });
@@ -811,7 +839,10 @@ export function useUploadEmployeeDocument() {
     mutationFn: async (payload: UploadDocumentPayload) => {
       const formData = new FormData();
       formData.append("doc_type", payload.doc_type);
+      formData.append("category", payload.category);
       formData.append("title", payload.title);
+      formData.append("linked_entity_type", payload.linked_entity_type || "");
+      formData.append("linked_entity_id", payload.linked_entity_id || "");
       formData.append("file", payload.file);
       const response = await http.post<EmployeeDocument>(
         endpoints.hr.employeeDocuments(payload.employeeId),
@@ -832,7 +863,10 @@ export function useUploadMyEmployeeDocument() {
     mutationFn: async (payload: Omit<UploadDocumentPayload, "employeeId">) => {
       const formData = new FormData();
       formData.append("doc_type", payload.doc_type);
+      formData.append("category", payload.category);
       formData.append("title", payload.title);
+      formData.append("linked_entity_type", payload.linked_entity_type || "");
+      formData.append("linked_entity_id", payload.linked_entity_id || "");
       formData.append("file", payload.file);
       const response = await http.post<EmployeeDocument>(
         endpoints.hr.myEmployeeDocuments,

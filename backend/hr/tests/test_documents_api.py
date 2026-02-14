@@ -121,6 +121,45 @@ class EmployeeDocumentApiTests(APITestCase):
         self.assertEqual(len(res.data), 1)
         self.assertEqual(res.data[0]["doc_type"], "contract")
 
+
+    def test_list_supports_category_and_ocr_search(self):
+        self.auth("hr")
+        url = reverse("employee-documents", kwargs={"employee_id": self.employee.id})
+        EmployeeDocument.objects.create(
+            company=self.c1,
+            employee=self.employee,
+            doc_type=EmployeeDocument.DocumentType.CONTRACT,
+            category=EmployeeDocument.Category.CONTRACT,
+            title="Main Contract",
+            linked_entity_type=EmployeeDocument.LinkedEntityType.CONTRACT,
+            linked_entity_id="CTR-2024-01",
+            ocr_text="Salary clause and probation",
+            file=SimpleUploadedFile("contract.pdf", b"contract", content_type="application/pdf"),
+            uploaded_by=self.hr_user,
+        )
+        EmployeeDocument.objects.create(
+            company=self.c1,
+            employee=self.employee,
+            doc_type=EmployeeDocument.DocumentType.OTHER,
+            category=EmployeeDocument.Category.INVOICE,
+            title="Vendor Invoice",
+            linked_entity_type=EmployeeDocument.LinkedEntityType.INVOICE,
+            linked_entity_id="INV-7788",
+            ocr_text="Office chairs payment",
+            file=SimpleUploadedFile("invoice.pdf", b"invoice", content_type="application/pdf"),
+            uploaded_by=self.hr_user,
+        )
+
+        by_category = self.client.get(url, {"category": "invoice"})
+        self.assertEqual(by_category.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(by_category.data), 1)
+        self.assertEqual(by_category.data[0]["linked_entity_id"], "INV-7788")
+
+        by_search = self.client.get(url, {"q": "probation"})
+        self.assertEqual(by_search.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(by_search.data), 1)
+        self.assertEqual(by_search.data[0]["category"], "contract")
+
     def test_upload_blocked_for_deleted_employee(self):
         self.auth("hr")
         self.employee.delete()

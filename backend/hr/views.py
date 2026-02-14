@@ -407,10 +407,21 @@ class EmployeeDocumentListCreateView(ListCreateAPIView):
 
     def get_queryset(self):
         employee = self.get_employee()
-        return EmployeeDocument.objects.filter(
+        queryset = EmployeeDocument.objects.filter(            
             company=self.request.user.company, employee=employee
-        ).order_by("id")
-
+        )
+        category = self.request.query_params.get("category")
+        search = (self.request.query_params.get("q") or "").strip()
+        if category:
+            queryset = queryset.filter(category=category)
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search)
+                | Q(ocr_text__icontains=search)
+                | Q(linked_entity_id__icontains=search)
+            )
+        return queryset.order_by("id")
+    
     def get_serializer_class(self):
         if self.request.method == "POST":
             return EmployeeDocumentCreateSerializer
@@ -451,10 +462,21 @@ class MyEmployeeDocumentListCreateView(ListCreateAPIView):
 
     def get_queryset(self):
         employee = self.get_employee()
-        return EmployeeDocument.objects.filter(
+        queryset = EmployeeDocument.objects.filter(            
             company=self.request.user.company, employee=employee
-        ).order_by("id")
-
+        )
+        category = self.request.query_params.get("category")
+        search = (self.request.query_params.get("q") or "").strip()
+        if category:
+            queryset = queryset.filter(category=category)
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search)
+                | Q(ocr_text__icontains=search)
+                | Q(linked_entity_id__icontains=search)
+            )
+        return queryset.order_by("id")
+    
     def get_serializer_class(self):
         if self.request.method == "POST":
             return EmployeeDocumentCreateSerializer

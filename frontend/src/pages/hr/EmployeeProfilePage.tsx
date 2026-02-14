@@ -32,7 +32,9 @@ import {
   useUpdateEmployee,
   useUploadEmployeeDocument,  
   useDeleteEmployeeDocument,
+  type DocumentCategory,
   type EmployeeStatus,
+  type LinkedEntityType,
   type SalaryType,
 } from "../../shared/hr/hooks.ts";
 import { AccessDenied } from "../../shared/ui/AccessDenied.tsx";
@@ -127,12 +129,19 @@ type PageContent = {
   };
   documents: {
     docType: string;
+    category: string;
+    linkedType: string;
+    linkedId: string;
     title: string;
     file: string;
+    search: string;
+    searchPlaceholder: string;
+    allCategories: string;
     placeholder: string;
     loading: string;
     empty: string;
     uploaded: string;
+    ocrText: string;
     actions: string;
     saveHint: string;
   };
@@ -243,12 +252,19 @@ const pageCopy: Record<Language, PageContent> = {
     },
     documents: {
       docType: "Document type",
+      category: "Category",
+      linkedType: "Linked to",
+      linkedId: "Reference no.",
       title: "Title",
       file: "File",
+      search: "Search",
+      searchPlaceholder: "Search in title, OCR text, or reference",
+      allCategories: "All categories",
       placeholder: "Select file",
       loading: "Loading documents...",
       empty: "No documents yet.",
       uploaded: "Uploaded",
+      ocrText: "OCR text",
       actions: "Actions",
       saveHint: "Save the employee first to add documents.",
     },
@@ -357,13 +373,20 @@ const pageCopy: Record<Language, PageContent> = {
     },
     documents: {
       docType: "نوع المستند",
+      category: "التصنيف",
+      linkedType: "مرتبط بـ",
+      linkedId: "المرجع",
       title: "العنوان",
       file: "الملف",
+      search: "بحث",
+      searchPlaceholder: "ابحث في العنوان أو نص OCR أو المرجع",
+      allCategories: "كل التصنيفات",
       placeholder: "اختر ملف",
       loading: "جاري تحميل المستندات...",
       empty: "لا توجد مستندات بعد.",
       uploaded: "تاريخ الرفع",
-      actions: "الإراءات",
+      ocrText: "نص OCR",
+      actions: "الإجراءات",
       saveHint: "احفظ الموظف أولاً لإضافة مستندات.",
     },
     status: {
@@ -423,20 +446,22 @@ const employeeDefaults: EmployeeFormValues = {
 
 const documentSchema = z.object({
   doc_type: z.string().min(1, "نوع المستند مطلوب"),
+  category: z.enum(["employee_file", "contract", "invoice", "other"]),
+  linked_entity_type: z.enum(["employee", "invoice", "contract", ""]).optional(),
+  linked_entity_id: z.string().optional(),
   title: z.string().min(1, "العنوان مطلوب"),
   file: z
     .custom<File | null>()
     .refine((value) => value instanceof File, { message: "الملف مطلوب" }),
 });
 
-type DocumentFormValues = {
-  doc_type: string;
-  title: string;
-  file: File | null;
-};
+type DocumentFormValues = z.input<typeof documentSchema>;
 
 const documentDefaults: DocumentFormValues = {
   doc_type: "",
+  category: "employee_file",
+  linked_entity_type: "",
+  linked_entity_id: "",
   title: "",
   file: null,
 };
@@ -472,6 +497,38 @@ const salaryTypeOptionsByLanguage: Record<
   ],
 };
 
+
+
+const documentCategoryOptionsByLanguage: Record<Language, { value: DocumentCategory; label: string }[]> = {
+  en: [
+    { value: "employee_file", label: "Employee file" },
+    { value: "contract", label: "Contract" },
+    { value: "invoice", label: "Invoice" },
+    { value: "other", label: "Other" },
+  ],
+  ar: [
+    { value: "employee_file", label: "ملف موظف" },
+    { value: "contract", label: "عقد" },
+    { value: "invoice", label: "فاتورة" },
+    { value: "other", label: "أخرى" },
+  ],
+};
+
+const linkedEntityOptionsByLanguage: Record<
+  Language,
+  { value: LinkedEntityType; label: string }[]
+> = {
+  en: [
+    { value: "employee", label: "Employee" },
+    { value: "contract", label: "Contract" },
+    { value: "invoice", label: "Invoice" },
+  ],
+  ar: [
+    { value: "employee", label: "موظف" },
+    { value: "contract", label: "عقد" },
+    { value: "invoice", label: "فاتورة" },
+  ],
+};
 const jobTitleSchema = z.object({
   name: z.string().min(1, "المسمى الوظيفي مطلوب"),
 });
@@ -586,6 +643,8 @@ export function EmployeeProfilePage() {
     const today = new Date();
     return today.toISOString().slice(0, 10);
   });
+  const [documentSearch, setDocumentSearch] = useState("");
+  const [documentCategoryFilter, setDocumentCategoryFilter] = useState<DocumentCategory | "">("");
 
   const employeeQuery = useEmployee(employeeId);
   const departmentsQuery = useDepartments();
@@ -593,7 +652,10 @@ export function EmployeeProfilePage() {
   const shiftsQuery = useShifts();
   const defaultsQuery = useEmployeeDefaults();
   const selectableUsersQuery = useEmployeeSelectableUsers();
-  const documentsQuery = useEmployeeDocuments(employeeId);
+  const documentsQuery = useEmployeeDocuments(employeeId, {
+    category: documentCategoryFilter,
+    query: documentSearch,
+  });
   const salaryStructuresQuery = useSalaryStructures({ employeeId });
   const salaryStructure = useMemo(
     () => salaryStructuresQuery.data?.[0] ?? null,
@@ -898,6 +960,9 @@ export function EmployeeProfilePage() {
       await uploadDocumentMutation.mutateAsync({
         employeeId,
         doc_type: values.doc_type,
+        category: values.category,
+        linked_entity_type: values.linked_entity_type,
+        linked_entity_id: values.linked_entity_id,
         title: values.title,
         file: values.file,
       });
@@ -1442,92 +1507,183 @@ export function EmployeeProfilePage() {
                   <section className="panel employee-profile__subpanel">
                     <div className="panel__header">
                       <div>
-                        <h2>{content.documents.title}</h2>
-                        <p>{content.documents.empty}</p>
+                        <h2>{content.section.documentsTitle}</h2>
+                        <p>{content.section.documentsSubtitle}</p>
                       </div>
                     </div>
 
                     {!employeeId && <p className="helper-text">{content.documents.saveHint}</p>}
 
-                    {documentsQuery.isLoading ? (
-                      <div className="employee-profile__loading">{content.documents.loading}</div>
-                    ) : documentsQuery.data?.length ? (
-                      <div className="employee-profile__documents">
-                        <div className="employee-profile__document-header">
-                          <label className="form-field">
-                            <span>{content.documents.docType}</span>
-                            <Controller
-                              name="doc_type"
-                              control={documentForm.control}
-                              render={({ field }) => (
-                                <TextInput
-                                  value={field.value}
-                                  onChange={field.onChange}
-                                  error={documentForm.formState.errors.doc_type?.message}
-                                  disabled={!employeeId}
-                                />
-                              )}
-                            />
-                          </label>
+                    <div className="employee-profile__documents">
+                      <div className="employee-profile__document-header">
+                        <label className="form-field">
+                          <span>{content.documents.docType}</span>
+                          <Controller
+                            name="doc_type"
+                            control={documentForm.control}
+                            render={({ field }) => (
+                              <TextInput
+                                value={field.value}
+                                onChange={field.onChange}
+                                error={documentForm.formState.errors.doc_type?.message}
+                                disabled={!employeeId}
+                              />
+                            )}
+                          />
+                        </label>
 
-                          <label className="form-field">
-                            <span>{content.documents.title}</span>
-                            <Controller
-                              name="title"
-                              control={documentForm.control}
-                              render={({ field }) => (
-                                <TextInput
-                                  value={field.value}
-                                  onChange={field.onChange}
-                                  error={documentForm.formState.errors.title?.message}
-                                  disabled={!employeeId}
-                                />
-                              )}
-                            />
-                          </label>
+                        <label className="form-field">
+                          <span>{content.documents.category}</span>
+                          <Controller
+                            name="category"
+                            control={documentForm.control}
+                            render={({ field }) => (
+                              <select
+                                value={field.value}
+                                onChange={(event) => field.onChange(event.target.value as DocumentCategory)}
+                                disabled={!employeeId}
+                              >
+                                {documentCategoryOptionsByLanguage[language].map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          />
+                        </label>
 
-                          <label className="form-field">
-                            <span>{content.documents.file}</span>
-                            <Controller
-                              name="file"
-                              control={documentForm.control}
-                              render={({ field }) => (
-                                <input
-                                  type="file"
-                                  onChange={(event) => field.onChange(event.target.files?.[0] ?? null)}
-                                  disabled={!employeeId}
-                                />
-                              )}
-                            />
-                          </label>
+                        <label className="form-field">
+                          <span>{content.documents.linkedType}</span>
+                          <Controller
+                            name="linked_entity_type"
+                            control={documentForm.control}
+                            render={({ field }) => (
+                              <select
+                                value={field.value ?? ""}
+                                onChange={(event) => field.onChange(event.target.value as LinkedEntityType | "")}
+                                disabled={!employeeId}
+                              >
+                                <option value="">-</option>
+                                {linkedEntityOptionsByLanguage[language].map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          />
+                        </label>
 
-                          <button
-                            type="button"
-                            className="primary-button"
-                            onClick={documentForm.handleSubmit(handleUploadDocument)}
-                            disabled={!employeeId || uploadDocumentMutation.isPending}
+                        <label className="form-field">
+                          <span>{content.documents.linkedId}</span>
+                          <Controller
+                            name="linked_entity_id"
+                            control={documentForm.control}
+                            render={({ field }) => (
+                              <TextInput
+                                value={field.value}
+                                onChange={field.onChange}
+                                disabled={!employeeId}
+                              />
+                            )}
+                          />
+                        </label>
+
+                        <label className="form-field">
+                          <span>{content.documents.title}</span>
+                          <Controller
+                            name="title"
+                            control={documentForm.control}
+                            render={({ field }) => (
+                              <TextInput
+                                value={field.value}
+                                onChange={field.onChange}
+                                error={documentForm.formState.errors.title?.message}
+                                disabled={!employeeId}
+                              />
+                            )}
+                          />
+                        </label>
+
+                        <label className="form-field">
+                          <span>{content.documents.file}</span>
+                          <Controller
+                            name="file"
+                            control={documentForm.control}
+                            render={({ field }) => (
+                              <input
+                                type="file"
+                                onChange={(event) => field.onChange(event.target.files?.[0] ?? null)}
+                                disabled={!employeeId}
+                              />
+                            )}
+                          />
+                        </label>
+
+                        <button
+                          type="button"
+                          className="primary-button"
+                          onClick={documentForm.handleSubmit(handleUploadDocument)}
+                          disabled={!employeeId || uploadDocumentMutation.isPending}
+                        >
+                          {content.buttons.upload}
+                        </button>
+                      </div>
+
+                      <div className="employee-profile__document-filters">
+                        <label className="form-field">
+                          <span>{content.documents.category}</span>
+                          <select
+                            value={documentCategoryFilter}
+                            onChange={(event) =>
+                              setDocumentCategoryFilter(event.target.value as DocumentCategory | "")
+                            }
                           >
-                            {content.buttons.upload}
-                          </button>
-                        </div>
+                            <option value="">{content.documents.allCategories}</option>
+                            {documentCategoryOptionsByLanguage[language].map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="form-field">
+                          <span>{content.documents.search}</span>
+                          <input
+                            value={documentSearch}
+                            onChange={(event) => setDocumentSearch(event.target.value)}
+                            placeholder={content.documents.searchPlaceholder}
+                          />
+                        </label>
+                      </div>
 
+                      {documentsQuery.isLoading ? (
+                        <div className="employee-profile__loading">{content.documents.loading}</div>
+                      ) : documentsQuery.data?.length ? (
                         <div className="employee-profile__document-list">
                           <div className="employee-profile__document-list-header">
                             <span>{content.documents.docType}</span>
-                            <span>{content.documents.title}</span>
+                            <span>{content.documents.category}</span>
+                            <span>{content.documents.linkedId}</span>
                             <span>{content.documents.uploaded}</span>
+                            <span>{content.documents.ocrText}</span>
                             <span>{content.documents.actions}</span>
                           </div>
                           <div className="employee-profile__document-list-body">
                             {documentsQuery.data.map((doc) => (
                               <div className="employee-profile__document-row" key={doc.id}>
                                 <span>{doc.doc_type}</span>
-                                <span>{doc.title}</span>
+                                <span>{doc.category}</span>
+                                <span>{doc.linked_entity_id || "-"}</span>
                                 <span>{doc.created_at ? doc.created_at.slice(0, 10) : ""}</span>
+                                <span className="employee-profile__ocr-preview">
+                                  {doc.ocr_text ? doc.ocr_text.slice(0, 80) : "-"}
+                                </span>
                                 <div className="employee-profile__document-actions">
                                   <a
                                     className="ghost-button"
-                                    href={`${env.API_BASE_URL}${doc.file}`}                                    
+                                    href={`${env.API_BASE_URL}${doc.file}`}
                                     target="_blank"
                                     rel="noreferrer"
                                   >
@@ -1546,71 +1702,13 @@ export function EmployeeProfilePage() {
                             ))}
                           </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="employee-profile__documents empty">
-                        <p>{content.documents.empty}</p>
-                        <div className="employee-profile__document-header">
-                          <label className="form-field">
-                            <span>{content.documents.docType}</span>
-                            <Controller
-                              name="doc_type"
-                              control={documentForm.control}
-                              render={({ field }) => (
-                                <TextInput
-                                  value={field.value}
-                                  onChange={field.onChange}
-                                  error={documentForm.formState.errors.doc_type?.message}
-                                  disabled={!employeeId}
-                                />
-                              )}
-                            />
-                          </label>
-
-                          <label className="form-field">
-                            <span>{content.documents.title}</span>
-                            <Controller
-                              name="title"
-                              control={documentForm.control}
-                              render={({ field }) => (
-                                <TextInput
-                                  value={field.value}
-                                  onChange={field.onChange}
-                                  error={documentForm.formState.errors.title?.message}
-                                  disabled={!employeeId}
-                                />
-                              )}
-                            />
-                          </label>
-
-                          <label className="form-field">
-                            <span>{content.documents.file}</span>
-                            <Controller
-                              name="file"
-                              control={documentForm.control}
-                              render={({ field }) => (
-                                <input
-                                  type="file"
-                                  onChange={(event) => field.onChange(event.target.files?.[0] ?? null)}
-                                  disabled={!employeeId}
-                                />
-                              )}
-                            />
-                          </label>
-
-                          <button
-                            type="button"
-                            className="primary-button"
-                            onClick={documentForm.handleSubmit(handleUploadDocument)}
-                            disabled={!employeeId || uploadDocumentMutation.isPending}
-                          >
-                            {content.buttons.upload}
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                      ) : (
+                        <p className="helper-text">{content.documents.empty}</p>
+                      )}
+                    </div>
                   </section>
                 )}
+
 
                 {activeTab === "payroll" && (
                   <>

@@ -177,14 +177,38 @@ class EmployeeDocument(BaseModel):
         ID = "id", "ID"
         OTHER = "other", "Other"
 
+    class Category(models.TextChoices):
+        EMPLOYEE_FILE = "employee_file", "Employee File"
+        CONTRACT = "contract", "Contract"
+        INVOICE = "invoice", "Invoice"
+        OTHER = "other", "Other"
+
+    class LinkedEntityType(models.TextChoices):
+        EMPLOYEE = "employee", "Employee"
+        INVOICE = "invoice", "Invoice"
+        CONTRACT = "contract", "Contract"
+
     employee = models.ForeignKey(
         "hr.Employee",
         on_delete=models.CASCADE,
         related_name="documents",
     )
     doc_type = models.CharField(max_length=20, choices=DocumentType.choices)
+    category = models.CharField(
+        max_length=30,
+        choices=Category.choices,
+        default=Category.EMPLOYEE_FILE,
+    )
     title = models.CharField(max_length=255, blank=True)
+    linked_entity_type = models.CharField(
+        max_length=20,
+        choices=LinkedEntityType.choices,
+        null=True,
+        blank=True,
+    )
+    linked_entity_id = models.CharField(max_length=64, blank=True)
     file = models.FileField(upload_to=employee_document_upload_to)
+    ocr_text = models.TextField(blank=True)
     uploaded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

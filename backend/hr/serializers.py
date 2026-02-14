@@ -297,8 +297,12 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
             "id",
             "employee",
             "doc_type",
+            "category",
             "title",
+            "linked_entity_type",
+            "linked_entity_id",
             "file",
+            "ocr_text",
             "uploaded_by",
             "created_at",
         )
@@ -307,9 +311,18 @@ class EmployeeDocumentSerializer(serializers.ModelSerializer):
 class EmployeeDocumentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployeeDocument
-        fields = ("id", "doc_type", "title", "file")
-        read_only_fields = ("id",)
-
+        fields = (
+            "id",
+            "doc_type",
+            "category",
+            "title",
+            "linked_entity_type",
+            "linked_entity_id",
+            "file",
+            "ocr_text",
+        )
+        read_only_fields = ("id", "ocr_text")
+        
     def validate(self, attrs):
         request = self.context.get("request")
         employee = self.context.get("employee")
@@ -332,8 +345,14 @@ class EmployeeDocumentCreateSerializer(serializers.ModelSerializer):
         validated_data["company"] = employee.company
         validated_data["employee"] = employee
         validated_data["uploaded_by"] = request.user if request else None
+        file_obj = validated_data.get("file")
+        title = (validated_data.get("title") or "").strip()
+        filename = getattr(file_obj, "name", "")
+        validated_data["ocr_text"] = " ".join(
+            part for part in [title, filename] if part
+        ).strip()
         return super().create(validated_data)
-
+    
 
 class AttendanceEmployeeSerializer(serializers.ModelSerializer):
     department = DepartmentMiniSerializer(read_only=True)

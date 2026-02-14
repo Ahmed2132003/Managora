@@ -12,6 +12,7 @@ import {
   type PayrollRunDetail,
   useAttendanceRecordsQuery,
   useUploadMyEmployeeDocument,
+  type DocumentCategory,
 } from "../../../shared/hr/hooks";
 import { http } from "../../../shared/api/http";
 import { endpoints } from "../../../shared/api/endpoints";
@@ -155,6 +156,7 @@ export function EmployeeSelfServicePage() {
   const deleteMutation = useDeleteEmployeeDocument();
 
   const [docType, setDocType] = useState("other");
+  const [docCategory, setDocCategory] = useState<DocumentCategory>("employee_file");
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
@@ -197,7 +199,12 @@ export function EmployeeSelfServicePage() {
   async function handleUpload(copy: Copy[Language]) {
     if (!file) return;
     try {
-      await uploadMutation.mutateAsync({ doc_type: docType, title, file });
+      await uploadMutation.mutateAsync({
+        doc_type: docType,
+        category: docCategory,
+        title,
+        file,
+      });
       setTitle("");
       setFile(null);
       await docsQuery.refetch();
@@ -684,6 +691,18 @@ export function EmployeeSelfServicePage() {
                     onChange={(event) => setDocType(event.target.value)}
                     placeholder={copy.labels.docType}
                   />
+                </label>
+                <label className="form-field">
+                  <span>{language === "ar" ? "التصنيف" : "Category"}</span>
+                  <select
+                    value={docCategory}
+                    onChange={(event) => setDocCategory(event.target.value as DocumentCategory)}
+                  >
+                    <option value="employee_file">{language === "ar" ? "ملف موظف" : "Employee file"}</option>
+                    <option value="contract">{language === "ar" ? "عقد" : "Contract"}</option>
+                    <option value="invoice">{language === "ar" ? "فاتورة" : "Invoice"}</option>
+                    <option value="other">{language === "ar" ? "أخرى" : "Other"}</option>
+                  </select>
                 </label>
                 <label className="form-field">
                   <span>{copy.labels.docTitle}</span>
