@@ -115,7 +115,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const redirectPath =
-    (location.state as { from?: { pathname?: string } })?.from?.pathname ?? "/dashboard";
+    (location.state as { from?: { pathname?: string } })?.from?.pathname ?? "/";    
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
 

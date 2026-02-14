@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { clearTokens } from "../shared/auth/tokens";
 import { useMe } from "../shared/auth/useMe";
 import { resolvePrimaryRole } from "../shared/auth/roleNavigation";
+import { getAllowedPathsForRole } from "../shared/auth/roleAccess.ts";
 import { hasPermission } from "../shared/auth/useCan";
 import { endpoints } from "../shared/api/endpoints";
 import { http } from "../shared/api/http";
@@ -427,69 +428,10 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
     [content.nav]
   );
 
-  const allowedRolePaths = useMemo(() => {
-    if (primaryRole === "hr") {
-      return new Set([
-        "/analytics/hr",
-        "/users",
-        "/attendance/self",
-        "/employee/self-service",
-        "/messages",
-        "/leaves/balance",
-        "/leaves/request",
-        "/leaves/my",
-        "/hr/employees",
-        "/hr/departments",
-        "/hr/job-titles",
-        "/hr/attendance",
-        "/hr/leaves/inbox",
-        "/hr/policies",
-        "/hr/actions",
-        "/payroll",
-      ]);
-    }
-
-    if (primaryRole === "accountant") {
-      return new Set([
-        "/analytics/finance",
-        "/attendance/self",
-        "/leaves/balance",
-        "/leaves/request",
-        "/leaves/my",
-        "/accounting/setup",
-        "/accounting/journal-entries",
-        "/accounting/expenses",
-        "/collections",
-        "/accounting/reports/trial-balance",
-        "/accounting/reports/general-ledger",
-        "/accounting/reports/pnl",
-        "/accounting/reports/balance-sheet",
-        "/accounting/reports/ar-aging",
-        "/customers",
-        "/customers/new",
-        "/invoices",
-        "/invoices/new",
-        "/analytics/cash-forecast",
-        "/catalog",
-        "/sales",
-        "/employee/self-service",
-        "/messages",
-      ]);
-    }
-
-    if (primaryRole === "employee") {
-      return new Set([
-        "/employee/self-service",
-        "/attendance/self",
-        "/leaves/balance",
-        "/leaves/request",
-        "/leaves/my",
-        "/messages",
-      ]);
-    }
-
-    return null;
-  }, [primaryRole]);
+  const allowedRolePaths = useMemo(
+    () => getAllowedPathsForRole(primaryRole),
+    [primaryRole]
+  );
 
   const visibleNavLinks = useMemo(() => {
     return navLinks.filter((link) => {
