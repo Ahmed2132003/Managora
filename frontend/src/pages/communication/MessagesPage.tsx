@@ -217,8 +217,16 @@ export function MessagesPage() {
               </div>
               {isManager ? (
                 <div className="messages-compose">
-                  <input value={groupName} placeholder={copy.groupName} onChange={(e) => setGroupName(e.target.value)} />
-                  <label><input type="checkbox" checked={newGroupPrivate} onChange={(e) => setNewGroupPrivate(e.target.checked)} /> {copy.groupPrivate}</label>
+                  <input
+                    className="messages-compose__input"
+                    value={groupName}
+                    placeholder={copy.groupName}
+                    onChange={(e) => setGroupName(e.target.value)}
+                  />
+                  <label className="messages-compose__checkbox">
+                    <input type="checkbox" checked={newGroupPrivate} onChange={(e) => setNewGroupPrivate(e.target.checked)} />
+                    <span>{copy.groupPrivate}</span>
+                  </label>                  
                   <button type="button" className="pill-button" onClick={() => void handleCreateGroup()}>{copy.createGroup}</button>
                 </div>
               ) : null}
@@ -266,7 +274,11 @@ export function MessagesPage() {
                 </div>
                 {selectedGroup && canManageGroup ? (
                   <div className="compose-actions">
-                    <select value={memberToAdd} onChange={(e) => setMemberToAdd(e.target.value ? Number(e.target.value) : "")}> 
+                    <select
+                      className="messages-compose__select"
+                      value={memberToAdd}
+                      onChange={(e) => setMemberToAdd(e.target.value ? Number(e.target.value) : "")}
+                    >                        
                       <option value="">{copy.addMember}</option>
                       {users.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
                     </select>

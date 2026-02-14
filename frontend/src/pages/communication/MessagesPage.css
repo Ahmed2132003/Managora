@@ -253,7 +253,9 @@
 }
 
 .messages-compose .field select,
-.messages-compose textarea {
+.messages-compose textarea,
+.messages-compose__input,
+.messages-compose__select {    
   border: 1px solid color-mix(in oklab, var(--border), transparent 8%);
   background: linear-gradient(
     165deg,
@@ -265,9 +267,16 @@
   transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
 }
 
-.messages-compose .field select {
+.messages-compose .field select,
+.messages-compose__input,
+.messages-compose__select {    
   min-height: 42px;
   padding-inline: 0.75rem;
+}
+
+.messages-compose__input,
+.messages-compose__select {
+  width: 100%;
 }
 
 .messages-compose textarea {
@@ -277,15 +286,36 @@
   line-height: 1.5;
 }
 
-.messages-compose textarea::placeholder {
+.messages-compose textarea::placeholder,
+.messages-compose__input::placeholder {    
   color: color-mix(in oklab, var(--muted), transparent 6%);
 }
 
 .messages-compose .field select:focus,
-.messages-compose textarea:focus {
+.messages-compose textarea:focus,
+.messages-compose__input:focus,
+.messages-compose__select:focus {    
   outline: none;
   border-color: color-mix(in oklab, var(--accent), var(--primary) 20%);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 85%);
+}
+
+.messages-compose__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.messages-compose__checkbox input {
+  accent-color: var(--accent);
+}
+
+
+.messages-compose select option {
+  background: var(--surface);
+  color: var(--text);
 }
 
 .compose-actions {
