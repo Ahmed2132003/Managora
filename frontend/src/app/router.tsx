@@ -5,8 +5,7 @@ import { LoginPage } from "../pages/LoginPage.tsx";
 import { DashboardPage } from "../pages/DashboardPage.tsx";
 import { UsersPage } from "../pages/UsersPage.tsx";
 import { RequireAuth } from "./RequireAuth";
-import { useMe } from "../shared/auth/useMe";
-import { getDefaultPathForRole, resolvePrimaryRole } from "../shared/auth/roleNavigation";
+import { RoleHomeRedirect } from "./RoleHomeRedirect";
 import { EmployeesPage } from "../pages/hr/EmployeesPage.tsx";
 import { EmployeeProfilePage } from "../pages/hr/EmployeeProfilePage.tsx";
 import { DepartmentsPage } from "../pages/hr/DepartmentsPage.tsx";
@@ -45,6 +44,7 @@ import { CatalogPage } from "../pages/catalog/CatalogPage";
 import { SalesPage } from "../pages/catalog/SalesPage.tsx";
 import { EmployeeSelfServicePage } from "../pages/accounting/employee/EmployeeSelfServicePage";
 import { MessagesPage } from "../pages/communication/MessagesPage.tsx";
+
 const TrialBalancePage = lazy(() =>
   import("../pages/accounting/TrialBalancePage.tsx").then((module) => ({
     default: module.TrialBalancePage,
@@ -71,24 +71,10 @@ const AgingReportPage = lazy(() =>
   }))
 );
 
-function withLazyLoad(element: JSX.Element) {
-  return <Suspense fallback={<p className="helper-text">Loading...</p>}>{element}</Suspense>;
-}
+const lazyFallback = <p className="helper-text">Loading...</p>;
 
-function RoleHomeRedirect() {
-  const meQuery = useMe();
-
-  if (meQuery.isLoading) {
-    return <p className="helper-text">Loading...</p>;
-  }
-
-  const role = resolvePrimaryRole(meQuery.data);
-  const targetPath = getDefaultPathForRole(role);
-  return <Navigate to={targetPath} replace />;
-}
-
-export const router = createBrowserRouter([           
-  {    
+export const router = createBrowserRouter([
+  {
     path: "/login",
     element: <LoginPage />,
   },
@@ -123,29 +109,64 @@ export const router = createBrowserRouter([
       { path: "accounting/journal-entries", element: <JournalEntriesPage /> },
       { path: "accounting/journal-entries/:id", element: <JournalEntryDetailsPage /> },
       { path: "accounting/expenses", element: <ExpensesPage /> },
-      { path: "collections", element: <CollectionsPage /> },      
-      { path: "accounting/reports/trial-balance", element: withLazyLoad(<TrialBalancePage />) },
-      { path: "accounting/reports/general-ledger", element: withLazyLoad(<GeneralLedgerPage />) },
-      { path: "accounting/reports/pnl", element: withLazyLoad(<ProfitLossPage />) },
-      { path: "accounting/reports/balance-sheet", element: withLazyLoad(<BalanceSheetPage />) },
-      { path: "accounting/reports/ar-aging", element: withLazyLoad(<AgingReportPage />) },      
+      { path: "collections", element: <CollectionsPage /> },
+      {
+        path: "accounting/reports/trial-balance",
+        element: (
+          <Suspense fallback={lazyFallback}>
+            <TrialBalancePage />
+          </Suspense>
+        ),
+      },
+      {
+        path: "accounting/reports/general-ledger",
+        element: (
+          <Suspense fallback={lazyFallback}>
+            <GeneralLedgerPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: "accounting/reports/pnl",
+        element: (
+          <Suspense fallback={lazyFallback}>
+            <ProfitLossPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: "accounting/reports/balance-sheet",
+        element: (
+          <Suspense fallback={lazyFallback}>
+            <BalanceSheetPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: "accounting/reports/ar-aging",
+        element: (
+          <Suspense fallback={lazyFallback}>
+            <AgingReportPage />
+          </Suspense>
+        ),
+      },
       { path: "customers", element: <CustomersPage /> },
       { path: "customers/new", element: <CustomerFormPage /> },
       { path: "customers/:id/edit", element: <CustomerFormPage /> },
       { path: "invoices", element: <InvoicesPage /> },
       { path: "invoices/new", element: <InvoiceFormPage /> },
       { path: "invoices/:id/edit", element: <InvoiceFormPage /> },
-      { path: "invoices/:id", element: <InvoiceDetailsPage /> },      
+      { path: "invoices/:id", element: <InvoiceDetailsPage /> },
       { path: "catalog", element: <CatalogPage /> },
       { path: "sales", element: <SalesPage /> },
       { path: "analytics/alerts", element: <AlertsCenterPage /> },
       { path: "analytics/cash-forecast", element: <CashForecastPage /> },
       { path: "analytics/ceo", element: <CEODashboardPage /> },
       { path: "analytics/finance", element: <FinanceDashboardPage /> },
-      { path: "analytics/hr", element: <HRDashboardPage /> },      
+      { path: "analytics/hr", element: <HRDashboardPage /> },
       { path: "admin", element: <AdminPanelPage /> },
-      { path: "admin/audit-logs", element: <AuditLogsPage /> },      
-      {                     
+      { path: "admin/audit-logs", element: <AuditLogsPage /> },
+      {
         path: "setup",
         element: <SetupWizardPage />,
         children: [
@@ -153,10 +174,10 @@ export const router = createBrowserRouter([
           { path: "templates", element: <SetupTemplatesPage /> },
           { path: "progress", element: <SetupProgressPage /> },
         ],
-      },      
+      },
     ],
-  },                                                                                                                                  
-  {    
+  },
+  {
     path: "*",
     element: <Navigate to="/login" replace />,
   },
