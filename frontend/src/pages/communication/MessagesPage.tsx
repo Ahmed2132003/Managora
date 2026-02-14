@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { notifications } from "@mantine/notifications";
 
@@ -29,8 +29,8 @@ const shellCopy: Record<Language, { title: string; subtitle: string; helper: str
   },
   ar: {
     title: "الرسائل الداخلية",
-    subtitle: "شات داخلي بنفس أسلوب واتساب مع مركز إشعارات متكامل.",
-    helper: "المحادثات والإشعارات تتحدث بشكل مباشر بدون إعادة تحميل.",
+    subtitle: "",
+    helper: "",
     tags: ["شات", "إشعارات", "مباشر"],
   },
 };
@@ -110,6 +110,7 @@ export function MessagesPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [enlargedImage, setEnlargedImage] = useState<{ src: string; label: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const chatBodyRef = useRef<HTMLDivElement | null>(null);
 
   const meQuery = useMe();
   const conversationsQuery = useChatConversations();
@@ -152,6 +153,13 @@ export function MessagesPage() {
       return Array.isArray(raw) ? raw : raw.results ?? [];
     },
   });
+
+  useEffect(() => {
+    if (!selectedConversationId || messages.length === 0) return;
+    const container = chatBodyRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+  }, [messages, selectedConversationId]);
 
   async function handleSend() {
     if (!recipientId || (!messageBody.trim() && files.length === 0)) return;
@@ -225,7 +233,7 @@ export function MessagesPage() {
                 </button>
               </div>
 
-              <div className="messages-chat-body">
+              <div ref={chatBodyRef} className="messages-chat-body">
                 {!selectedConversationId ? (
                   <p className="helper-text">{copy.selectConversationHint}</p>
                 ) : (initialMessagesQuery.isLoading || incrementalMessagesQuery.isLoading) && messages.length === 0 ? (
