@@ -31,6 +31,7 @@ type Content = {
   purchasePrice: string;
   maintenancePrice: string;
   paymentCodeLabel: string;
+  activationUsernameLabel: string;
   subscribeNowLabel: string;
   subscriptionHint: string;
 };
@@ -57,10 +58,11 @@ const contentMap: Record<Language, Content> = {
     purchasePrice: "Purchase price: 7000 EGP",
     maintenancePrice: "Maintenance & hosting: 600 EGP every 3 months",
     paymentCodeLabel: "Payment code",
+    activationUsernameLabel: "Username for activation",
     subscribeNowLabel: "Subscribe now",
     subscriptionHint:
-      "Get your 24-hour payment code from administration, then activate all company accounts instantly.",
-  },
+      "Enter your username and 24-hour payment code to activate all accounts for your company.",
+  },  
   ar: {
     brand: "ماناجورا",
     subtitle: "لوحة ذكية تجمع الحركة والوضوح والرؤية التحليلية.",
@@ -82,16 +84,18 @@ const contentMap: Record<Language, Content> = {
     purchasePrice: "سعر الشراء: 7000 جنيه",
     maintenancePrice: "الصيانة والاستضافة: 600 جنيه كل 3 شهور",
     paymentCodeLabel: "كود الدفع",
+    activationUsernameLabel: "اسم المستخدم للتفعيل",
     subscribeNowLabel: "اشترك الآن",
     subscriptionHint:
-      "استلم كود الدفع الصالح لمدة 24 ساعة من الإدارة ثم فعّل كل حسابات الشركة فورًا.",
+      "اكتب اسم المستخدم وكود الدفع الصالح لمدة 24 ساعة لتفعيل كل حسابات شركتك فورًا.",
   },
 };
 
 export function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [paymentCode, setPaymentCode] = useState("");
+  const [activationUsername, setActivationUsername] = useState("");
+  const [paymentCode, setPaymentCode] = useState("");  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [language, setLanguage] = useState<Language>(() => {
@@ -171,29 +175,21 @@ export function LoginPage() {
   async function handleSubscriptionActivation() {
     try {
       setIsSubscribing(true);
-      const loginResponse = await http.post(endpoints.auth.login, { username, password });
-      const access = loginResponse.data?.access;
-      const refresh = loginResponse.data?.refresh;
-
-      if (!access || !refresh) {
-        throw new Error("Missing tokens from login response.");
-      }
-
-      setTokens({ access, refresh });
-      await http.post(endpoints.subscriptions.activate, { code: paymentCode.trim().toUpperCase() });
+      await http.post(endpoints.subscriptions.activate, {
+        username: activationUsername.trim(),
+        code: paymentCode.trim().toUpperCase(),
+      });
 
       notifications.show({
         title: isArabic ? "تم تفعيل الاشتراك" : "Subscription activated",
         message: isArabic
           ? "تم تفعيل جميع حسابات الشركة بنجاح."
-          : "All company accounts are now active.",
+          : "All company accounts are now active. You can now log in.",
         color: "teal",
       });
-
-      navigate(redirectPath, { replace: true });
     } catch (err: unknown) {
       notifications.show({
-        title: isArabic ? "تعذر تفعيل الاشتراك" : "Subscription activation failed",
+        title: isArabic ? "تعذر تفعيل الاشتراك" : "Subscription activation failed",        
         message: formatApiError(err),
         color: "red",
       });
@@ -304,9 +300,18 @@ export function LoginPage() {
                 <li>{content.maintenancePrice}</li>
               </ul>
               <label className="field">
-                <span>{content.paymentCodeLabel}</span>
+                <span>{content.activationUsernameLabel}</span>
                 <input
                   type="text"
+                  value={activationUsername}
+                  onChange={(e) => setActivationUsername(e.currentTarget.value)}
+                  placeholder={isArabic ? "ادخل اسم المستخدم" : "Enter username"}
+                />
+              </label>
+              <label className="field">
+                <span>{content.paymentCodeLabel}</span>
+                <input
+                  type="text"                  
                   value={paymentCode}
                   onChange={(e) => setPaymentCode(e.currentTarget.value)}
                   placeholder={isArabic ? "ادخل كود الدفع" : "Enter payment code"}
@@ -316,7 +321,7 @@ export function LoginPage() {
                 type="button"
                 className="action-button"
                 onClick={handleSubscriptionActivation}
-                disabled={isSubscribing || !paymentCode.trim() || !username.trim() || !password.trim()}
+                disabled={isSubscribing || !paymentCode.trim() || !activationUsername.trim()}                
               >
                 {isSubscribing ? content.subscribeNowLabel + "..." : content.subscribeNowLabel}
               </button>
