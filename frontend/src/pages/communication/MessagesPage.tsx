@@ -50,9 +50,12 @@ const pageCopy = {
     send: "Send",
     enablePush: "Enable browser push",
     pushEnabled: "Push notifications enabled.",
-    pushMissingKey: "Push key is not configured (VITE_WEB_PUSH_PUBLIC_KEY).",
+    pushMissingKey: "Push key is not configured (VITE_WEB_PUSH_PUBLIC_KEY). Add it to frontend/.env then restart Vite.",
+    pushDenied: "Browser notification permission was denied.",
+    pushUnsupported: "Push notifications are not supported in this browser.",
+    pushGenericError: "Could not enable browser push notifications.",
   },
-  ar: {
+  ar: {    
     conversations: "المحادثات",
     notifications: "الإشعارات",
     unread: "غير مقروء",
@@ -65,7 +68,10 @@ const pageCopy = {
     send: "إرسال",
     enablePush: "تفعيل إشعارات المتصفح",
     pushEnabled: "تم تفعيل إشعارات المتصفح بنجاح.",
-    pushMissingKey: "مفتاح Push غير مضبوط (VITE_WEB_PUSH_PUBLIC_KEY).",
+    pushMissingKey: "مفتاح Push غير مضبوط (VITE_WEB_PUSH_PUBLIC_KEY). أضِفه داخل frontend/.env ثم أعد تشغيل Vite.",
+    pushDenied: "تم رفض إذن الإشعارات من المتصفح.",
+    pushUnsupported: "المتصفح الحالي لا يدعم إشعارات Push.",
+    pushGenericError: "تعذر تفعيل إشعارات Push في المتصفح.",
   },
 } as const;
 
@@ -135,9 +141,22 @@ export function MessagesPage() {
 
     if (result.reason === "missing_vapid") {
       notifications.show({ message: pageCopy[language].pushMissingKey, color: "yellow" });
+      return;
     }
-  }
 
+    if (result.reason === "denied") {
+      notifications.show({ message: pageCopy[language].pushDenied, color: "yellow" });
+      return;
+    }
+
+    if (result.reason === "unsupported") {
+      notifications.show({ message: pageCopy[language].pushUnsupported, color: "yellow" });
+      return;
+    }
+
+    notifications.show({ message: pageCopy[language].pushGenericError, color: "red" });
+  }
+  
   return (
     <DashboardShell copy={shellCopy} className="messages-page">
       {({ language, isArabic }) => {

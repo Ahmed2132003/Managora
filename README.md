@@ -52,4 +52,6 @@ One platform for HR + Attendance + Payroll + Accounting + Dashboards (10–300 e
 
 ### Backend environment variables
 - `NOTIFICATIONS_EMAIL_ENABLED` (default `1`)
-- `DEFAULT_FROM_EMAIL`
+DEFAULT_FROM_EMAIL`
+### Frontend environment variables
+- `VITE_WEB_PUSH_PUBLIC_KEY` (required to enable browser push subscription from the Messages page).
