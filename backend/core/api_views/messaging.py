@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.models import ChatConversation, ChatMessage, InAppNotification, PushSubscription
-from core.serializers.messaging import (
+from core.serializers import (    
     ChatConversationSerializer,
     ChatMessageSerializer,
     InAppNotificationSerializer,
