@@ -24,6 +24,7 @@ type Content = {
     users: string;
     attendanceSelf: string;
     employeeSelfService: string;
+    messages: string;
     leaveBalance: string;
     leaveRequest: string;
     leaveMyRequests: string;
@@ -78,6 +79,7 @@ const contentMap: Record<Language, Content> = {
       users: "Users",
       attendanceSelf: "My Attendance",
       employeeSelfService: "Employee Self Service",
+      messages: "Messages & Notifications",
       leaveBalance: "Leave Balance",
       leaveRequest: "Leave Request",
       leaveMyRequests: "My Leave Requests",
@@ -130,6 +132,7 @@ const contentMap: Record<Language, Content> = {
       users: "المستخدمون",
       attendanceSelf: "حضوري",
       employeeSelfService: "الخدمات الذاتية للموظف",
+      messages: "الرسائل والإشعارات",
       leaveBalance: "رصيد الإجازات",
       leaveRequest: "طلب إجازة",
       leaveMyRequests: "طلباتي",
@@ -235,6 +238,11 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
         path: "/employee/self-service",
         label: content.nav.employeeSelfService,
         icon: "🧑‍💻",
+      },
+      {
+        path: "/messages",
+        label: content.nav.messages,
+        icon: "💬",
       },
       {
         path: "/leaves/balance",

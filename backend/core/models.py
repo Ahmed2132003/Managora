@@ -447,3 +447,124 @@ class CompanySetupState(models.Model):
 
     def __str__(self):
         return f"{self.company.name} setup state"
+
+
+class ChatConversation(models.Model):
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="chat_conversations",
+    )
+    participant_one = models.ForeignKey(
+        "core.User",
+        on_delete=models.CASCADE,
+        related_name="chat_conversations_as_one",
+    )
+    participant_two = models.ForeignKey(
+        "core.User",
+        on_delete=models.CASCADE,
+        related_name="chat_conversations_as_two",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=~models.Q(participant_one=models.F("participant_two")),
+                name="chat_conversation_distinct_participants",
+            ),
+            models.UniqueConstraint(
+                fields=["company", "participant_one", "participant_two"],
+                name="unique_chat_conversation_pair",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.company_id}:{self.participant_one_id}-{self.participant_two_id}"
+
+
+class ChatMessage(models.Model):
+    conversation = models.ForeignKey(
+        "core.ChatConversation",
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="chat_messages",
+    )
+    sender = models.ForeignKey(
+        "core.User",
+        on_delete=models.CASCADE,
+        related_name="sent_chat_messages",
+    )
+    recipient = models.ForeignKey(
+        "core.User",
+        on_delete=models.CASCADE,
+        related_name="received_chat_messages",
+    )
+    body = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["company", "recipient", "is_read"], name="chat_msg_rec_unread_idx"),
+            models.Index(fields=["conversation", "id"], name="chat_msg_conv_id_idx"),
+        ]
+
+
+class InAppNotification(models.Model):
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="in_app_notifications",
+    )
+    sender = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_in_app_notifications",
+    )
+    recipient = models.ForeignKey(
+        "core.User",
+        on_delete=models.CASCADE,
+        related_name="in_app_notifications",
+    )
+    message = models.ForeignKey(
+        "core.ChatMessage",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="notifications",
+    )
+    title = models.CharField(max_length=255)
+    body = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["company", "recipient", "is_read"], name="notif_rec_unread_idx"),
+            models.Index(fields=["recipient", "id"], name="notif_rec_id_idx"),
+        ]
+
+
+class PushSubscription(models.Model):
+    user = models.ForeignKey(
+        "core.User",
+        on_delete=models.CASCADE,
+        related_name="push_subscriptions",
+    )
+    endpoint = models.TextField(unique=True)
+    p256dh = models.TextField()
+    auth = models.TextField()
+    user_agent = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user"], name="push_sub_user_idx")]

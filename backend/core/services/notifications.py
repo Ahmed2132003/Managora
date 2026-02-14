@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from typing import Iterable
-from urllib import error, request
 
 from django.conf import settings
 from django.core.mail import send_mail
+
+from core.models import InAppNotification
 
 logger = logging.getLogger(__name__)
 
@@ -41,45 +41,14 @@ def send_email_notification(*, to_email: str, subject: str, body: str) -> bool:
     return bool(sent)
 
 
-def send_whatsapp_notification(*, to_number: str, body: str) -> bool:
-    if not to_number or not _is_enabled("NOTIFICATIONS_WHATSAPP_ENABLED", False):
-        return False
-
-    api_url = getattr(settings, "WHATSAPP_API_URL", "")
-    api_token = getattr(settings, "WHATSAPP_API_TOKEN", "")
-    sender_id = getattr(settings, "WHATSAPP_SENDER_ID", "")
-
-    if not api_url or not api_token:
-        logger.warning("WhatsApp notifications enabled but API_URL/API_TOKEN are missing")
-        return False
-
-    payload = json.dumps(
-        {
-            "to": to_number,
-            "message": body,
-            "sender_id": sender_id,
-        }
-    ).encode("utf-8")
-
-    req = request.Request(
-        api_url,
-        data=payload,
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_token}",
-        },
+def send_in_app_notification(*, user, subject: str, body: str) -> bool:
+    InAppNotification.objects.create(
+        company=user.company,
+        recipient=user,
+        title=subject,
+        body=body,
     )
-
-    try:
-        with request.urlopen(req, timeout=10) as response:
-            return 200 <= response.status < 300
-    except error.URLError:
-        logger.exception(
-            "Failed to send WhatsApp notification",
-            extra={"to_number": to_number},
-        )
-        return False
+    return True
 
 
 def notify_user(user, *, message: NotificationMessage) -> dict[str, bool]:
@@ -88,13 +57,9 @@ def notify_user(user, *, message: NotificationMessage) -> dict[str, bool]:
         subject=message.subject,
         body=message.body,
     )
+    in_app_sent = send_in_app_notification(user=user, subject=message.subject, body=message.body)
 
-    whatsapp_sent = send_whatsapp_notification(
-        to_number=(getattr(user, "phone_number", "") or "").strip(),
-        body=message.body,
-    )
-
-    return {"email": email_sent, "whatsapp": whatsapp_sent}
+    return {"email": email_sent, "in_app": in_app_sent}
 
 
 def notify_users(users: Iterable, *, message: NotificationMessage) -> None:

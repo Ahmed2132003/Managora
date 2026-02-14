@@ -8,6 +8,14 @@ from core.api_views.audit import AuditLogListView
 from core.api_views.copilot import CopilotQueryView
 from core.api_views.companies import CompanyListCreateView
 from core.api_views.me import MeView
+from core.api_views.messaging import (
+    ChatConversationListView,
+    ChatMessageListView,
+    NotificationListView,
+    NotificationMarkReadView,
+    PushSubscriptionUpsertView,
+    SendChatMessageView,
+)
 from core.api_views.roles import RoleListView
 from core.api_views.setup import ApplySetupTemplateView, SetupTemplateListView
 from core.api_views.users import UsersViewSet
@@ -45,4 +53,12 @@ urlpatterns = [
     # Setup        
     path("setup/templates/", SetupTemplateListView.as_view(), name="setup-templates"),
     path("setup/apply-template/", ApplySetupTemplateView.as_view(), name="setup-apply-template"),
+
+    # Internal chat and notifications
+    path("chat/conversations/", ChatConversationListView.as_view(), name="chat-conversations"),
+    path("chat/conversations/<int:conversation_id>/messages/", ChatMessageListView.as_view(), name="chat-messages"),
+    path("chat/messages/send/", SendChatMessageView.as_view(), name="chat-send-message"),
+    path("notifications/", NotificationListView.as_view(), name="notifications"),
+    path("notifications/<int:notification_id>/read/", NotificationMarkReadView.as_view(), name="notification-mark-read"),
+    path("push-subscriptions/", PushSubscriptionUpsertView.as_view(), name="push-subscription-upsert"),
 ]

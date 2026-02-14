@@ -1,0 +1,88 @@
+.messages-grid {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 320px;
+  gap: 1rem;
+}
+
+.messages-list {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 520px;
+  overflow: auto;
+}
+
+.message-item {
+  text-align: start;
+  border: 1px solid color-mix(in oklab, var(--border), transparent 15%);
+  background: color-mix(in oklab, var(--surface), transparent 4%);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.message-item--active {
+  border-color: var(--accent);
+}
+
+.message-item--unread {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.message-item span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.messages-chat-body {
+  min-height: 380px;
+  max-height: 520px;
+  overflow: auto;
+  display: grid;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+  padding-inline-end: 0.35rem;
+}
+
+.bubble {
+  max-width: 75%;
+  padding: 0.6rem 0.75rem;
+  border-radius: 12px;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.bubble--mine {
+  margin-inline-start: auto;
+  background: color-mix(in oklab, var(--accent), white 80%);
+}
+
+.bubble--other {
+  margin-inline-end: auto;
+  background: color-mix(in oklab, var(--surface), white 35%);
+  border: 1px solid var(--border);
+}
+
+.bubble small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.messages-compose {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.messages-compose textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+@media (max-width: 1280px) {
+  .messages-grid {
+    grid-template-columns: 1fr;
+  }
+}

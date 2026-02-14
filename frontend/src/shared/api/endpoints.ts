@@ -163,6 +163,15 @@ export const endpoints = {
     cashForecast: api("/analytics/forecast/cash/"),
   },
 
+  messaging: {
+    conversations: api("/chat/conversations/"),
+    conversationMessages: (conversationId: number) => api(`/chat/conversations/${conversationId}/messages/`),
+    sendMessage: api("/chat/messages/send/"),
+    notifications: api("/notifications/"),
+    markNotificationRead: (id: number) => api(`/notifications/${id}/read/`),
+    pushSubscriptions: api("/push-subscriptions/"),
+  },
+
   copilot: {
     query: api("/copilot/query/"),
   },

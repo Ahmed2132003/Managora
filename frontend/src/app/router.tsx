@@ -42,6 +42,7 @@ import { AdminPanelPage } from "../pages/admin/AdminPanelPage";
 import { CatalogPage } from "../pages/catalog/CatalogPage";
 import { SalesPage } from "../pages/catalog/SalesPage.tsx";
 import { EmployeeSelfServicePage } from "../pages/accounting/employee/EmployeeSelfServicePage";
+import { MessagesPage } from "../pages/communication/MessagesPage";
 const TrialBalancePage = lazy(() =>
   import("../pages/accounting/TrialBalancePage.tsx").then((module) => ({
     default: module.TrialBalancePage,
@@ -90,6 +91,7 @@ export const router = createBrowserRouter([
       { path: "users", element: <UsersPage /> },
       { path: "attendance/self", element: <SelfAttendancePage /> },
       { path: "employee/self-service", element: <EmployeeSelfServicePage /> },
+      { path: "messages", element: <MessagesPage /> },
       { path: "leaves/balance", element: <LeaveBalancePage /> },
       { path: "leaves/request", element: <LeaveRequestPage /> },
       { path: "leaves/my", element: <LeaveMyRequestsPage /> },
