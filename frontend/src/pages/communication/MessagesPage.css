@@ -315,12 +315,12 @@
 
 .messages-compose .field select,
 .messages-compose__select {
-  color-scheme: dark;
+  color-scheme: light;  
 }
 
 .messages-compose select option {
-  background: color-mix(in oklab, #0b1736, var(--surface) 25%);
-  color: #eef4ff;
+  background: #fff;
+  color: #111;  
 }
 .compose-actions {
   display: flex;
