@@ -181,6 +181,65 @@
   font-size: 0.83rem;
 }
 
+.image-attachment {
+  display: grid;
+  gap: 0.3rem;
+  justify-items: start;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+
+.image-attachment img {
+  max-width: min(280px, 100%);
+  max-height: 200px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid color-mix(in oklab, var(--border), transparent 5%);
+}
+
+.image-attachment span {
+  font-size: 0.76rem;
+  color: color-mix(in oklab, currentColor, transparent 30%);
+}
+
+.image-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in oklab, #020617, transparent 30%);
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.image-preview {
+  width: min(900px, 100%);
+  max-height: 92dvh;
+  display: grid;
+  gap: 0.8rem;
+  background: var(--surface);
+  border: 1px solid color-mix(in oklab, var(--border), transparent 10%);
+  border-radius: 16px;
+  padding: 0.9rem;
+}
+
+.image-preview img {
+  max-width: 100%;
+  max-height: calc(92dvh - 7rem);
+  margin-inline: auto;
+  border-radius: 12px;
+  object-fit: contain;
+}
+
+.image-preview__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .bubble small {
   color: color-mix(in oklab, currentColor, transparent 34%);
   font-size: 0.72rem;
