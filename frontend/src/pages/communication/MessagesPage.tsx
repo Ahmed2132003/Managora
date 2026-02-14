@@ -114,18 +114,21 @@ export function MessagesPage() {
   const addMemberMutation = useUpsertGroupMember();
   const updateGroupMutation = useUpdateChatGroup();
 
+  const autoSelectedConversationId = conversationsQuery.data?.[0]?.id ?? null;
+  const selectedConversationId = manuallySelectedConversationId ?? autoSelectedConversationId;
+
   const selectedConversation = useMemo(
-    () => conversationsQuery.data?.find((item) => item.id === manuallySelectedConversationId) ?? null,
-    [conversationsQuery.data, manuallySelectedConversationId]
-  );
+    () => conversationsQuery.data?.find((item) => item.id === selectedConversationId) ?? null,
+    [conversationsQuery.data, selectedConversationId]
+  );  
   const selectedGroup = useMemo(() => {
     if (!selectedConversation?.group_id) return null;
     return groupsQuery.data?.find((item) => item.id === selectedConversation.group_id) ?? null;
-  }, [groupsQuery.data, selectedConversation?.group_id]);
+  }, [groupsQuery.data, selectedConversation]);
 
-  const initialMessagesQuery = useChatMessages(manuallySelectedConversationId, null);
+  const initialMessagesQuery = useChatMessages(selectedConversationId, null);  
   const lastInitialMessageId = initialMessagesQuery.data?.[initialMessagesQuery.data.length - 1]?.id ?? null;
-  const incrementalMessagesQuery = useChatMessages(manuallySelectedConversationId, lastInitialMessageId);
+  const incrementalMessagesQuery = useChatMessages(selectedConversationId, lastInitialMessageId);
 
   const messages = useMemo(() => {
     const seen = new Set<number>();
@@ -161,12 +164,6 @@ export function MessagesPage() {
   const unreadCount = useMemo(() => (notificationsQuery.data ?? []).filter((item) => !item.is_read).length, [notificationsQuery.data]);
   const isManager = useMemo(() => (meQuery.data?.roles ?? []).some((r) => roleNames.has(r.name.toLowerCase())), [meQuery.data?.roles]);
   const canManageGroup = Boolean(selectedGroup?.members.some((m) => m.user === meQuery.data?.user.id && m.is_admin)) || isManager;
-
-  useEffect(() => {
-    if (!manuallySelectedConversationId && conversationsQuery.data?.length) {
-      setManuallySelectedConversationId(conversationsQuery.data[0].id);
-    }
-  }, [manuallySelectedConversationId, conversationsQuery.data]);
 
   useEffect(() => {
     chatBodyRef.current?.scrollTo({ top: chatBodyRef.current.scrollHeight, behavior: "smooth" });
@@ -212,7 +209,7 @@ export function MessagesPage() {
               <div className="panel__header"><h2>{copy.conversations}</h2></div>
               <div className="messages-list">
                 {(conversationsQuery.data ?? []).map((conversation) => (
-                  <button key={conversation.id} type="button" className={`message-item ${manuallySelectedConversationId === conversation.id ? "message-item--active" : ""}`} onClick={() => setManuallySelectedConversationId(conversation.id)}>
+                  <button key={conversation.id} type="button" className={`message-item ${selectedConversationId === conversation.id ? "message-item--active" : ""}`} onClick={() => setManuallySelectedConversationId(conversation.id)}>                    
                     <strong>{conversation.type === "group" ? `# ${conversation.group_name}` : conversation.other_user_name}</strong>
                     <span>{copy.conversationUpdatedLabel}: {new Date(conversation.updated_at).toLocaleString()}</span>
                   </button>
@@ -234,7 +231,7 @@ export function MessagesPage() {
               </div>
 
               <div ref={chatBodyRef} className="messages-chat-body">
-                {!manuallySelectedConversationId ? <p className="helper-text">{copy.selectConversationHint}</p> : messages.map((message) => {
+                {!selectedConversationId ? <p className="helper-text">{copy.selectConversationHint}</p> : messages.map((message) => {                    
                   const mine = message.sender === meQuery.data?.user.id;
                   return (
                     <div key={message.id} className={`bubble ${mine ? "bubble--mine" : "bubble--other"}`}>
