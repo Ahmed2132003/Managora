@@ -145,10 +145,7 @@ export function MessagesPage() {
     return next;
   }, [incrementalMessagesQuery.data, initialMessagesQuery.data]);
 
-  const language = (localStorage.getItem("language") as Language | null) ?? "en";
-  const copy = pageCopy[language];
-
-  const usersQuery = useQuery({
+  const usersQuery = useQuery({    
     queryKey: ["users", "light"],
     queryFn: async () => {
       const response = await http.get<{ id: number; username: string }[]>(endpoints.users);
@@ -169,10 +166,10 @@ export function MessagesPage() {
     chatBodyRef.current?.scrollTo({ top: chatBodyRef.current.scrollHeight, behavior: "smooth" });
   }, [messages.length]);
 
-  const handleEnablePush = async () => {
+  const handleEnablePush = async (copy: (typeof pageCopy)[Language]) => {    
     const vapidPublicKey = import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY;
     const result = await registerPushSubscription(vapidPublicKey);
-    if (result.ok) notifications.show({ title: "Push", message: copy.pushEnabled });
+    if (result.ok) notifications.show({ title: copy.enablePush, message: copy.pushEnabled });    
   };
 
   const handleSend = async () => {
@@ -202,19 +199,22 @@ export function MessagesPage() {
 
   return (
     <DashboardShell copy={shellCopy}>
-      {() => (
+      {({ language, isArabic }) => {
+        const copy = pageCopy[language];
+
+        return (
         <>
-          <div className="messages-grid">
+          <div className="messages-grid" dir={isArabic ? "rtl" : "ltr"}>
             <section className="panel conversations-panel">
               <div className="panel__header"><h2>{copy.conversations}</h2></div>
               <div className="messages-list">
-                {(conversationsQuery.data ?? []).map((conversation) => (
+                {(conversationsQuery.data ?? []).length === 0 ? <p className="helper-text">{copy.emptyConversations}</p> : (conversationsQuery.data ?? []).map((conversation) => (
                   <button key={conversation.id} type="button" className={`message-item ${selectedConversationId === conversation.id ? "message-item--active" : ""}`} onClick={() => setManuallySelectedConversationId(conversation.id)}>                    
                     <strong>{conversation.type === "group" ? `# ${conversation.group_name}` : conversation.other_user_name}</strong>
-                    <span>{copy.conversationUpdatedLabel}: {new Date(conversation.updated_at).toLocaleString()}</span>
+                    <span>{copy.conversationUpdatedLabel}: {new Date(conversation.updated_at).toLocaleString(isArabic ? "ar" : "en")}</span>
                   </button>
                 ))}
-              </div>
+              </div>              
               {isManager ? (
                 <div className="messages-compose">
                   <input
@@ -235,11 +235,11 @@ export function MessagesPage() {
             <section className="panel chat-panel">
               <div className="panel__header">
                 <h2>{selectedConversation?.type === "group" ? selectedConversation.group_name : selectedConversation?.other_user_name ?? copy.conversations}</h2>
-                <button type="button" className="table-action" onClick={() => void handleEnablePush()}>{copy.enablePush}</button>
+                <button type="button" className="table-action" onClick={() => void handleEnablePush(copy)}>{copy.enablePush}</button>                
               </div>
 
               <div ref={chatBodyRef} className="messages-chat-body">
-                {!selectedConversationId ? <p className="helper-text">{copy.selectConversationHint}</p> : messages.map((message) => {                    
+                {!selectedConversationId ? <p className="helper-text">{copy.selectConversationHint}</p> : messages.length === 0 ? <p className="helper-text">{copy.emptyMessages}</p> : messages.map((message) => {                                        
                   const mine = message.sender === meQuery.data?.user.id;
                   return (
                     <div key={message.id} className={`bubble ${mine ? "bubble--mine" : "bubble--other"}`}>
@@ -302,7 +302,8 @@ export function MessagesPage() {
           </div>
           {enlargedImage ? <div className="image-preview-overlay" role="dialog" aria-modal="true" onClick={() => setEnlargedImage(null)}><div className="image-preview" onClick={(event) => event.stopPropagation()}><img src={enlargedImage.src} alt={enlargedImage.label} /><div className="image-preview__actions"><a className="table-action" href={enlargedImage.src} download>{copy.saveImage}</a></div></div></div> : null}
         </>
-      )}
+      );
+      }}
     </DashboardShell>
   );
 }

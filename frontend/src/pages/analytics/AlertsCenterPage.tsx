@@ -86,6 +86,11 @@ export function AlertsCenterPage() {
           ack: "Ack",
           resolve: "Resolve",
         },
+        severity: {
+          low: "Low",
+          medium: "Medium",
+          high: "High",
+        },
         modal: {
           title: "Alert details",
           evidence: "Evidence",
@@ -102,6 +107,7 @@ export function AlertsCenterPage() {
           ackAction: "Ack Alert",
           resolveAction: "Resolve Alert",
           loading: "Loading details...",
+          close: "Close",
           table: {
             dimension: "Dimension",
             contributor: "Contributor",
@@ -135,6 +141,11 @@ export function AlertsCenterPage() {
           ack: "تأكيد",
           resolve: "حل",
         },
+        severity: {
+          low: "منخفض",
+          medium: "متوسط",
+          high: "مرتفع",
+        },
         modal: {
           title: "تفاصيل التنبيه",
           evidence: "الأدلة",
@@ -151,6 +162,7 @@ export function AlertsCenterPage() {
           ackAction: "تأكيد التنبيه",
           resolveAction: "حل التنبيه",
           loading: "جارٍ تحميل التفاصيل...",
+          close: "إغلاق",
           table: {
             dimension: "البعد",
             contributor: "المساهم",
@@ -258,7 +270,7 @@ export function AlertsCenterPage() {
                                   alert.severity
                                 ]}`}
                               >
-                                {alert.severity.toUpperCase()}
+                                {copy.severity[alert.severity]}
                               </span>
                             </td>
                             <td>{alert.title}</td>
@@ -324,7 +336,7 @@ export function AlertsCenterPage() {
                       type="button"
                       className="icon-button"
                       onClick={closeModal}
-                      aria-label="Close"
+                      aria-label={copy.modal.close}
                     >
                       ✕
                     </button>
@@ -345,7 +357,7 @@ export function AlertsCenterPage() {
                                 alertDetailQuery.data.severity
                               ]}`}
                             >
-                              {alertDetailQuery.data.severity.toUpperCase()}
+                              {copy.severity[alertDetailQuery.data.severity]}
                             </span>
                             <span
                               className={`status-pill status-pill--${statusColor[
@@ -375,7 +387,7 @@ export function AlertsCenterPage() {
                             <div>
                               <span>{copy.modal.delta}</span>
                               <strong>
-                                {alertDetailQuery.data.evidence.delta_percent ?? "N/A"}%
+                                {alertDetailQuery.data.evidence.delta_percent ?? (language === "ar" ? "غير متاح" : "N/A")}%
                               </strong>
                             </div>
                           </div>
