@@ -27,6 +27,11 @@ export const endpoints = {
   users: api("/users/"),
   roles: api("/roles/"),
 
+  subscriptions: {
+    generateCode: api("/subscriptions/codes/generate/"),
+    activate: api("/subscriptions/activate/"),
+  },
+
   setup: {
     templates: api("/setup/templates/"),
     applyTemplate: api("/setup/apply-template/"),

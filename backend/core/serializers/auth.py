@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import update_last_login
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.settings import api_settings
@@ -56,6 +57,18 @@ class LoginSerializer(TokenObtainPairSerializer):
         if getattr(user, "company_id", None) is None:
             raise serializers.ValidationError(
                 {"detail": "User is not linked to a company."},
+                code="authorization",
+            )
+
+        company = getattr(user, "company", None)
+        now = timezone.now()
+        if company and company.subscription_expires_at and company.subscription_expires_at <= now:
+            company.is_active = False
+            company.save(update_fields=["is_active"])
+
+        if company and not company.is_active:
+            raise serializers.ValidationError(
+                {"detail": "Company subscription is inactive. Please subscribe now."},
                 code="authorization",
             )
 

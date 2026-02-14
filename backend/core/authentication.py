@@ -1,3 +1,5 @@
+from django.utils import timezone
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from core.audit import get_audit_context, get_client_ip, set_audit_context
@@ -9,6 +11,15 @@ class AuditJWTAuthentication(JWTAuthentication):
         if result:
             user, token = result
             audit_context = get_audit_context()
+            company = getattr(user, "company", None)
+            now = timezone.now()
+            if company and company.subscription_expires_at and company.subscription_expires_at <= now:
+                company.is_active = False
+                company.save(update_fields=["is_active"])
+
+            if company and not company.is_active:
+                raise AuthenticationFailed("Company subscription is inactive.")
+
             set_audit_context(
                 user=user,
                 ip_address=audit_context.ip_address if audit_context else get_client_ip(request),

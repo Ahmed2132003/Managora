@@ -1,9 +1,24 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Card, Group, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import {
+  Button,
+  Card,
+  Group,
+  Select,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { useQuery } from "@tanstack/react-query";
 import { useMe } from "../../shared/auth/useMe";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { DashboardShell } from "../DashboardShell";
+import { http } from "../../shared/api/http";
+import { endpoints } from "../../shared/api/endpoints";
+import { formatApiError } from "../../shared/api/errors";
 
 type Language = "en" | "ar";
 
@@ -17,6 +32,11 @@ type AdminSection = {
   title: string;
   description: string;
   items: AdminItem[];
+};
+
+type CompanyOption = {
+  id: number;
+  name: string;
 };
 
 const shellCopy = {
@@ -211,15 +231,46 @@ export function AdminPanelPage() {
   const navigate = useNavigate();
   const { data } = useMe();
   const isSuperuser = Boolean(data?.user.is_superuser);
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [generatedCode, setGeneratedCode] = useState("");
 
-  const actionsLabel = useMemo(
-    () => ({ en: "Open", ar: "إدارة" }),
-    []
-  );
+  const { data: companies = [] } = useQuery({
+    queryKey: ["subscription-companies"],
+    queryFn: async () => {
+      const response = await http.get<CompanyOption[]>(endpoints.companies);
+      return response.data;
+    },
+    enabled: isSuperuser,
+  });
+
+  const actionsLabel = useMemo(() => ({ en: "Open", ar: "إدارة" }), []);
 
   if (!isSuperuser) {
     return <AccessDenied />;
   }
+
+  const generateCode = async () => {
+    if (!selectedCompany) {
+      return;
+    }
+    try {
+      const response = await http.post(endpoints.subscriptions.generateCode, {
+        company_id: Number(selectedCompany),
+      });
+      setGeneratedCode(response.data?.code ?? "");
+      notifications.show({
+        title: "Payment code generated",
+        message: "Code copied is ready and valid for 24 hours.",
+        color: "teal",
+      });
+    } catch (error: unknown) {
+      notifications.show({
+        title: "Failed to generate code",
+        message: formatApiError(error),
+        color: "red",
+      });
+    }
+  };
 
   return (
     <DashboardShell copy={shellCopy}>
@@ -238,6 +289,52 @@ export function AdminPanelPage() {
                 {shellCopy[language].helper}
               </Text>
             </Group>
+
+            <Card withBorder radius="md" p="lg">
+              <Stack gap="sm">
+                <Title order={4}>{isArabic ? "توليد كود دفع لشركة" : "Generate payment code for company"}</Title>
+                <Group align="flex-end">
+                  <Select
+                    label={isArabic ? "الشركة" : "Company"}
+                    placeholder={isArabic ? "اختر الشركة" : "Select company"}
+                    value={selectedCompany}
+                    onChange={setSelectedCompany}
+                    data={companies.map((company) => ({ value: String(company.id), label: company.name }))}
+                    searchable
+                    w={320}
+                  />
+                  <Button onClick={generateCode} disabled={!selectedCompany}>
+                    {isArabic ? "توليد الكود" : "Generate code"}
+                  </Button>
+                </Group>
+                <TextInput
+                  label={isArabic ? "كود الدفع" : "Payment code"}
+                  value={generatedCode}
+                  readOnly
+                  rightSection={
+                    <Button
+                      size="compact-xs"
+                      variant="subtle"
+                      disabled={!generatedCode}
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(generatedCode);
+                        notifications.show({
+                          title: isArabic ? "تم النسخ" : "Copied",
+                          message: isArabic ? "تم نسخ كود الدفع." : "Payment code copied.",
+                        });
+                      }}
+                    >
+                      {isArabic ? "نسخ" : "Copy"}
+                    </Button>
+                  }
+                />
+                <Text c="dimmed" size="sm">
+                  {isArabic
+                    ? "مدة صلاحية كود الدفع: 24 ساعة."
+                    : "Payment code is valid for 24 hours only."}
+                </Text>
+              </Stack>
+            </Card>
 
             <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
               {sections.map((section) => (

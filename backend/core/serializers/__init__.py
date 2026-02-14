@@ -2,6 +2,10 @@
 
 from core.serializers.auth import LoginSerializer
 from core.serializers.companies import CompanySerializer
+from core.serializers.subscriptions import (
+    ActivateSubscriptionSerializer,
+    GenerateSubscriptionCodeSerializer,
+)
 from core.serializers.messaging import (
     ChatConversationSerializer,
     ChatGroupSerializer,
@@ -26,4 +30,6 @@ __all__ = [
     "PushSubscriptionSerializer",
     "SendChatMessageSerializer",
     "UpdateChatGroupSerializer",
+    "ActivateSubscriptionSerializer",
+    "GenerateSubscriptionCodeSerializer",
 ]

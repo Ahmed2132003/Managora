@@ -26,6 +26,13 @@ type Content = {
   passwordLabel: string;
   loginLabel: string;
   helperText: string;
+  subscriptionTitle: string;
+  subscriptionSummary: string;
+  purchasePrice: string;
+  maintenancePrice: string;
+  paymentCodeLabel: string;
+  subscribeNowLabel: string;
+  subscriptionHint: string;
 };
 
 const contentMap: Record<Language, Content> = {
@@ -44,6 +51,15 @@ const contentMap: Record<Language, Content> = {
     passwordLabel: "Password",
     loginLabel: "Check in",
     helperText: "Need help? Contact your administrator.",
+    subscriptionTitle: "Subscribe now",
+    subscriptionSummary:
+      "Managora connects HR, accounting, attendance, and analytics in one system to run your company smoothly.",
+    purchasePrice: "Purchase price: 7000 EGP",
+    maintenancePrice: "Maintenance & hosting: 600 EGP every 3 months",
+    paymentCodeLabel: "Payment code",
+    subscribeNowLabel: "Subscribe now",
+    subscriptionHint:
+      "Get your 24-hour payment code from administration, then activate all company accounts instantly.",
   },
   ar: {
     brand: "ماناجورا",
@@ -60,13 +76,24 @@ const contentMap: Record<Language, Content> = {
     passwordLabel: "كلمة المرور",
     loginLabel: "تسجيل حضور",
     helperText: "هل تحتاج للمساعدة؟ تواصل مع مسؤول النظام.",
+    subscriptionTitle: "اشترك الآن",
+    subscriptionSummary:
+      "ماناجورا نظام موحد لإدارة الموارد البشرية والمحاسبة والحضور والتحليلات لتشغيل شركتك بكفاءة.",
+    purchasePrice: "سعر الشراء: 7000 جنيه",
+    maintenancePrice: "الصيانة والاستضافة: 600 جنيه كل 3 شهور",
+    paymentCodeLabel: "كود الدفع",
+    subscribeNowLabel: "اشترك الآن",
+    subscriptionHint:
+      "استلم كود الدفع الصالح لمدة 24 ساعة من الإدارة ثم فعّل كل حسابات الشركة فورًا.",
   },
 };
 
 export function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [paymentCode, setPaymentCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubscribing, setIsSubscribing] = useState(false);
   const [language, setLanguage] = useState<Language>(() => {
     const stored =
       typeof window !== "undefined"
@@ -125,19 +152,53 @@ export function LoginPage() {
 
       notifications.show({
         title: isArabic ? "تم تسجيل الدخول" : "Login successful",
-        message: isArabic ? "تم تسجيل الدخول بنجاح." : "You have signed in successfully.",        
+        message: isArabic ? "تم تسجيل الدخول بنجاح." : "You have signed in successfully.",
       });
 
       navigate(redirectPath, { replace: true });
     } catch (err: unknown) {
       const message = formatApiError(err);
       notifications.show({
-        title: isArabic ? "فشل تسجيل الدخول" : "Login failed",        
+        title: isArabic ? "فشل تسجيل الدخول" : "Login failed",
         message,
-        color: "red",        
+        color: "red",
       });
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleSubscriptionActivation() {
+    try {
+      setIsSubscribing(true);
+      const loginResponse = await http.post(endpoints.auth.login, { username, password });
+      const access = loginResponse.data?.access;
+      const refresh = loginResponse.data?.refresh;
+
+      if (!access || !refresh) {
+        throw new Error("Missing tokens from login response.");
+      }
+
+      setTokens({ access, refresh });
+      await http.post(endpoints.subscriptions.activate, { code: paymentCode.trim().toUpperCase() });
+
+      notifications.show({
+        title: isArabic ? "تم تفعيل الاشتراك" : "Subscription activated",
+        message: isArabic
+          ? "تم تفعيل جميع حسابات الشركة بنجاح."
+          : "All company accounts are now active.",
+        color: "teal",
+      });
+
+      navigate(redirectPath, { replace: true });
+    } catch (err: unknown) {
+      notifications.show({
+        title: isArabic ? "تعذر تفعيل الاشتراك" : "Subscription activation failed",
+        message: formatApiError(err),
+        color: "red",
+      });
+    } finally {
+      setIsSubscribing(false);
     }
   }
 
@@ -166,7 +227,7 @@ export function LoginPage() {
             <strong>{content.heroTitle}</strong>
             <span className="sidebar-note">{content.helperText}</span>
           </div>
-          <nav className="sidebar-nav" aria-label="Preferences">            
+          <nav className="sidebar-nav" aria-label="Preferences">
             <button
               type="button"
               className="nav-item"
@@ -202,7 +263,7 @@ export function LoginPage() {
               alt="Managora logo"
             />
             <div className="login-card">
-              <div className="login-card__header">                
+              <div className="login-card__header">
                 <div>
                   <h2>{content.formTitle}</h2>
                   <p>{content.formSubtitle}</p>
@@ -233,6 +294,33 @@ export function LoginPage() {
                   {isSubmitting ? content.loginLabel + "..." : content.loginLabel}
                 </button>
               </form>
+            </div>
+
+            <div className="subscription-card">
+              <h3>{content.subscriptionTitle}</h3>
+              <p>{content.subscriptionSummary}</p>
+              <ul>
+                <li>{content.purchasePrice}</li>
+                <li>{content.maintenancePrice}</li>
+              </ul>
+              <label className="field">
+                <span>{content.paymentCodeLabel}</span>
+                <input
+                  type="text"
+                  value={paymentCode}
+                  onChange={(e) => setPaymentCode(e.currentTarget.value)}
+                  placeholder={isArabic ? "ادخل كود الدفع" : "Enter payment code"}
+                />
+              </label>
+              <button
+                type="button"
+                className="action-button"
+                onClick={handleSubscriptionActivation}
+                disabled={isSubscribing || !paymentCode.trim() || !username.trim() || !password.trim()}
+              >
+                {isSubscribing ? content.subscribeNowLabel + "..." : content.subscribeNowLabel}
+              </button>
+              <small className="subscription-note">{content.subscriptionHint}</small>
             </div>
           </section>
         </main>

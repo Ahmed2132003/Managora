@@ -6,4 +6,4 @@ from core.models import Company
 class CompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
-        fields = ("id", "name")
+        fields = ("id", "name", "is_active", "subscription_expires_at")

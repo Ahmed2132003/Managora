@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import secrets
 
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.conf import settings
@@ -20,6 +21,7 @@ class Company(models.Model):
     )
     attendance_qr_start_time = models.TimeField(null=True, blank=True)
     attendance_qr_end_time = models.TimeField(null=True, blank=True)
+    subscription_expires_at = models.DateTimeField(null=True, blank=True)
     
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -67,6 +69,42 @@ class CompanyAttendanceQrToken(models.Model):
 
     def __str__(self):
         return f"{self.company_id} - {self.issued_for}"
+
+
+class CompanySubscriptionCode(models.Model):
+    company = models.ForeignKey(
+        "core.Company",
+        on_delete=models.CASCADE,
+        related_name="subscription_codes",
+    )
+    code = models.CharField(max_length=32, unique=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="generated_subscription_codes",
+    )
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    consumed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="consumed_subscription_codes",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    @staticmethod
+    def generate_code() -> str:
+        return secrets.token_hex(4).upper()
+
+    def __str__(self):
+        return f"{self.company.name} - {self.code}"
 
 
 class Permission(models.Model):

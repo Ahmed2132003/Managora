@@ -21,6 +21,10 @@ from core.api_views.messaging import (
 )
 from core.api_views.roles import RoleListView
 from core.api_views.setup import ApplySetupTemplateView, SetupTemplateListView
+from core.api_views.subscriptions import (
+    ActivateCompanySubscriptionView,
+    GenerateCompanyPaymentCodeView,
+)
 from core.api_views.users import UsersViewSet
 
 router = DefaultRouter()
@@ -47,6 +51,9 @@ urlpatterns = [
     # Companies
     path("companies/", CompanyListCreateView.as_view(), name="companies"),
 
+    # Subscriptions
+    path("subscriptions/codes/generate/", GenerateCompanyPaymentCodeView.as_view(), name="subscription-generate-code"),
+    path("subscriptions/activate/", ActivateCompanySubscriptionView.as_view(), name="subscription-activate"),
 
     # Backups
     path("backups/", BackupListCreateView.as_view(), name="backups"),

@@ -10,6 +10,7 @@ from .models import (
     RolePermission,
     UserRole,
     CompanyAttendanceQrToken,
+    CompanySubscriptionCode,
 )
 
 User = get_user_model()
@@ -38,6 +39,7 @@ class CompanyAdmin(admin.ModelAdmin):
         "attendance_qr_start_time",
         "attendance_qr_end_time",
         "created_at",
+        "subscription_expires_at",
     )    
     search_fields = ("name", "slug")
     list_filter = ("is_active",)
@@ -117,3 +119,10 @@ class ExportLogAdmin(admin.ModelAdmin):
     search_fields = ("export_type", "actor__username")
     ordering = ("-created_at",)
 admin.site.register(CompanyAttendanceQrToken)
+
+@admin.register(CompanySubscriptionCode)
+class CompanySubscriptionCodeAdmin(admin.ModelAdmin):
+    list_display = ("id", "company", "code", "expires_at", "used_at", "created_at")
+    list_filter = ("company", "used_at")
+    search_fields = ("code", "company__name")
+    ordering = ("-created_at",)
