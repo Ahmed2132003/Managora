@@ -5,6 +5,8 @@ import { LoginPage } from "../pages/LoginPage.tsx";
 import { DashboardPage } from "../pages/DashboardPage.tsx";
 import { UsersPage } from "../pages/UsersPage.tsx";
 import { RequireAuth } from "./RequireAuth";
+import { useMe } from "../shared/auth/useMe";
+import { getDefaultPathForRole, resolvePrimaryRole } from "../shared/auth/roleNavigation";
 import { EmployeesPage } from "../pages/hr/EmployeesPage.tsx";
 import { EmployeeProfilePage } from "../pages/hr/EmployeeProfilePage.tsx";
 import { DepartmentsPage } from "../pages/hr/DepartmentsPage.tsx";
@@ -73,6 +75,18 @@ function withLazyLoad(element: JSX.Element) {
   return <Suspense fallback={<p className="helper-text">Loading...</p>}>{element}</Suspense>;
 }
 
+function RoleHomeRedirect() {
+  const meQuery = useMe();
+
+  if (meQuery.isLoading) {
+    return <p className="helper-text">Loading...</p>;
+  }
+
+  const role = resolvePrimaryRole(meQuery.data);
+  const targetPath = getDefaultPathForRole(role);
+  return <Navigate to={targetPath} replace />;
+}
+
 export const router = createBrowserRouter([           
   {    
     path: "/login",
@@ -86,7 +100,7 @@ export const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
-      { index: true, element: <Navigate to="/dashboard" replace /> },
+      { index: true, element: <RoleHomeRedirect /> },
       { path: "dashboard", element: <DashboardPage /> },
       { path: "users", element: <UsersPage /> },
       { path: "attendance/self", element: <SelfAttendancePage /> },

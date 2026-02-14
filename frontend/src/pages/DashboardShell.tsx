@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { clearTokens } from "../shared/auth/tokens";
 import { useMe } from "../shared/auth/useMe";
+import { resolvePrimaryRole } from "../shared/auth/roleNavigation";
 import { hasPermission } from "../shared/auth/useCan";
+import { endpoints } from "../shared/api/endpoints";
+import { http } from "../shared/api/http";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
@@ -17,6 +21,8 @@ type Content = {
   themeLabel: string;
   navigationLabel: string;
   logoutLabel: string;
+  backupNowLabel: string;
+  restoreBackupLabel: string;
   footer: string;
   userFallback: string;
   nav: {
@@ -72,6 +78,8 @@ const contentMap: Record<Language, Content> = {
     themeLabel: "Theme",
     navigationLabel: "Navigation",
     logoutLabel: "Logout",
+    backupNowLabel: "Download backup",
+    restoreBackupLabel: "Restore backup",
     footer: "This system is produced by Creativity Code.",
     userFallback: "Explorer",
     nav: {
@@ -125,6 +133,8 @@ const contentMap: Record<Language, Content> = {
     themeLabel: "المظهر",
     navigationLabel: "التنقل",
     logoutLabel: "تسجيل الخروج",
+    backupNowLabel: "تحميل نسخة احتياطية",
+    restoreBackupLabel: "استرجاع نسخة احتياطية",
     footer: "هذا السيستم من انتاج كريتفيتي كود",
     userFallback: "ضيف",
     nav: {
@@ -207,7 +217,8 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
   const content = useMemo(() => contentMap[language], [language]);
   const pageCopy = copy[language];
   const isArabic = language === "ar";
-  const userPermissions = useMemo(() => data?.permissions ?? [], [data?.permissions]);  
+  const userPermissions = useMemo(() => data?.permissions ?? [], [data?.permissions]);
+  const primaryRole = useMemo(() => resolvePrimaryRole(data), [data]);
   const userName =
     data?.user.first_name || data?.user.username || content.userFallback;
 
@@ -416,8 +427,76 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
     [content.nav]
   );
 
+  const allowedRolePaths = useMemo(() => {
+    if (primaryRole === "hr") {
+      return new Set([
+        "/analytics/hr",
+        "/users",
+        "/attendance/self",
+        "/employee/self-service",
+        "/messages",
+        "/leaves/balance",
+        "/leaves/request",
+        "/leaves/my",
+        "/hr/employees",
+        "/hr/departments",
+        "/hr/job-titles",
+        "/hr/attendance",
+        "/hr/leaves/inbox",
+        "/hr/policies",
+        "/hr/actions",
+        "/payroll",
+      ]);
+    }
+
+    if (primaryRole === "accountant") {
+      return new Set([
+        "/analytics/finance",
+        "/attendance/self",
+        "/leaves/balance",
+        "/leaves/request",
+        "/leaves/my",
+        "/accounting/setup",
+        "/accounting/journal-entries",
+        "/accounting/expenses",
+        "/collections",
+        "/accounting/reports/trial-balance",
+        "/accounting/reports/general-ledger",
+        "/accounting/reports/pnl",
+        "/accounting/reports/balance-sheet",
+        "/accounting/reports/ar-aging",
+        "/customers",
+        "/customers/new",
+        "/invoices",
+        "/invoices/new",
+        "/analytics/cash-forecast",
+        "/catalog",
+        "/sales",
+        "/employee/self-service",
+        "/messages",
+      ]);
+    }
+
+    if (primaryRole === "employee") {
+      return new Set([
+        "/employee/self-service",
+        "/attendance/self",
+        "/leaves/balance",
+        "/leaves/request",
+        "/leaves/my",
+        "/messages",
+      ]);
+    }
+
+    return null;
+  }, [primaryRole]);
+
   const visibleNavLinks = useMemo(() => {
     return navLinks.filter((link) => {
+      if (allowedRolePaths && !allowedRolePaths.has(link.path)) {
+        return false;
+      }
+
       if (!link.permissions || link.permissions.length === 0) {
         return true;
       }
@@ -425,7 +504,89 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
+  }, [allowedRolePaths, navLinks, userPermissions]);
+
+
+  type CompanyBackup = {
+    id: number;
+  };
+
+  const backupsQuery = useQuery({
+    queryKey: ["company-backups"],
+    queryFn: async () => {
+      const response = await http.get<CompanyBackup[]>(endpoints.backups.listCreate);
+      return response.data;
+    },
+  });
+
+  const downloadBackupMutation = useMutation({
+    mutationFn: async () => {
+      const createResponse = await http.post<CompanyBackup>(endpoints.backups.listCreate, {});
+      const backupId = createResponse.data.id;
+      const downloadResponse = await http.get<Blob>(endpoints.backups.download(backupId), {
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(downloadResponse.data);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `backup-${backupId}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+      await backupsQuery.refetch();
+    },
+    onError: () => {
+      window.alert(isArabic ? "تعذر إنشاء النسخة الاحتياطية." : "Unable to create backup.");
+    },
+  });
+
+  const restoreBackupMutation = useMutation({
+    mutationFn: async () => {
+      const latestBackup = backupsQuery.data?.[0];
+      if (!latestBackup) {
+        throw new Error("no-backups");
+      }
+      await http.post(endpoints.backups.restore(latestBackup.id), {});
+      await backupsQuery.refetch();
+    },
+    onSuccess: () => {
+      window.alert(
+        isArabic
+          ? "تم استرجاع آخر نسخة احتياطية بنجاح."
+          : "Latest backup restored successfully."
+      );
+    },
+    onError: (error) => {
+      if (error instanceof Error && error.message === "no-backups") {
+        window.alert(isArabic ? "لا توجد نسخ احتياطية للاسترجاع." : "No backups available to restore.");
+        return;
+      }
+      window.alert(isArabic ? "تعذر استرجاع النسخة الاحتياطية." : "Unable to restore backup.");
+    },
+  });
+
+  function handleDownloadBackup() {
+    if (downloadBackupMutation.isPending) {
+      return;
+    }
+    void downloadBackupMutation.mutateAsync();
+  }
+
+  function handleRestoreBackup() {
+    if (restoreBackupMutation.isPending) {
+      return;
+    }
+    const confirmed = window.confirm(
+      isArabic
+        ? "سيتم استرجاع آخر نسخة احتياطية متاحة. هل تريد المتابعة؟"
+        : "This will restore the latest available backup. Continue?"
+    );
+    if (!confirmed) {
+      return;
+    }
+    void restoreBackupMutation.mutateAsync();
+  }
 
   function handleLogout() {
     clearTokens();
@@ -523,6 +684,22 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
             </div>
           </nav>
           <div className="sidebar-footer">
+            <button
+              type="button"
+              className="pill-button sidebar-action-button"
+              onClick={handleDownloadBackup}
+              disabled={downloadBackupMutation.isPending}
+            >
+              {content.backupNowLabel}
+            </button>
+            <button
+              type="button"
+              className="pill-button sidebar-action-button sidebar-action-button--secondary"
+              onClick={handleRestoreBackup}
+              disabled={restoreBackupMutation.isPending || backupsQuery.isLoading}
+            >
+              {content.restoreBackupLabel}
+            </button>
             <button type="button" className="pill-button" onClick={handleLogout}>
               {content.logoutLabel}
             </button>
