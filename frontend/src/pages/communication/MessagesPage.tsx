@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { notifications } from "@mantine/notifications";
 
@@ -18,35 +18,35 @@ import { DashboardShell } from "../DashboardShell";
 import "./MessagesPage.css";
 
 type Language = "en" | "ar";
-
 type UserOption = { id: number; username: string };
 
 const shellCopy: Record<Language, { title: string; subtitle: string; helper: string; tags: string[] }> = {
   en: {
     title: "Internal messaging",
-    subtitle: "Chat privately with teammates and receive live in-app notifications.",
-    helper: "Messages and notifications refresh automatically without full page reload.",
+    subtitle: "WhatsApp-style company chat with a built-in notification center.",
+    helper: "Conversations and notifications refresh live without page reload.",
     tags: ["Chat", "Notifications", "Realtime"],
   },
   ar: {
     title: "الرسائل الداخلية",
-    subtitle: "تواصل بشكل خاص مع فريقك واستقبل إشعارات داخلية مباشرة.",
-    helper: "الرسائل والإشعارات تتحدث تلقائيًا بدون إعادة تحميل الصفحة.",
+    subtitle: "شات داخلي بنفس أسلوب واتساب مع مركز إشعارات متكامل.",
+    helper: "المحادثات والإشعارات تتحدث بشكل مباشر بدون إعادة تحميل.",
     tags: ["شات", "إشعارات", "مباشر"],
   },
 };
 
 const pageCopy = {
   en: {
-    conversations: "Conversations",
-    notifications: "Notifications",
+    conversations: "Chats",
+    notifications: "Notification center",
     unread: "Unread",
     loading: "Loading...",
     emptyConversations: "No conversations yet.",
     emptyMessages: "No messages yet. Start the conversation.",
     recipient: "Recipient",
     recipientPlaceholder: "Select teammate",
-    messagePlaceholder: "Type your message...",
+    messagePlaceholder: "Type a message",
+    attachFile: "Attach files",
     send: "Send",
     enablePush: "Enable browser push",
     pushEnabled: "Push notifications enabled.",
@@ -54,17 +54,19 @@ const pageCopy = {
     pushDenied: "Browser notification permission was denied.",
     pushUnsupported: "Push notifications are not supported in this browser.",
     pushGenericError: "Could not enable browser push notifications.",
+    pickedFiles: "Selected files",
   },
-  ar: {    
+  ar: {
     conversations: "المحادثات",
-    notifications: "الإشعارات",
+    notifications: "مركز الإشعارات",
     unread: "غير مقروء",
     loading: "جارٍ التحميل...",
     emptyConversations: "لا توجد محادثات بعد.",
     emptyMessages: "لا توجد رسائل بعد. ابدأ المحادثة الآن.",
     recipient: "المستلم",
     recipientPlaceholder: "اختر الزميل",
-    messagePlaceholder: "اكتب رسالتك...",
+    messagePlaceholder: "اكتب رسالة",
+    attachFile: "إرفاق ملفات",
     send: "إرسال",
     enablePush: "تفعيل إشعارات المتصفح",
     pushEnabled: "تم تفعيل إشعارات المتصفح بنجاح.",
@@ -72,6 +74,7 @@ const pageCopy = {
     pushDenied: "تم رفض إذن الإشعارات من المتصفح.",
     pushUnsupported: "المتصفح الحالي لا يدعم إشعارات Push.",
     pushGenericError: "تعذر تفعيل إشعارات Push في المتصفح.",
+    pickedFiles: "الملفات المحددة",
   },
 } as const;
 
@@ -79,6 +82,8 @@ export function MessagesPage() {
   const [manuallySelectedConversationId, setManuallySelectedConversationId] = useState<number | null>(null);
   const [recipientId, setRecipientId] = useState<number | "">("");
   const [messageBody, setMessageBody] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const meQuery = useMe();
   const conversationsQuery = useChatConversations();
@@ -86,8 +91,7 @@ export function MessagesPage() {
   const markReadMutation = useMarkNotificationRead();
   const sendMessageMutation = useSendMessage();
 
-  const selectedConversationId =
-    manuallySelectedConversationId ?? conversationsQuery.data?.[0]?.id ?? null;
+  const selectedConversationId = manuallySelectedConversationId ?? conversationsQuery.data?.[0]?.id ?? null;
 
   const selectedConversation = useMemo(
     () => conversationsQuery.data?.find((item) => item.id === selectedConversationId) ?? null,
@@ -119,44 +123,33 @@ export function MessagesPage() {
     queryFn: async () => {
       const response = await http.get(endpoints.users, { params: { page_size: 200 } });
       const raw = response.data as { results?: UserOption[] } | UserOption[];
-      const users = Array.isArray(raw) ? raw : raw.results ?? [];
-      return users;
+      return Array.isArray(raw) ? raw : raw.results ?? [];
     },
   });
 
   async function handleSend() {
-    if (!messageBody.trim() || !recipientId) {
-      return;
-    }
-    await sendMessageMutation.mutateAsync({ recipient_id: Number(recipientId), body: messageBody.trim() });
+    if (!recipientId || (!messageBody.trim() && files.length === 0)) return;
+
+    await sendMessageMutation.mutateAsync({
+      recipient_id: Number(recipientId),
+      body: messageBody.trim(),
+      attachments: files,
+    });
+
     setMessageBody("");
+    setFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   async function handleEnablePush(language: Language) {
     const result = await registerPushSubscription(import.meta.env.VITE_WEB_PUSH_PUBLIC_KEY as string | undefined);
-    if (result.ok) {
-      notifications.show({ message: pageCopy[language].pushEnabled, color: "green" });
-      return;
-    }
-
-    if (result.reason === "missing_vapid") {
-      notifications.show({ message: pageCopy[language].pushMissingKey, color: "yellow" });
-      return;
-    }
-
-    if (result.reason === "denied") {
-      notifications.show({ message: pageCopy[language].pushDenied, color: "yellow" });
-      return;
-    }
-
-    if (result.reason === "unsupported") {
-      notifications.show({ message: pageCopy[language].pushUnsupported, color: "yellow" });
-      return;
-    }
-
+    if (result.ok) return notifications.show({ message: pageCopy[language].pushEnabled, color: "green" });
+    if (result.reason === "missing_vapid") return notifications.show({ message: pageCopy[language].pushMissingKey, color: "yellow" });
+    if (result.reason === "denied") return notifications.show({ message: pageCopy[language].pushDenied, color: "yellow" });
+    if (result.reason === "unsupported") return notifications.show({ message: pageCopy[language].pushUnsupported, color: "yellow" });
     notifications.show({ message: pageCopy[language].pushGenericError, color: "red" });
   }
-  
+
   return (
     <DashboardShell copy={shellCopy} className="messages-page">
       {({ language, isArabic }) => {
@@ -166,7 +159,7 @@ export function MessagesPage() {
 
         return (
           <div className="messages-grid">
-            <section className="panel panel--compact">
+            <section className="panel panel--compact conversations-panel">
               <div className="panel__header">
                 <h2>{copy.conversations}</h2>
                 <span className="pill">{conversationsQuery.data?.length ?? 0}</span>
@@ -188,14 +181,14 @@ export function MessagesPage() {
                       }}
                     >
                       <strong>{conversation.other_user_name}</strong>
-                      <span>{conversation.last_message?.body ?? "..."}</span>
+                      <span>{conversation.last_message?.body || "📎"}</span>
                     </button>
                   ))}
                 </div>
               )}
             </section>
 
-            <section className="panel">
+            <section className="panel chat-panel">
               <div className="panel__header">
                 <h2>{selectedConversation?.other_user_name ?? copy.conversations}</h2>
                 <button type="button" className="table-action" onClick={() => void handleEnablePush(language as Language)}>
@@ -213,7 +206,16 @@ export function MessagesPage() {
                     const mine = message.sender === meQuery.data?.user.id;
                     return (
                       <div key={message.id} className={`bubble ${mine ? "bubble--mine" : "bubble--other"}`}>
-                        <span>{message.body}</span>
+                        {message.body ? <span>{message.body}</span> : null}
+                        {message.attachments.length > 0 ? (
+                          <div className="bubble-attachments">
+                            {message.attachments.map((attachment) => (
+                              <a key={attachment.id} href={attachment.file_url || attachment.file} target="_blank" rel="noreferrer">
+                                📎 {attachment.original_name}
+                              </a>
+                            ))}
+                          </div>
+                        ) : null}
                         <small>{new Date(message.created_at).toLocaleTimeString()}</small>
                       </div>
                     );
@@ -237,23 +239,36 @@ export function MessagesPage() {
                     ))}
                   </select>
                 </label>
-                <textarea
-                  value={messageBody}
-                  placeholder={copy.messagePlaceholder}
-                  onChange={(event) => setMessageBody(event.target.value)}
-                />
-                <button
-                  type="button"
-                  className="pill-button"
-                  onClick={() => void handleSend()}
-                  disabled={sendMessageMutation.isPending || !recipientId || !messageBody.trim()}
-                >
-                  {copy.send}
-                </button>
+                <textarea value={messageBody} placeholder={copy.messagePlaceholder} onChange={(event) => setMessageBody(event.target.value)} />
+                <div className="compose-actions">
+                  <label className="table-action table-action--ghost file-label" htmlFor="chat-files">
+                    {copy.attachFile}
+                  </label>
+                  <input
+                    id="chat-files"
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+                  />
+                  <button
+                    type="button"
+                    className="pill-button"
+                    onClick={() => void handleSend()}
+                    disabled={sendMessageMutation.isPending || !recipientId || (!messageBody.trim() && files.length === 0)}
+                  >
+                    {copy.send}
+                  </button>
+                </div>
+                {files.length > 0 ? (
+                  <p className="helper-text">
+                    {copy.pickedFiles}: {files.map((file) => file.name).join(", ")}
+                  </p>
+                ) : null}
               </div>
             </section>
 
-            <section className="panel panel--compact">
+            <section className="panel panel--compact notifications-panel">
               <div className="panel__header">
                 <h2>{copy.notifications}</h2>
                 <span className="pill">{copy.unread}: {unreadCount}</span>

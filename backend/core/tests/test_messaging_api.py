@@ -1,13 +1,18 @@
+import tempfile
+
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
+from django.test import override_settings
 
 from core.models import Company
 
 User = get_user_model()
 
 
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class MessagingApiTests(APITestCase):
     def setUp(self):
         self.company = Company.objects.create(name="MsgCo")
@@ -65,3 +70,14 @@ class MessagingApiTests(APITestCase):
         self.assertEqual(messages_response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(messages_response.data), 1)
         self.assertEqual(messages_response.data[0]["body"], "m2")
+
+    def test_send_message_with_attachment(self):
+        self._login("u1")
+        upload = SimpleUploadedFile("note.txt", b"hello file", content_type="text/plain")
+        response = self.client.post(
+            reverse("chat-send-message"),
+            {"recipient_id": self.user2.id, "body": "", "attachments": [upload]},
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(response.data["attachments"]), 1)
+        self.assertEqual(response.data["attachments"][0]["original_name"], "note.txt")

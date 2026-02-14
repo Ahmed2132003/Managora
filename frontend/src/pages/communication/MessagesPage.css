@@ -1,32 +1,47 @@
 .messages-grid {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 320px;
+  grid-template-columns: 320px minmax(0, 1fr) 340px;
   gap: 1rem;
+  min-height: calc(100dvh - 14rem);
+}
+
+.conversations-panel,
+.notifications-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.chat-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: color-mix(in oklab, var(--surface), transparent 4%);
 }
 
 .messages-list {
   display: grid;
-  gap: 0.5rem;
-  max-height: 520px;
+  gap: 0.55rem;
+  max-height: 68dvh;
   overflow: auto;
+  padding-inline-end: 0.25rem;
 }
 
 .message-item {
   text-align: start;
-  border: 1px solid color-mix(in oklab, var(--border), transparent 15%);
+  border: 1px solid color-mix(in oklab, var(--border), transparent 20%);
   background: color-mix(in oklab, var(--surface), transparent 4%);
-  border-radius: 12px;
-  padding: 0.65rem 0.75rem;
+  border-radius: 14px;
+  padding: 0.7rem 0.8rem;
   display: grid;
   gap: 0.25rem;
 }
 
 .message-item--active {
   border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent), transparent 60%);
 }
 
 .message-item--unread {
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 4px 0 0 var(--accent);
 }
 
 .message-item span {
@@ -38,32 +53,47 @@
 }
 
 .messages-chat-body {
-  min-height: 380px;
-  max-height: 520px;
+  min-height: 320px;
+  max-height: 60dvh;
   overflow: auto;
   display: grid;
   gap: 0.6rem;
-  margin-bottom: 0.75rem;
-  padding-inline-end: 0.35rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.1rem;
+  background-image: radial-gradient(circle at 1px 1px, color-mix(in oklab, var(--border), transparent 45%) 1px, transparent 0);
+  background-size: 18px 18px;
+  border-radius: 16px;
 }
 
 .bubble {
-  max-width: 75%;
-  padding: 0.6rem 0.75rem;
-  border-radius: 12px;
+  max-width: min(82%, 640px);
+  padding: 0.65rem 0.8rem;
+  border-radius: 14px;
   display: grid;
-  gap: 0.25rem;
+  gap: 0.35rem;
 }
 
 .bubble--mine {
   margin-inline-start: auto;
-  background: color-mix(in oklab, var(--accent), white 80%);
+  background: color-mix(in oklab, var(--accent), white 84%);
+  border-end-end-radius: 4px;
 }
 
 .bubble--other {
   margin-inline-end: auto;
-  background: color-mix(in oklab, var(--surface), white 35%);
+  background: color-mix(in oklab, var(--surface), white 30%);
   border: 1px solid var(--border);
+  border-end-start-radius: 4px;
+}
+
+.bubble-attachments {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.bubble-attachments a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.83rem;
 }
 
 .bubble small {
@@ -73,16 +103,39 @@
 
 .messages-compose {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.55rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
 }
 
 .messages-compose textarea {
-  min-height: 92px;
+  min-height: 88px;
   resize: vertical;
+}
+
+.compose-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+#chat-files {
+  display: none;
+}
+
+.file-label {
+  cursor: pointer;
 }
 
 @media (max-width: 1280px) {
   .messages-grid {
     grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .messages-list,
+  .messages-chat-body {
+    max-height: none;
   }
 }

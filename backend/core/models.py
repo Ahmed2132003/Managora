@@ -516,6 +516,28 @@ class ChatMessage(models.Model):
         ]
 
 
+def chat_message_attachment_upload_to(instance, filename):
+    return (
+        f"companies/{instance.message.company_id}/chat/"
+        f"{instance.message.conversation_id}/{filename}"
+    )
+
+
+class ChatMessageAttachment(models.Model):
+    message = models.ForeignKey(
+        "core.ChatMessage",
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to=chat_message_attachment_upload_to)
+    original_name = models.CharField(max_length=255)
+    file_size = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["message", "id"], name="chat_att_msg_id_idx")]
+
+
 class InAppNotification(models.Model):
     company = models.ForeignKey(
         "core.Company",

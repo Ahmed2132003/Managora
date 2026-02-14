@@ -4,8 +4,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.models import ChatConversation, ChatMessage, InAppNotification, PushSubscription
-from core.serializers import (    
+from core.models import (
+    ChatConversation,
+    ChatMessage,
+    ChatMessageAttachment,
+    InAppNotification,
+    PushSubscription,
+)
+from core.serializers import (
     ChatConversationSerializer,
     ChatMessageSerializer,
     InAppNotificationSerializer,
@@ -73,17 +79,31 @@ class SendChatMessageView(APIView):
             recipient=recipient,
             body=serializer.validated_data["body"],
         )
+
+        attachments = serializer.validated_data.get("attachments") or []
+        for upload in attachments:
+            ChatMessageAttachment.objects.create(
+                message=message,
+                file=upload,
+                original_name=getattr(upload, "name", "attachment"),
+                file_size=getattr(upload, "size", 0) or 0,
+            )
+
+        notification_body = message.body or "📎 Attachment"
         InAppNotification.objects.create(
             company=request.user.company,
             sender=request.user,
             recipient=recipient,
             message=message,
             title=f"New message from {request.user.username}",
-            body=message.body,
+            body=notification_body,
         )
         conversation.save(update_fields=["updated_at"])
 
-        return Response(ChatMessageSerializer(message).data, status=status.HTTP_201_CREATED)
+        return Response(
+            ChatMessageSerializer(message, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class NotificationListView(generics.ListAPIView):

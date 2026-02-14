@@ -3,6 +3,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { endpoints } from "../api/endpoints";
 import { http } from "../api/http";
 
+export type ChatMessageAttachment = {
+  id: number;
+  file: string;
+  file_url: string;
+  original_name: string;
+  file_size: number;
+  created_at: string;
+};
+
 export type ChatMessage = {
   id: number;
   conversation: number;
@@ -12,6 +21,7 @@ export type ChatMessage = {
   body: string;
   is_read: boolean;
   created_at: string;
+  attachments: ChatMessageAttachment[];
 };
 
 export type ChatConversation = {
@@ -67,8 +77,16 @@ export function useChatMessages(conversationId: number | null, afterId?: number 
 export function useSendMessage() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { recipient_id: number; body: string }) => {
-      const response = await http.post<ChatMessage>(endpoints.messaging.sendMessage, payload);
+    mutationFn: async (payload: { recipient_id: number; body: string; attachments?: File[] }) => {
+      const formData = new FormData();
+      formData.append("recipient_id", String(payload.recipient_id));
+      formData.append("body", payload.body);
+      for (const file of payload.attachments ?? []) {
+        formData.append("attachments", file);
+      }
+      const response = await http.post<ChatMessage>(endpoints.messaging.sendMessage, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       return response.data;
     },
     onSuccess: () => {
