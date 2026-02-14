@@ -42,7 +42,7 @@ import { AdminPanelPage } from "../pages/admin/AdminPanelPage";
 import { CatalogPage } from "../pages/catalog/CatalogPage";
 import { SalesPage } from "../pages/catalog/SalesPage.tsx";
 import { EmployeeSelfServicePage } from "../pages/accounting/employee/EmployeeSelfServicePage";
-import { MessagesPage } from "../pages/communication/MessagesPage";
+import { MessagesPage } from "../pages/communication/MessagesPage.tsx";
 const TrialBalancePage = lazy(() =>
   import("../pages/accounting/TrialBalancePage.tsx").then((module) => ({
     default: module.TrialBalancePage,

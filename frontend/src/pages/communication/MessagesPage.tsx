@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { notifications } from "@mantine/notifications";
 
@@ -70,10 +70,9 @@ const pageCopy = {
 } as const;
 
 export function MessagesPage() {
-  const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
+  const [manuallySelectedConversationId, setManuallySelectedConversationId] = useState<number | null>(null);
   const [recipientId, setRecipientId] = useState<number | "">("");
   const [messageBody, setMessageBody] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const meQuery = useMe();
   const conversationsQuery = useChatConversations();
@@ -81,14 +80,33 @@ export function MessagesPage() {
   const markReadMutation = useMarkNotificationRead();
   const sendMessageMutation = useSendMessage();
 
+  const selectedConversationId =
+    manuallySelectedConversationId ?? conversationsQuery.data?.[0]?.id ?? null;
+
   const selectedConversation = useMemo(
     () => conversationsQuery.data?.find((item) => item.id === selectedConversationId) ?? null,
     [conversationsQuery.data, selectedConversationId]
   );
 
   const initialMessagesQuery = useChatMessages(selectedConversationId, null);
-  const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null;
-  const incrementalMessagesQuery = useChatMessages(selectedConversationId, lastMessageId);
+  const lastInitialMessageId = initialMessagesQuery.data?.[initialMessagesQuery.data.length - 1]?.id ?? null;
+  const incrementalMessagesQuery = useChatMessages(selectedConversationId, lastInitialMessageId);
+
+  const messages = useMemo(() => {
+    const seen = new Set<number>();
+    const next: ChatMessage[] = [];
+    for (const item of initialMessagesQuery.data ?? []) {
+      seen.add(item.id);
+      next.push(item);
+    }
+    for (const item of incrementalMessagesQuery.data ?? []) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        next.push(item);
+      }
+    }
+    return next;
+  }, [incrementalMessagesQuery.data, initialMessagesQuery.data]);
 
   const usersQuery = useQuery({
     queryKey: ["messaging", "users"],
@@ -99,32 +117,6 @@ export function MessagesPage() {
       return users;
     },
   });
-
-  useEffect(() => {
-    if (!selectedConversationId && (conversationsQuery.data?.length ?? 0) > 0) {
-      setSelectedConversationId(conversationsQuery.data?.[0].id ?? null);
-    }
-  }, [conversationsQuery.data, selectedConversationId]);
-
-  useEffect(() => {
-    setMessages(initialMessagesQuery.data ?? []);
-  }, [selectedConversationId, initialMessagesQuery.data]);
-
-  useEffect(() => {
-    if (!incrementalMessagesQuery.data || incrementalMessagesQuery.data.length === 0) {
-      return;
-    }
-    setMessages((prev) => {
-      const seen = new Set(prev.map((item) => item.id));
-      const next = [...prev];
-      for (const item of incrementalMessagesQuery.data) {
-        if (!seen.has(item.id)) {
-          next.push(item);
-        }
-      }
-      return next;
-    });
-  }, [incrementalMessagesQuery.data]);
 
   async function handleSend() {
     if (!messageBody.trim() || !recipientId) {
@@ -172,7 +164,7 @@ export function MessagesPage() {
                       type="button"
                       className={`message-item ${selectedConversationId === conversation.id ? "message-item--active" : ""}`}
                       onClick={() => {
-                        setSelectedConversationId(conversation.id);
+                        setManuallySelectedConversationId(conversation.id);
                         setRecipientId(conversation.other_user_id);
                       }}
                     >
