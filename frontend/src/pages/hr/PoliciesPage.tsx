@@ -6,6 +6,8 @@ import { isForbiddenError } from "../../shared/api/errors";
 import { clearTokens } from "../../shared/auth/tokens";
 import { hasPermission } from "../../shared/auth/useCan";
 import { useMe } from "../../shared/auth/useMe";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
+import { buildHrSidebarLinks } from "../../shared/navigation/hrSidebarLinks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import {
   useCreatePolicyRuleMutation,
@@ -376,6 +378,11 @@ export function PoliciesPage() {
 
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
+  const primaryRole = useMemo(() => resolvePrimaryRole(meQuery.data), [meQuery.data]);
+  const hrSidebarLinks = useMemo(
+    () => buildHrSidebarLinks(content.nav, isArabic),
+    [content.nav, isArabic]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -628,6 +635,10 @@ export function PoliciesPage() {
   );
 
   const visibleNavLinks = useMemo(() => {
+    if (primaryRole === "hr") {
+      return hrSidebarLinks;
+    }
+
     const userPermissions = meQuery.data?.permissions ?? [];
     return navLinks.filter((link) => {
       if (!link.permissions || link.permissions.length === 0) {
@@ -637,8 +648,8 @@ export function PoliciesPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [meQuery.data?.permissions, navLinks]);
-
+  }, [hrSidebarLinks, meQuery.data?.permissions, navLinks, primaryRole]);
+  
   const userName =
     meQuery.data?.user.first_name ||
     meQuery.data?.user.username ||

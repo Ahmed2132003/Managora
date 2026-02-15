@@ -4,6 +4,8 @@ import { isForbiddenError } from "../../shared/api/errors";
 import { clearTokens } from "../../shared/auth/tokens";
 import { hasPermission } from "../../shared/auth/useCan";
 import { useMe } from "../../shared/auth/useMe";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
+import { buildHrSidebarLinks } from "../../shared/navigation/hrSidebarLinks";
 import {
   type HRAction,
   type PayrollPeriod,
@@ -345,7 +347,12 @@ export function HRActionsPage() {
   });
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
-  const userPermissions = useMemo(() => meData?.permissions ?? [], [meData?.permissions]);  
+  const userPermissions = useMemo(() => meData?.permissions ?? [], [meData?.permissions]);
+  const primaryRole = useMemo(() => resolvePrimaryRole(meData), [meData]);
+  const hrSidebarLinks = useMemo(
+    () => buildHrSidebarLinks(content.nav, isArabic),
+    [content.nav, isArabic]
+  );  
   const userName =
     meData?.user.first_name || meData?.user.username || content.userFallback;
 
@@ -659,6 +666,10 @@ export function HRActionsPage() {
   );
 
   const visibleNavLinks = useMemo(() => {
+    if (primaryRole === "hr") {
+      return hrSidebarLinks;
+    }
+
     return navLinks.filter((link) => {
       if (!link.permissions || link.permissions.length === 0) {
         return true;
@@ -667,8 +678,8 @@ export function HRActionsPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
-
+  }, [hrSidebarLinks, navLinks, primaryRole, userPermissions]);
+  
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });

@@ -7,6 +7,8 @@ import { notifications } from "@mantine/notifications";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { hasPermission } from "../../shared/auth/useCan";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
+import { buildHrSidebarLinks } from "../../shared/navigation/hrSidebarLinks";
 import { isForbiddenError } from "../../shared/api/errors.ts";
 import {
   useCreateJobTitle,
@@ -352,12 +354,17 @@ export function JobTitlesPage() {
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const meQuery = useMe();
 
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
+  const primaryRole = useMemo(() => resolvePrimaryRole(meQuery.data), [meQuery.data]);
+  const hrSidebarLinks = useMemo(
+    () => buildHrSidebarLinks(content.nav, isArabic),
+    [content.nav, isArabic]
+  );
 
-  const meQuery = useMe();
-  const jobTitlesQuery = useJobTitles();
+  const jobTitlesQuery = useJobTitles();  
   const createMutation = useCreateJobTitle();
   const updateMutation = useUpdateJobTitle();
   const deleteMutation = useDeleteJobTitle();
@@ -601,6 +608,10 @@ export function JobTitlesPage() {
   );
 
   const visibleNavLinks = useMemo(() => {
+    if (primaryRole === "hr") {
+      return hrSidebarLinks;
+    }
+
     const userPermissions = meQuery.data?.permissions ?? [];
     return navLinks.filter((link) => {
       if (!link.permissions || link.permissions.length === 0) {
@@ -610,8 +621,8 @@ export function JobTitlesPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [meQuery.data?.permissions, navLinks]);
-
+  }, [hrSidebarLinks, meQuery.data?.permissions, navLinks, primaryRole]);
+  
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });

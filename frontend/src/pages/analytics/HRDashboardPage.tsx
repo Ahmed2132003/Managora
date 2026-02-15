@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
+import { buildHrSidebarLinks } from "../../shared/navigation/hrSidebarLinks";
 import { useAnalyticsKpis } from "../../shared/analytics/insights.ts";
 import { buildRangeSelection } from "../../shared/analytics/range.ts";
 import type { RangeOption } from "../../shared/analytics/range.ts";
@@ -441,10 +443,15 @@ export function HRDashboardPage() {
   const [customStart, setCustomStart] = useState<string>("");
   const [customEnd, setCustomEnd] = useState<string>("");
   const content = useMemo(() => contentMap[language], [language]);
-  const userPermissions = useMemo(() => data?.permissions ?? [], [data?.permissions]);  
+  const isArabic = language === "ar";
+  const userPermissions = useMemo(() => data?.permissions ?? [], [data?.permissions]);
+  const primaryRole = useMemo(() => resolvePrimaryRole(data), [data]);
+  const hrSidebarLinks = useMemo(
+    () => buildHrSidebarLinks(content.nav, isArabic),
+    [content.nav, isArabic]
+  );
   const userName =
     data?.user.first_name || data?.user.username || content.userFallback;
-  const isArabic = language === "ar";
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -839,7 +846,11 @@ export function HRDashboardPage() {
   );
 
   const visibleNavLinks = useMemo(() => {
-    return navLinks.filter((link) => {
+    if (primaryRole === "hr") {
+      return hrSidebarLinks;
+    }
+
+    return navLinks.filter((link) => {      
       if (!link.permissions || link.permissions.length === 0) {
         return true;
       }
@@ -847,8 +858,8 @@ export function HRDashboardPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
-
+  }, [hrSidebarLinks, navLinks, primaryRole, userPermissions]);
+  
   return (
     <div
       className="dashboard-page"

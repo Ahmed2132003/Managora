@@ -6,6 +6,8 @@ import { useDepartments, useEmployees } from "../../shared/hr/hooks.ts";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { hasPermission } from "../../shared/auth/useCan";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
+import { buildHrSidebarLinks } from "../../shared/navigation/hrSidebarLinks";
 import "../DashboardPage.css";
 import "./EmployeesPage.css";
 
@@ -300,6 +302,11 @@ export function EmployeesPage() {
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
   const userPermissions = meData?.permissions ?? [];
+  const primaryRole = useMemo(() => resolvePrimaryRole(meData), [meData]);
+  const hrSidebarLinks = useMemo(
+    () => buildHrSidebarLinks(content.nav, isArabic),
+    [content.nav, isArabic]
+  );  
   const userName =
     meData?.user.first_name || meData?.user.username || content.userFallback;
 
@@ -543,7 +550,11 @@ export function EmployeesPage() {
   );
 
   const visibleNavLinks = useMemo(() => {
-    return navLinks.filter((link) => {
+    if (primaryRole === "hr") {
+      return hrSidebarLinks;
+    }
+
+    return navLinks.filter((link) => {      
       if (!link.permissions || link.permissions.length === 0) {
         return true;
       }
@@ -551,8 +562,8 @@ export function EmployeesPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
-
+  }, [hrSidebarLinks, navLinks, primaryRole, userPermissions]);
+  
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });

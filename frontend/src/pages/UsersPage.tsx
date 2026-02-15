@@ -25,6 +25,8 @@ import { http } from "../shared/api/http";
 import { hasPermission, useCan } from "../shared/auth/useCan";
 import { clearTokens } from "../shared/auth/tokens";
 import { useMe } from "../shared/auth/useMe";
+import { resolvePrimaryRole } from "../shared/auth/roleNavigation";
+import { buildHrSidebarLinks } from "../shared/navigation/hrSidebarLinks";
 import "./DashboardPage.css";
 import "./UsersPage.css";
 
@@ -499,6 +501,11 @@ export function UsersPage() {
   const userPermissions = useMemo(
     () => data?.permissions ?? [],
     [data?.permissions]
+  );
+  const primaryRole = useMemo(() => resolvePrimaryRole(data), [data]);
+  const hrSidebarLinks = useMemo(
+    () => buildHrSidebarLinks(content.nav, isArabic),
+    [content.nav, isArabic]
   );  
   const userName =
     data?.user.first_name || data?.user.username || content.brand;
@@ -1014,7 +1021,11 @@ useEffect(() => {
   );
 
   const visibleNavLinks = useMemo(() => {
-    return navLinks.filter((link) => {
+    if (primaryRole === "hr") {
+      return hrSidebarLinks;
+    }
+
+    return navLinks.filter((link) => {      
       if (!link.permissions || link.permissions.length === 0) {
         return true;
       }
@@ -1022,8 +1033,8 @@ useEffect(() => {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
-
+  }, [hrSidebarLinks, navLinks, primaryRole, userPermissions]);
+  
   /* ================= UI ================= */
 
   return (

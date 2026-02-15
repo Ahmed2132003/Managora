@@ -11,6 +11,7 @@ import { clearTokens } from "../../shared/auth/tokens";
 import { hasPermission } from "../../shared/auth/useCan";
 import { getAllowedPathsForRole } from "../../shared/auth/roleAccess";
 import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
+import { buildHrSidebarLinks } from "../../shared/navigation/hrSidebarLinks";
 import "../DashboardPage.css";
 import "./LeaveBalancePage.css";
 
@@ -521,9 +522,13 @@ export function LeaveBalancePage() {
     [content.nav]
   );
 
-    const appRole = resolvePrimaryRole(meQuery.data);
+  const appRole = resolvePrimaryRole(meQuery.data);
   const allowedRolePaths = getAllowedPathsForRole(appRole);
-
+  const hrSidebarLinks = useMemo(
+    () => buildHrSidebarLinks(content.nav, isArabic),
+    [content.nav, isArabic]
+  );
+  
   const employeeNavLinks = useMemo(
     () => [
       {
@@ -541,6 +546,10 @@ export function LeaveBalancePage() {
   );
 
   const visibleNavLinks = useMemo(() => {
+    if (appRole === "hr") {
+      return hrSidebarLinks;
+    }
+
     if (appRole === "employee") {
       return employeeNavLinks;
     }
@@ -557,7 +566,7 @@ export function LeaveBalancePage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [allowedRolePaths, appRole, employeeNavLinks, meQuery.data?.permissions, navLinks]);
+  }, [allowedRolePaths, appRole, employeeNavLinks, hrSidebarLinks, meQuery.data?.permissions, navLinks]);
   
   const userName =
     meQuery.data?.user.first_name ||

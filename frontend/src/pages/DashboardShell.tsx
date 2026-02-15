@@ -6,6 +6,7 @@ import { clearTokens } from "../shared/auth/tokens";
 import { useMe } from "../shared/auth/useMe";
 import { resolvePrimaryRole } from "../shared/auth/roleNavigation";
 import { getAllowedPathsForRole } from "../shared/auth/roleAccess.ts";
+import { buildHrSidebarLinks } from "../shared/navigation/hrSidebarLinks";
 import { hasPermission } from "../shared/auth/useCan";
 import { endpoints } from "../shared/api/endpoints";
 import { http } from "../shared/api/http";
@@ -432,9 +433,17 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
     () => getAllowedPathsForRole(primaryRole),
     [primaryRole]
   );
+  const hrSidebarLinks = useMemo(
+    () => buildHrSidebarLinks(content.nav, isArabic),
+    [content.nav, isArabic]
+  );
 
   const visibleNavLinks = useMemo(() => {
-    return navLinks.filter((link) => {
+    if (primaryRole === "hr") {
+      return hrSidebarLinks;
+    }
+
+    return navLinks.filter((link) => {      
       if (allowedRolePaths && !allowedRolePaths.has(link.path)) {
         return false;
       }
@@ -446,8 +455,8 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
         hasPermission(userPermissions, permission)
       );
     });
-  }, [allowedRolePaths, navLinks, userPermissions]);
-
+  }, [allowedRolePaths, hrSidebarLinks, navLinks, primaryRole, userPermissions]);
+  
 
   type CompanyBackup = {
     id: number;

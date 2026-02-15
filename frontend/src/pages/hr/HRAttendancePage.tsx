@@ -16,6 +16,8 @@ import {
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { hasPermission } from "../../shared/auth/useCan";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
+import { buildHrSidebarLinks } from "../../shared/navigation/hrSidebarLinks";
 import "../DashboardPage.css";
 import "./HRAttendancePage.css";
 
@@ -679,6 +681,11 @@ export function HRAttendancePage() {
     () => meData?.permissions ?? [],
     [meData?.permissions]
   );
+  const primaryRole = useMemo(() => resolvePrimaryRole(meData), [meData]);
+  const hrSidebarLinks = useMemo(
+    () => buildHrSidebarLinks(content.nav, isArabic),
+    [content.nav, isArabic]
+  );
 
   // persist prefs
   useEffect(() => {
@@ -860,14 +867,18 @@ export function HRAttendancePage() {
   );
 
   const visibleNavLinks = useMemo(() => {
+    if (primaryRole === "hr") {
+      return hrSidebarLinks;
+    }
+
     return navLinks.filter((link) => {
       if (!link.permissions || link.permissions.length === 0) return true;
       return link.permissions.some((permission) =>
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
-
+  }, [hrSidebarLinks, navLinks, primaryRole, userPermissions]);
+  
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });
