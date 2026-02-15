@@ -39,6 +39,7 @@ const ROLE_ALLOWED_PATHS: Record<Exclude<AppRole, "manager">, Set<string>> = {
     "/customers/new",
     "/invoices",
     "/invoices/new",
+    "/analytics/alerts",
     "/analytics/cash-forecast",
     "/catalog",
     "/sales",

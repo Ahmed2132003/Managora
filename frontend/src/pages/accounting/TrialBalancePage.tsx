@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { isForbiddenError } from "../../shared/api/errors";
 import { useTrialBalance } from "../../shared/accounting/hooks";
 import { useCan, hasPermission } from "../../shared/auth/useCan";
+import { getAllowedPathsForRole } from "../../shared/auth/roleAccess";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
@@ -553,17 +555,29 @@ export function TrialBalancePage() {
     [content.nav]
   );
 
+  const appRole = resolvePrimaryRole(data);
+  const allowedRolePaths = getAllowedPathsForRole(appRole);
+
   const visibleNavLinks = useMemo(() => {
     return navLinks.filter((link) => {
       if (!link.permissions || link.permissions.length === 0) {
+      if (allowedRolePaths && !allowedRolePaths.has(link.path)) {
+        return false;
+      }
+
+      if (appRole === "accountant") {
+        return true;
+      }
+
+
         return true;
       }
       return link.permissions.some((permission) =>
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
-
+  }, [allowedRolePaths, appRole, navLinks, userPermissions]);
+  
   if (isForbiddenError(trialBalanceQuery.error)) {
     return <AccessDenied />;
   }

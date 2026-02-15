@@ -4,6 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
+import { getAllowedPathsForRole } from "../../shared/auth/roleAccess";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
 import { isForbiddenError } from "../../shared/api/errors";
 import {
   type JournalEntry,
@@ -636,8 +638,19 @@ export function JournalEntriesPage() {
     [content.nav]
   );
 
+  const appRole = resolvePrimaryRole(data);
+  const allowedRolePaths = getAllowedPathsForRole(appRole);
+
   const visibleNavLinks = useMemo(() => {
     return navLinks.filter((link) => {
+      if (allowedRolePaths && !allowedRolePaths.has(link.path)) {
+        return false;
+      }
+
+      if (appRole === "accountant") {
+        return true;
+      }
+
       if (!link.permissions || link.permissions.length === 0) {
         return true;
       }
@@ -645,8 +658,8 @@ export function JournalEntriesPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
-
+  }, [allowedRolePaths, appRole, navLinks, userPermissions]);
+  
   const entriesQuery = useJournalEntries(filters);
   const accountsQuery = useAccounts();
   const costCentersQuery = useCostCenters();

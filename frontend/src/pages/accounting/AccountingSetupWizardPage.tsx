@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
 import { clearTokens } from "../../shared/auth/tokens";
 import { hasPermission } from "../../shared/auth/useCan";
+import { getAllowedPathsForRole } from "../../shared/auth/roleAccess";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
 import { useMe } from "../../shared/auth/useMe";
 import { http } from "../../shared/api/http";
 import { endpoints } from "../../shared/api/endpoints";
@@ -837,8 +839,19 @@ export function AccountingSetupWizardPage() {
     [content.nav]
   );
 
+    const appRole = resolvePrimaryRole(meData);
+  const allowedRolePaths = getAllowedPathsForRole(appRole);
+
   const visibleNavLinks = useMemo(() => {
     return navLinks.filter((link) => {
+      if (allowedRolePaths && !allowedRolePaths.has(link.path)) {
+        return false;
+      }
+
+      if (appRole === "accountant") {
+        return true;
+      }
+
       if (!link.permissions || link.permissions.length === 0) {
         return true;
       }
@@ -846,8 +859,8 @@ export function AccountingSetupWizardPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
-
+  }, [allowedRolePaths, appRole, navLinks, userPermissions]);
+  
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });

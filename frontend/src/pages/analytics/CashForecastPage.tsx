@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { clearTokens } from "../../shared/auth/tokens";
 import { useMe } from "../../shared/auth/useMe";
 import { hasPermission } from "../../shared/auth/useCan";
+import { getAllowedPathsForRole } from "../../shared/auth/roleAccess";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
 import { useCashForecast } from "../../shared/analytics/forecast";
 import { formatCurrency, formatPercent } from "../../shared/analytics/format.ts";
 import {
@@ -633,8 +635,19 @@ export function CashForecastPage() {
     [content.nav]
   );
 
+  const appRole = resolvePrimaryRole(data);
+  const allowedRolePaths = getAllowedPathsForRole(appRole);
+
   const visibleNavLinks = useMemo(() => {
     return navLinks.filter((link) => {
+      if (allowedRolePaths && !allowedRolePaths.has(link.path)) {
+        return false;
+      }
+
+      if (appRole === "accountant") {
+        return true;
+      }
+
       if (!link.permissions || link.permissions.length === 0) {
         return true;
       }
@@ -642,8 +655,8 @@ export function CashForecastPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
-
+  }, [allowedRolePaths, appRole, navLinks, userPermissions]);
+  
   return (
     <div
       className="dashboard-page"

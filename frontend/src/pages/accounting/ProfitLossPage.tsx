@@ -6,6 +6,8 @@ import {
   useProfitLoss,
 } from "../../shared/accounting/hooks";
 import { useCan, hasPermission } from "../../shared/auth/useCan";
+import { getAllowedPathsForRole } from "../../shared/auth/roleAccess";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
@@ -572,8 +574,19 @@ export function ProfitLossPage() {
     [content.nav]
   );
 
+  const appRole = resolvePrimaryRole(data);
+  const allowedRolePaths = getAllowedPathsForRole(appRole);
+
   const visibleNavLinks = useMemo(() => {
     return navLinks.filter((link) => {
+      if (allowedRolePaths && !allowedRolePaths.has(link.path)) {
+        return false;
+      }
+
+      if (appRole === "accountant") {
+        return true;
+      }
+
       if (!link.permissions || link.permissions.length === 0) {
         return true;
       }
@@ -581,8 +594,8 @@ export function ProfitLossPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
-
+  }, [allowedRolePaths, appRole, navLinks, userPermissions]);
+  
   if (isForbiddenError(pnlQuery.error)) {
     return <AccessDenied />;
   }

@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { isForbiddenError } from "../../shared/api/errors";
 import { useAccounts, useGeneralLedger } from "../../shared/accounting/hooks";
 import { useCan, hasPermission } from "../../shared/auth/useCan";
+import { getAllowedPathsForRole } from "../../shared/auth/roleAccess";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
@@ -590,8 +592,19 @@ export function GeneralLedgerPage() {
     [content.nav]
   );
 
+  const appRole = resolvePrimaryRole(data);
+  const allowedRolePaths = getAllowedPathsForRole(appRole);
+
   const visibleNavLinks = useMemo(() => {
     return navLinks.filter((link) => {
+      if (allowedRolePaths && !allowedRolePaths.has(link.path)) {
+        return false;
+      }
+
+      if (appRole === "accountant") {
+        return true;
+      }
+
       if (!link.permissions || link.permissions.length === 0) {
         return true;
       }
@@ -599,8 +612,8 @@ export function GeneralLedgerPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [navLinks, userPermissions]);
-
+  }, [allowedRolePaths, appRole, navLinks, userPermissions]);
+  
   if (isForbiddenError(ledgerQuery.error)) {
     return <AccessDenied />;
   }
