@@ -8,12 +8,12 @@ export function resolvePrimaryRole(me?: MeResponse): AppRole | null {
   if (!me) {
     return null;
   }
-  if (me.user.is_superuser) {
+  if (me.user?.is_superuser) {    
     return "manager";
   }
 
   const roleSet = new Set(
-    me.roles.map((role) => (role.slug || role.name || "").trim().toLowerCase())
+    (me.roles ?? []).map((role) => (role.slug || role.name || "").trim().toLowerCase())    
   );
 
   return ROLE_PRIORITY.find((role) => roleSet.has(role)) ?? null;
