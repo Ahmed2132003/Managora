@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { clearTokens } from "../shared/auth/tokens";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMe } from "../shared/auth/useMe.ts";
+import { resolvePrimaryRole } from "../shared/auth/roleNavigation";
 import { hasPermission } from "../shared/auth/useCan";
 import { useAlerts } from "../shared/analytics/hooks";
 import { useAnalyticsKpis } from "../shared/analytics/insights.ts";
@@ -82,7 +83,9 @@ type Content = {
     dashboard: string;
     adminPanel: string;
     users: string;
-    attendanceSelf: string;    
+    attendanceSelf: string;
+    employeeSelfService: string;
+    messages: string;
     leaveBalance: string;
     leaveRequest: string;
     leaveMyRequests: string;
@@ -186,6 +189,8 @@ const contentMap: Record<Language, Content> = {
       adminPanel: "Admin",
       users: "Users",      
       attendanceSelf: "My Attendance",
+      employeeSelfService: "Employee Self Service",
+      messages: "Messages",
       leaveBalance: "Leave Balance",
       leaveRequest: "Leave Request",
       leaveMyRequests: "My Leave Requests",
@@ -287,6 +292,8 @@ const contentMap: Record<Language, Content> = {
       adminPanel: "الإدارة",
       users: "المستخدمون",      
       attendanceSelf: "حضوري",
+      employeeSelfService: "الخدمات الذاتية للموظف",
+      messages: "الرسائل",
       leaveBalance: "رصيد الإجازات",
       leaveRequest: "طلب إجازة",
       leaveMyRequests: "طلباتي",
@@ -954,6 +961,12 @@ export function DashboardPage() {
         icon: "🕒",
       },
       {
+        path: "/employee/self-service",
+        label: content.nav.employeeSelfService,
+        icon: "🧑‍💼",
+      },
+      { path: "/messages", label: content.nav.messages, icon: "✉️" },
+      {
         path: "/leaves/balance",
         label: content.nav.leaveBalance,
         icon: "📅",
@@ -1119,8 +1132,10 @@ export function DashboardPage() {
     [content.nav]
   );
 
+  const primaryRole = resolvePrimaryRole(data);
+
   const visibleNavLinks = useMemo(() => {
-    return navLinks.filter((link) => {
+    const filteredLinks = navLinks.filter((link) => {
       if (link.superuserOnly && !isSuperuser) {
         return false;
       }
@@ -1131,7 +1146,16 @@ export function DashboardPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [isSuperuser, navLinks, userPermissions]);
+
+    if (primaryRole === "accountant" || primaryRole === "manager") {
+      const footerPaths = new Set(["/employee/self-service", "/messages"]);
+      const regularLinks = filteredLinks.filter((link) => !footerPaths.has(link.path));
+      const footerLinks = filteredLinks.filter((link) => footerPaths.has(link.path));
+      return [...regularLinks, ...footerLinks];
+    }
+
+    return filteredLinks;
+  }, [isSuperuser, navLinks, primaryRole, userPermissions]);
 
   return (
     <div

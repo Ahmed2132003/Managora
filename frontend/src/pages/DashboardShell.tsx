@@ -455,7 +455,7 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
       "/employee/self-service",
     ]);
 
-    return navLinks.filter((link) => {      
+    const filteredLinks = navLinks.filter((link) => {        
       if (allowedRolePaths && !allowedRolePaths.has(link.path)) {
         return false;
       }
@@ -474,8 +474,16 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
         hasPermission(userPermissions, permission)
       );
     });
-  }, [allowedRolePaths, hrSidebarLinks, navLinks, primaryRole, userPermissions]);
 
+    if (primaryRole === "accountant" || primaryRole === "manager") {
+      const footerPaths = new Set(["/employee/self-service", "/messages"]);
+      const regularLinks = filteredLinks.filter((link) => !footerPaths.has(link.path));
+      const footerLinks = filteredLinks.filter((link) => footerPaths.has(link.path));
+      return [...regularLinks, ...footerLinks];
+    }
+
+    return filteredLinks;
+  }, [allowedRolePaths, hrSidebarLinks, navLinks, primaryRole, userPermissions]);
 
   type CompanyBackup = {
     id: number;
