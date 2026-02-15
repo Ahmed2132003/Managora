@@ -451,8 +451,11 @@ export function HRDashboardPage() {
     [content.nav, isArabic]
   );
   const userName =
-    data?.user.first_name || data?.user.username || content.userFallback;
-
+    data?.user?.first_name ||
+    data?.employee?.full_name ||
+    data?.user?.username ||
+    content.userFallback;
+    
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -859,7 +862,7 @@ export function HRDashboardPage() {
       );
     });
   }, [hrSidebarLinks, navLinks, primaryRole, userPermissions]);
-  
+
   return (
     <div
       className="dashboard-page"
