@@ -455,7 +455,7 @@ export function HRDashboardPage() {
     data?.employee?.full_name ||
     data?.user?.username ||
     content.userFallback;
-    
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -534,13 +534,23 @@ export function HRDashboardPage() {
     Boolean(selection.start && selection.end)
   );
 
+  const attendanceRecords = useMemo(() => {
+    if (!Array.isArray(attendanceQuery.data)) {
+      return [] as AttendanceRecord[];
+    }
+    return attendanceQuery.data.filter(
+      (record): record is AttendanceRecord =>
+        Boolean(record?.employee && typeof record.employee.id === "number")
+    );
+  }, [attendanceQuery.data]);
+
   const attendanceSummary = useMemo(() => {
     const rangeDays = getRangeDays(selection.start, selection.end);
-    if (!rangeDays || !attendanceQuery.data) {
+    if (!rangeDays) {      
       return null;
     }
     const employees = new Map<number, { presentDays: number; lateMinutes: number }>();
-    attendanceQuery.data.forEach((record) => {
+    attendanceRecords.forEach((record) => {      
       const entry = employees.get(record.employee.id) ?? { presentDays: 0, lateMinutes: 0 };
       if (record.status !== "absent") {
         entry.presentDays += 1;
@@ -561,19 +571,16 @@ export function HRDashboardPage() {
       absenceAvg: totalAbsentDays / employees.size,
       latenessAvg: totalLateMinutes / employees.size,
     };
-  }, [attendanceQuery.data, selection.end, selection.start]);
+  }, [attendanceRecords, selection.end, selection.start]);
 
   const attendanceTrend = useMemo(() => {
-    return buildAttendanceTrend(attendanceQuery.data ?? [], selection.start, selection.end);
-  }, [attendanceQuery.data, selection.end, selection.start]);
+    return buildAttendanceTrend(attendanceRecords, selection.start, selection.end);
+  }, [attendanceRecords, selection.end, selection.start]);
 
   const absenceByDepartment = useMemo(() => {
-    if (!attendanceQuery.data) {
-      return [];
-    }
     const departmentFallback = isArabic ? "بدون قسم" : "Unassigned";
     const counts = new Map<string, number>();
-    attendanceQuery.data.forEach((record) => {
+    attendanceRecords.forEach((record) => {      
       if (record.status !== "absent") {
         return;
       }
@@ -584,14 +591,11 @@ export function HRDashboardPage() {
       .map(([department, absences]) => ({ department, absences }))
       .sort((a, b) => b.absences - a.absences)
       .slice(0, 5);
-  }, [attendanceQuery.data, isArabic]);
+  }, [attendanceRecords, isArabic]);
 
   const attendanceLogRows = useMemo(() => {
-    if (!attendanceQuery.data) {
-      return [];
-    }
-    return [...attendanceQuery.data].sort((a, b) => b.date.localeCompare(a.date));
-  }, [attendanceQuery.data]);
+    return [...attendanceRecords].sort((a, b) => b.date.localeCompare(a.date));
+  }, [attendanceRecords]);
 
   const showCustomHint = range === "custom" && (!selection.start || !selection.end);
 
@@ -966,7 +970,14 @@ export function HRDashboardPage() {
                 </span>
               </div>
             </div>
-            <div className="hero-panel__stats">
+            {(attendanceQuery.isError || kpisQuery.isError) && (
+              <p className="helper-text" role="alert">
+                {isArabic
+                  ? "تعذر تحميل بعض بيانات التحليلات حاليًا."
+                  : "Some analytics data is unavailable right now."}
+              </p>
+            )}
+            <div className="hero-panel__stats">              
               {/*
                 Stats are driven by attendance records (absence/lateness)
                 and KPI data (overtime).

@@ -2,7 +2,9 @@ import type { AppRole } from "./roleNavigation";
 
 const ROLE_ALLOWED_PATHS: Record<Exclude<AppRole, "manager">, Set<string>> = {
   hr: new Set([
-    "/users",    
+    "/analytics/hr",
+    "/users",
+    
     "/attendance/self",
     "/employee/self-service",
     "/messages",
