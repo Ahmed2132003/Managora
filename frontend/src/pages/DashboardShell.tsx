@@ -412,10 +412,16 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
         label: content.nav.sales,
         icon: "🛒",
         permissions: ["invoices.*"],
-      },      
+      },
+      {
+        path: "/analytics/alerts",
+        label: content.nav.alertsCenter,
+        icon: "🚨",
+        permissions: ["analytics.alerts.view", "analytics.alerts.manage"],
+      },
       { path: "/analytics/cash-forecast", label: content.nav.cashForecast, icon: "💡" },
       { path: "/analytics/ceo", label: content.nav.ceoDashboard, icon: "📌" },
-      { path: "/analytics/finance", label: content.nav.financeDashboard, icon: "💹" },
+      { path: "/analytics/finance", label: content.nav.financeDashboard, icon: "💹" },      
       { path: "/analytics/hr", label: content.nav.hrDashboard, icon: "🧑‍💻" },
       {
         path: "/admin/audit-logs",
@@ -443,20 +449,33 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
       return hrSidebarLinks;
     }
 
+    const accountantAlwaysVisiblePaths = new Set([
+      "/messages",
+      "/analytics/alerts",
+      "/employee/self-service",
+    ]);
+
     return navLinks.filter((link) => {      
       if (allowedRolePaths && !allowedRolePaths.has(link.path)) {
         return false;
       }
 
-      if (!link.permissions || link.permissions.length === 0) {
+      if (
+        primaryRole === "accountant" &&
+        accountantAlwaysVisiblePaths.has(link.path)
+      ) {
         return true;
       }
+
+      if (!link.permissions || link.permissions.length === 0) {
+        return true;
+      }      
       return link.permissions.some((permission) =>
         hasPermission(userPermissions, permission)
       );
     });
   }, [allowedRolePaths, hrSidebarLinks, navLinks, primaryRole, userPermissions]);
-  
+
 
   type CompanyBackup = {
     id: number;
