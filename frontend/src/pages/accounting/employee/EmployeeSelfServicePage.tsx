@@ -35,6 +35,7 @@ type Copy = Record<
     };
     actions: {
       requestLeave: string;
+      viewMyRequests: string;
       viewAttendance: string;
       upload: string;
       uploading: string;
@@ -73,6 +74,7 @@ const pageCopy: Copy = {
     },
     actions: {
       requestLeave: "Create Leave Request",
+      viewMyRequests: "View My Requests",
       viewAttendance: "View My Attendance",
       upload: "Upload Document",
       uploading: "Uploading...",
@@ -108,6 +110,7 @@ const pageCopy: Copy = {
     },
     actions: {
       requestLeave: "إنشاء طلب إجازة",
+      viewMyRequests: "عرض طلباتي",
       viewAttendance: "عرض حضوري",
       upload: "رفع مستند",
       uploading: "جاري الرفع...",
@@ -670,6 +673,9 @@ export function EmployeeSelfServicePage() {
               </div>
               <Link className="primary-button" to="/leaves/request">              
                 {copy.actions.requestLeave}
+              </Link>
+              <Link className="ghost-button" to="/leaves/my">
+                {copy.actions.viewMyRequests}
               </Link>
               <div className="panel__header">
                 <h2>{copy.sections.attendance}</h2>

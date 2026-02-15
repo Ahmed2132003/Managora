@@ -4,6 +4,8 @@ import { useMyLeaveRequestsQuery } from "../../shared/hr/hooks";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
 import { hasPermission } from "../../shared/auth/useCan";
+import { getAllowedPathsForRole } from "../../shared/auth/roleAccess";
+import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
 import "../DashboardPage.css";
 import "./LeaveMyRequestsPage.css";
 
@@ -280,13 +282,11 @@ export function LeaveMyRequestsPage() {
         path: "/leaves/request",
         label: content.nav.leaveRequest,
         icon: "📝",
-        permissions: ["leaves.*"],
       },
       {
         path: "/leaves/my",
         label: content.nav.leaveMyRequests,
         icon: "📌",
-        permissions: ["leaves.*"],
       },
       {
         path: "/hr/employees",
@@ -448,9 +448,35 @@ export function LeaveMyRequestsPage() {
     [content.nav]
   );
 
+    const appRole = resolvePrimaryRole(meQuery.data);
+  const allowedRolePaths = getAllowedPathsForRole(appRole);
+
+  const employeeNavLinks = useMemo(
+    () => [
+      {
+        path: "/employee/self-service",
+        label: isArabic ? "الملف الوظيفي" : "Employee Profile",
+        icon: "🪪",
+      },
+      { path: "/attendance/self", label: content.nav.attendanceSelf, icon: "🕒" },
+      { path: "/leaves/balance", label: content.nav.leaveBalance, icon: "📅" },
+      { path: "/leaves/request", label: content.nav.leaveRequest, icon: "📝" },
+      { path: "/leaves/my", label: content.nav.leaveMyRequests, icon: "📌" },
+      { path: "/messages", label: isArabic ? "الرسائل" : "Messages", icon: "✉️" },
+    ],
+    [content.nav.attendanceSelf, content.nav.leaveBalance, content.nav.leaveMyRequests, content.nav.leaveRequest, isArabic]
+  );
+
   const visibleNavLinks = useMemo(() => {
+    if (appRole === "employee") {
+      return employeeNavLinks;
+    }
+
     const userPermissions = meQuery.data?.permissions ?? [];
     return navLinks.filter((link) => {
+      if (allowedRolePaths && !allowedRolePaths.has(link.path)) {
+        return false;
+      }
       if (!link.permissions || link.permissions.length === 0) {
         return true;
       }
@@ -458,8 +484,8 @@ export function LeaveMyRequestsPage() {
         hasPermission(userPermissions, permission)
       );
     });
-  }, [meQuery.data?.permissions, navLinks]);
-
+  }, [allowedRolePaths, appRole, employeeNavLinks, meQuery.data?.permissions, navLinks]);
+  
   const userName =
     meQuery.data?.user.first_name ||
     meQuery.data?.user.username ||

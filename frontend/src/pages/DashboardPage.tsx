@@ -963,13 +963,11 @@ export function DashboardPage() {
         path: "/leaves/request",
         label: content.nav.leaveRequest,
         icon: "📝",
-        permissions: ["leaves.*"],
       },
       {
         path: "/leaves/my",
         label: content.nav.leaveMyRequests,
         icon: "📌",
-        permissions: ["leaves.*"],
       },
       {
         path: "/hr/employees",
