@@ -590,6 +590,19 @@ export function CollectionsPage() {
         permissions: ["leaves.*"],
       },
       {
+        path: "/employee/self-service",
+        label:
+          language === "ar"
+            ? "الخدمات الذاتية للموظف"
+            : "Employee Self-Service",
+        icon: "🧑‍💼",
+      },
+      {
+        path: "/messages",
+        label: language === "ar" ? "الرسائل" : "Messages",
+        icon: "✉️",
+      },
+      {
         path: "/hr/employees",
         label: content.nav.employees,
         icon: "🧑‍💼",
@@ -746,10 +759,10 @@ export function CollectionsPage() {
       { path: "/setup/templates", label: content.nav.setupTemplates, icon: "🧱" },
       { path: "/setup/progress", label: content.nav.setupProgress, icon: "🚀" },
     ],
-    [content.nav]
+    [content.nav, language]
   );
 
-    const appRole = resolvePrimaryRole(data);
+  const appRole = resolvePrimaryRole(data);
   const allowedRolePaths = getAllowedPathsForRole(appRole);
 
   const visibleNavLinks = useMemo(() => {
@@ -770,7 +783,7 @@ export function CollectionsPage() {
       );
     });
   }, [allowedRolePaths, appRole, navLinks, userPermissions]);
-  
+
   function handleLogout() {
     clearTokens();
     navigate("/login", { replace: true });

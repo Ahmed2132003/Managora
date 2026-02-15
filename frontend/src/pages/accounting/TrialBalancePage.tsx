@@ -396,6 +396,19 @@ export function TrialBalancePage() {
         permissions: ["leaves.*"],
       },
       {
+        path: "/employee/self-service",
+        label:
+          language === "ar"
+            ? "الخدمات الذاتية للموظف"
+            : "Employee Self-Service",
+        icon: "🧑‍💼",
+      },
+      {
+        path: "/messages",
+        label: language === "ar" ? "الرسائل" : "Messages",
+        icon: "✉️",
+      },
+      {
         path: "/hr/employees",
         label: content.nav.employees,
         icon: "🧑‍💼",
@@ -552,7 +565,7 @@ export function TrialBalancePage() {
       { path: "/setup/templates", label: content.nav.setupTemplates, icon: "🧱" },
       { path: "/setup/progress", label: content.nav.setupProgress, icon: "🚀" },
     ],
-    [content.nav]
+    [content.nav, language]
   );
 
   const appRole = resolvePrimaryRole(data);
@@ -560,7 +573,6 @@ export function TrialBalancePage() {
 
   const visibleNavLinks = useMemo(() => {
     return navLinks.filter((link) => {
-      if (!link.permissions || link.permissions.length === 0) {
       if (allowedRolePaths && !allowedRolePaths.has(link.path)) {
         return false;
       }
@@ -569,7 +581,7 @@ export function TrialBalancePage() {
         return true;
       }
 
-
+      if (!link.permissions || link.permissions.length === 0) {
         return true;
       }
       return link.permissions.some((permission) =>
@@ -577,7 +589,7 @@ export function TrialBalancePage() {
       );
     });
   }, [allowedRolePaths, appRole, navLinks, userPermissions]);
-  
+
   if (isForbiddenError(trialBalanceQuery.error)) {
     return <AccessDenied />;
   }
