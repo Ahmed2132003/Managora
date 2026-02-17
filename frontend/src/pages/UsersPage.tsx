@@ -29,6 +29,7 @@ import { resolvePrimaryRole } from "../shared/auth/roleNavigation";
 import { buildHrSidebarLinks } from "../shared/navigation/hrSidebarLinks";
 import "./DashboardPage.css";
 import "./UsersPage.css";
+import { TopbarQuickActions } from "./TopbarQuickActions";
 
 // Try to extract useful validation errors from axios-like responses.
 function formatApiError(err: unknown): string {
@@ -507,8 +508,8 @@ export function UsersPage() {
     () => buildHrSidebarLinks(content.nav, isArabic),
     [content.nav, isArabic]
   );  
-  const userName =
-    data?.user.first_name || data?.user.username || content.brand;
+  const accountCompanyName =
+    data?.company.name || content.brand;
 
   const canCreate = useCan("users.create");
   const canEdit = useCan("users.edit");
@@ -1065,13 +1066,14 @@ useEffect(() => {
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
+        <TopbarQuickActions isArabic={isArabic} />
       </header>
 
       <div className="dashboard-shell">
         <aside className="dashboard-sidebar">
           <div className="sidebar-card">
             <p>{content.pageTitle}</p>
-            <strong>{userName}</strong>
+            <strong>{accountCompanyName}</strong>
             {isLoading && (
               <span className="sidebar-note">...loading profile</span>
             )}

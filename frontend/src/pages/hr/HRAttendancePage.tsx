@@ -20,6 +20,7 @@ import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
 import { buildHrSidebarLinks } from "../../shared/navigation/hrSidebarLinks";
 import "../DashboardPage.css";
 import "./HRAttendancePage.css";
+import { TopbarQuickActions } from "../TopbarQuickActions";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
@@ -700,8 +701,8 @@ export function HRAttendancePage() {
     }
   }, [theme]);
 
-  const userName =
-    meData?.user.first_name || meData?.user.username || content.userFallback;
+  const companyName =
+    meData?.company.name || content.userFallback;
 
   const departmentsQuery = useDepartments();
   const employeesQuery = useEmployees({
@@ -987,13 +988,14 @@ export function HRAttendancePage() {
             onChange={(event) => setEmployeeSearch(event.target.value)}
           />
         </div>
+        <TopbarQuickActions isArabic={isArabic} />
       </header>
 
       <div className="dashboard-shell">
         <aside className="dashboard-sidebar">
           <div className="sidebar-card">
             <p>{content.pageTitle}</p>
-            <strong>{userName}</strong>
+            <strong>{companyName}</strong>
             {isProfileLoading && (
               <span className="sidebar-note">...loading profile</span>
             )}

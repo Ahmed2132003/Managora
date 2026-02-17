@@ -14,6 +14,7 @@ import { endpoints } from "../shared/api/endpoints";
 import { http } from "../shared/api/http";
 import { formatCurrency, formatNumber, formatPercent } from "../shared/analytics/format.ts";
 import "./DashboardPage.css";
+import { TopbarQuickActions } from "./TopbarQuickActions";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
@@ -1185,6 +1186,7 @@ export function DashboardPage() {
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
+        <TopbarQuickActions isArabic={isArabic} />
       </header>
 
       <div className="dashboard-shell">

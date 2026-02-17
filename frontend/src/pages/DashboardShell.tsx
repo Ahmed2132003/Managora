@@ -10,6 +10,7 @@ import { buildHrSidebarLinks } from "../shared/navigation/hrSidebarLinks";
 import { hasPermission } from "../shared/auth/useCan";
 import { endpoints } from "../shared/api/endpoints";
 import { http } from "../shared/api/http";
+import { TopbarQuickActions } from "./TopbarQuickActions";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
@@ -221,8 +222,8 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
   const isArabic = language === "ar";
   const userPermissions = useMemo(() => data?.permissions ?? [], [data?.permissions]);
   const primaryRole = useMemo(() => resolvePrimaryRole(data), [data]);
-  const userName =
-    data?.user.first_name || data?.user.username || content.userFallback;
+  const companyName =
+    data?.company.name || content.userFallback;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -597,13 +598,14 @@ export function DashboardShell({ copy, actions, children, className }: Dashboard
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
+        <TopbarQuickActions isArabic={isArabic} />
       </header>
 
       <div className="dashboard-shell">
         <aside className="dashboard-sidebar">
           <div className="sidebar-card">
             <p>{content.welcome}</p>
-            <strong>{userName}</strong>
+            <strong>{companyName}</strong>
             {isLoading && (
               <span className="sidebar-note">...loading profile</span>
             )}

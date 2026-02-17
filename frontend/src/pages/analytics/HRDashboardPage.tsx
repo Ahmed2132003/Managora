@@ -20,6 +20,7 @@ import {
   YAxis,
 } from "recharts";
 import "./HRDashboardPage.css";
+import { TopbarQuickActions } from "../TopbarQuickActions";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
@@ -450,11 +451,8 @@ export function HRDashboardPage() {
     () => buildHrSidebarLinks(content.nav, isArabic),
     [content.nav, isArabic]
   );
-  const userName =
-    data?.user?.first_name ||
-    data?.employee?.full_name ||
-    data?.user?.username ||
-    content.userFallback;
+  const companyName =
+    data?.company.name || content.userFallback;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -893,13 +891,14 @@ export function HRDashboardPage() {
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
+        <TopbarQuickActions isArabic={isArabic} />
       </header>
 
       <div className="dashboard-shell">
         <aside className="dashboard-sidebar">
           <div className="sidebar-card">
             <p>{content.welcome}</p>
-            <strong>{userName}</strong>
+            <strong>{companyName}</strong>
             {isLoading && <span className="sidebar-note">...loading profile</span>}
             {isError && (
               <span className="sidebar-note sidebar-note--error">

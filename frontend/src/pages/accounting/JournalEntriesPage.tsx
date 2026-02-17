@@ -19,6 +19,7 @@ import {
 } from "../../shared/accounting/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import "../DashboardPage.css";
+import { TopbarQuickActions } from "../TopbarQuickActions";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
@@ -424,8 +425,8 @@ export function JournalEntriesPage() {
     () => data?.permissions ?? [],
     [data?.permissions]
   );  
-  const userName =
-    data?.user.first_name || data?.user.username || content.userFallback;
+  const companyName =
+    data?.company.name || content.userFallback;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -947,13 +948,14 @@ export function JournalEntriesPage() {
             onChange={(event) => handleSearchChange(event.target.value)}
           />
         </div>
+        <TopbarQuickActions isArabic={isArabic} />
       </header>
 
       <div className="dashboard-shell">
         <aside className="dashboard-sidebar">
           <div className="sidebar-card">
             <p>{content.welcome}</p>
-            <strong>{userName}</strong>
+            <strong>{companyName}</strong>
             {isLoading && (
               <span className="sidebar-note">...loading profile</span>
             )}

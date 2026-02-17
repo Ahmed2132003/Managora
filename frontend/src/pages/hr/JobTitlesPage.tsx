@@ -20,6 +20,7 @@ import {
 import { AccessDenied } from "../../shared/ui/AccessDenied.tsx";
 import "../DashboardPage.css";
 import "./JobTitlesPage.css";
+import { TopbarQuickActions } from "../TopbarQuickActions";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
@@ -420,9 +421,8 @@ export function JobTitlesPage() {
     });
   }, [jobTitlesQuery.data, searchTerm, statusFilter]);
 
-  const userName =
-    meQuery.data?.user.first_name ||
-    meQuery.data?.user.username ||
+  const companyName =
+    meQuery.data?.company.name ||
     content.userFallback;
 
   const navLinks = useMemo(
@@ -719,13 +719,14 @@ export function JobTitlesPage() {
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
+        <TopbarQuickActions isArabic={isArabic} />
       </header>
 
       <div className="dashboard-shell">
         <aside className="dashboard-sidebar">
           <div className="sidebar-card">
             <p>{content.pageTitle}</p>
-            <strong>{userName}</strong>
+            <strong>{companyName}</strong>
             {meQuery.isLoading && <span className="sidebar-note">...loading profile</span>}
             {meQuery.isError && (
               <span className="sidebar-note sidebar-note--error">

@@ -15,6 +15,7 @@ import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
 import { buildHrSidebarLinks } from "../../shared/navigation/hrSidebarLinks";
 import "../DashboardPage.css";
 import "./LeaveRequestPage.css";
+import { TopbarQuickActions } from "../TopbarQuickActions";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
@@ -624,9 +625,8 @@ export function LeaveRequestPage() {
     });
   }, [allowedRolePaths, appRole, employeeNavLinks, hrSidebarLinks, meQuery.data?.permissions, navLinks]);
   
-  const userName =
-    meQuery.data?.user.first_name ||
-    meQuery.data?.user.username ||
+  const companyName =
+    meQuery.data?.company.name ||
     content.userFallback;
 
   const selectedLeaveType = leaveTypesQuery.data?.find(
@@ -666,13 +666,14 @@ export function LeaveRequestPage() {
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
+        <TopbarQuickActions isArabic={isArabic} />
       </header>
 
       <div className="dashboard-shell">
         <aside className="dashboard-sidebar">
           <div className="sidebar-card">
             <p>{content.pageTitle}</p>
-            <strong>{userName}</strong>
+            <strong>{companyName}</strong>
             {meQuery.isLoading && (
               <span className="sidebar-note">...loading profile</span>
             )}

@@ -10,6 +10,7 @@ import { http } from "../../shared/api/http";
 import { endpoints } from "../../shared/api/endpoints";
 import "../DashboardPage.css";
 import "./AccountingSetupWizardPage.css";
+import { TopbarQuickActions } from "../TopbarQuickActions";
 
 type Language = "en" | "ar";
 
@@ -471,8 +472,8 @@ export function AccountingSetupWizardPage() {
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
   const userPermissions = meData?.permissions ?? [];
-  const userName =
-    meData?.user.first_name || meData?.user.username || content.userFallback;
+  const companyName =
+    meData?.company.name || content.userFallback;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -905,13 +906,14 @@ export function AccountingSetupWizardPage() {
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
+        <TopbarQuickActions isArabic={isArabic} />
       </header>
 
       <div className="dashboard-shell">
         <aside className="dashboard-sidebar">
           <div className="sidebar-card">
             <p>{content.pageTitle}</p>
-            <strong>{userName}</strong>
+            <strong>{companyName}</strong>
             {isProfileLoading && <span className="sidebar-note">...loading profile</span>}
             {isError && (
               <span className="sidebar-note sidebar-note--error">

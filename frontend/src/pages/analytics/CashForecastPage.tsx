@@ -17,6 +17,7 @@ import {
   YAxis,
 } from "recharts";
 import "./CashForecastPage.css";
+import { TopbarQuickActions } from "../TopbarQuickActions";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
@@ -298,8 +299,8 @@ export function CashForecastPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const content = useMemo(() => contentMap[language], [language]);
   const userPermissions = useMemo(() => data?.permissions ?? [], [data?.permissions]);  
-  const userName =
-    data?.user.first_name || data?.user.username || content.userFallback;
+  const companyName =
+    data?.company.name || content.userFallback;
   const isArabic = language === "ar";
 
   useEffect(() => {
@@ -696,13 +697,14 @@ export function CashForecastPage() {
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
+        <TopbarQuickActions isArabic={isArabic} />
       </header>
 
       <div className="dashboard-shell">
         <aside className="dashboard-sidebar">
           <div className="sidebar-card">
             <p>{content.welcome}</p>
-            <strong>{userName}</strong>
+            <strong>{companyName}</strong>
             {isLoading && <span className="sidebar-note">...loading profile</span>}
             {isError && (
               <span className="sidebar-note sidebar-note--error">

@@ -23,6 +23,7 @@ import { hasPermission } from "../shared/auth/useCan";
 import type { Department } from "../shared/hr/hooks";
 import "./DashboardPage.css";
 import "./CopilotPage.css";
+import { TopbarQuickActions } from "./TopbarQuickActions.tsx";
 
 type Language = "en" | "ar";
 type ThemeMode = "light" | "dark";
@@ -344,7 +345,7 @@ export function CopilotPage() {
   const content = useMemo(() => contentMap[language], [language]);
   const isArabic = language === "ar";
   const userPermissions = useMemo(() => data?.permissions ?? [], [data?.permissions]);
-  const userName = data?.user.first_name || data?.user.username || content.brand;
+  const companyName = data?.company.name || content.brand;
 
   const [question, setQuestion] = useState("");
   const [intent, setIntent] = useState<CopilotIntentKey | "">("");
@@ -915,13 +916,14 @@ export function CopilotPage() {
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
+        <TopbarQuickActions isArabic={isArabic} />
       </header>
 
       <div className="dashboard-shell">
         <aside className="dashboard-sidebar">
           <div className="sidebar-card">
             <p>{content.pageTitle}</p>
-            <strong>{userName}</strong>
+            <strong>{companyName}</strong>
             {isLoading && <span className="sidebar-note">...loading profile</span>}
             {isError && (
               <span className="sidebar-note sidebar-note--error">

@@ -10,6 +10,7 @@ import { resolvePrimaryRole } from "../../shared/auth/roleNavigation";
 import { buildHrSidebarLinks } from "../../shared/navigation/hrSidebarLinks";
 import "../DashboardPage.css";
 import "./EmployeesPage.css";
+import { TopbarQuickActions } from "../TopbarQuickActions";
 
 type Language = "en" | "ar";
 
@@ -307,8 +308,8 @@ export function EmployeesPage() {
     () => buildHrSidebarLinks(content.nav, isArabic),
     [content.nav, isArabic]
   );  
-  const userName =
-    meData?.user.first_name || meData?.user.username || content.userFallback;
+  const companyName =
+    meData?.company.name || content.userFallback;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -605,13 +606,14 @@ export function EmployeesPage() {
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
+        <TopbarQuickActions isArabic={isArabic} />
       </header>
 
       <div className="dashboard-shell">
         <aside className="dashboard-sidebar">
           <div className="sidebar-card">
             <p>{content.pageTitle}</p>
-            <strong>{userName}</strong>
+            <strong>{companyName}</strong>
             {isProfileLoading && <span className="sidebar-note">...loading profile</span>}
             {isError && (
               <span className="sidebar-note sidebar-note--error">
