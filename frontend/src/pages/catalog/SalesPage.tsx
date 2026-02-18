@@ -28,7 +28,7 @@ export function SalesPage() {
   const [invoiceNumber, setInvoiceNumber] = useState(INITIAL_INVOICE_NUMBER);
   const [issueDate, setIssueDate] = useState(INITIAL_ISSUE_DATE);
   const [dueDate, setDueDate] = useState("");
-  const [taxAmount, setTaxAmount] = useState("0");
+  const [taxRate, setTaxRate] = useState<number | string>("");  
   const [notes, setNotes] = useState("");
 
   const [expenseAccount, setExpenseAccount] = useState("");
@@ -52,7 +52,9 @@ export function SalesPage() {
     () => lines.reduce((s, l) => s + Number(l.quantity || 0) * Number(l.unit_price || 0), 0),
     [lines]
   );
-  const total = subtotal + Number(taxAmount || 0);
+  const taxRateValue = taxRate === "" ? 0 : Number(taxRate);
+  const taxAmountValue = subtotal * (taxRateValue / 100);
+  const total = subtotal + taxAmountValue;  
   const filteredSavedInvoices = useMemo(() => {
     const allInvoices = invoices.data ?? [];
     if (!savedInvoiceDateFilter) return allInvoices;
@@ -80,7 +82,7 @@ export function SalesPage() {
       invoice_number: invoiceNumber,
       issue_date: issueDate,
       due_date: dueDate || undefined,
-      tax_amount: taxAmount,
+      tax_amount: taxAmountValue.toFixed(2),      
       notes,
       items: lines.map((l) => ({ item: Number(l.item), quantity: l.quantity, unit_price: l.unit_price })),
       expense_account: expenseAccount ? Number(expenseAccount) : undefined,
@@ -92,7 +94,7 @@ export function SalesPage() {
 
     setInvoiceNumber(`INV-${Date.now()}`);
     setNotes("");
-    setTaxAmount("0");
+    setTaxRate("");    
   }
 
   return (
@@ -151,7 +153,8 @@ export function SalesPage() {
               <label className="sales-page__input-group"><span>{language === "ar" ? "رقم الفاتورة" : "Invoice number"}</span><input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder={language === "ar" ? "رقم الفاتورة" : "Invoice number"} /></label>
               <label className="sales-page__input-group"><span>{language === "ar" ? "تاريخ الإصدار" : "Issue date"}</span><input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} /></label>
               <label className="sales-page__input-group"><span>{language === "ar" ? "تاريخ الاستحقاق" : "Due date"}</span><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>
-              <label className="sales-page__input-group"><span>{language === "ar" ? "الضريبة" : "Tax"}</span><input value={taxAmount} onChange={(e) => setTaxAmount(e.target.value)} placeholder={language === "ar" ? "الضريبة" : "Tax"} /></label>
+              <label className="sales-page__input-group"><span>{language === "ar" ? "نسبة الضريبة (%)" : "Tax Rate (%)"}</span><input type="number" min="0" step="0.01" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} placeholder={language === "ar" ? "نسبة الضريبة" : "Tax rate"} /></label>
+              <label className="sales-page__input-group"><span>{language === "ar" ? "قيمة الضريبة" : "Tax Amount"}</span><input value={taxAmountValue.toFixed(2)} readOnly /></label>              
               <label className="sales-page__input-group"><span>{language === "ar" ? "ملاحظات" : "Notes"}</span><input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={language === "ar" ? "ملاحظات" : "Notes"} /></label>            </div>
 
             <h3>{language === "ar" ? "بنود الفاتورة" : "Invoice items"}</h3>
