@@ -468,7 +468,7 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {  
   .app {
     padding: 2rem 1.5rem 3rem;
   }
@@ -550,7 +550,7 @@
     background: var(--bg, #f4f6ff);
     padding: 78px 14px 16px;
     overflow-y: auto;
-    transform: translateX(-105%);
+    transform: translateX(-105%) !important;    
     transition: transform 0.24s ease;
     z-index: 1200;
     box-shadow: 0 24px 55px rgba(8, 13, 31, 0.36);
@@ -559,11 +559,11 @@
   [dir="rtl"] .dashboard-shell .dashboard-sidebar {
     inset-inline-start: auto;
     inset-inline-end: 0;
-    transform: translateX(105%);
+    transform: translateX(105%) !important;    
   }
 
   body.mobile-sidebar-open .dashboard-shell .dashboard-sidebar {
-    transform: translateX(0);
+    transform: translateX(0) !important;    
   }
 
   .dashboard-shell {
