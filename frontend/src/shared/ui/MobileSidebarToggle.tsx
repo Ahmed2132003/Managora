@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 
-const MOBILE_BREAKPOINT = 900;
+const MOBILE_BREAKPOINT = 1100;
 
 export function MobileSidebarToggle() {
   const location = useLocation();
