@@ -211,6 +211,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             "due_date",
             "status",
             "subtotal",
+            "tax_rate",
             "tax_amount",
             "total_amount",
             "total_paid",
@@ -254,17 +255,26 @@ class InvoiceSerializer(serializers.ModelSerializer):
         if not self.instance and not attrs.get("lines"):
             raise serializers.ValidationError({"lines": "At least one line is required."})
         if "lines" in attrs and not attrs.get("lines"):
-            raise serializers.ValidationError({"lines": "At least one line is required."})        
+            raise serializers.ValidationError({"lines": "At least one line is required."})
+
+        tax_rate = attrs.get("tax_rate")
+        if tax_rate is not None and (tax_rate < Decimal("0") or tax_rate > Decimal("100")):
+            raise serializers.ValidationError({"tax_rate": "Tax rate must be between 0 and 100."})
         return attrs
 
-    def _calculate_totals(self, lines_data, tax_amount):
+    def _calculate_tax_amount(self, subtotal, tax_rate, tax_amount):
+        if tax_rate is not None:
+            return (subtotal * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
+        return tax_amount or Decimal("0")
+
+    def _calculate_totals(self, lines_data, tax_rate, tax_amount):
         subtotal = sum(
             (line["quantity"] * line["unit_price"] for line in lines_data),
             Decimal("0"),
         )
-        tax_value = tax_amount or Decimal("0")
+        tax_value = self._calculate_tax_amount(subtotal, tax_rate, tax_amount)
         total_amount = subtotal + tax_value
-        return subtotal, total_amount
+        return subtotal, tax_value, total_amount
 
     def _get_due_date(self, issue_date, customer):
         return issue_date + timedelta(days=customer.payment_terms_days)
@@ -285,11 +295,12 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         lines_data = validated_data.pop("lines")
+        tax_rate = validated_data.get("tax_rate")
         tax_amount = validated_data.get("tax_amount")
         issue_date = validated_data["issue_date"]
         customer = validated_data["customer"]
 
-        subtotal, total_amount = self._calculate_totals(lines_data, tax_amount)
+        subtotal, tax_amount, total_amount = self._calculate_totals(lines_data, tax_rate, tax_amount)
         due_date = self._get_due_date(issue_date, customer)
 
         try:
@@ -298,6 +309,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 created_by=self.context["request"].user,
                 due_date=due_date,
                 subtotal=subtotal,
+                tax_amount=tax_amount,
                 total_amount=total_amount,
                 **validated_data,
             )
@@ -310,6 +322,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         lines_data = validated_data.pop("lines", None)
+        tax_rate = validated_data.get("tax_rate", instance.tax_rate)
         tax_amount = validated_data.get("tax_amount", instance.tax_amount)
         issue_date = validated_data.get("issue_date", instance.issue_date)
         customer = validated_data.get("customer", instance.customer)
@@ -323,15 +336,17 @@ class InvoiceSerializer(serializers.ModelSerializer):
         if lines_data is not None:
             instance.lines.all().delete()
             self._create_lines(instance, lines_data)
-            subtotal, total_amount = self._calculate_totals(lines_data, tax_amount)
+            subtotal, tax_amount, total_amount = self._calculate_totals(lines_data, tax_rate, tax_amount)
         else:
             subtotal = sum(
                 (line.line_total for line in instance.lines.all()),
                 Decimal("0"),
             )
-            total_amount = subtotal + (tax_amount or Decimal("0"))
+            tax_amount = self._calculate_tax_amount(subtotal, tax_rate, tax_amount)
+            total_amount = subtotal + tax_amount
 
         instance.subtotal = subtotal
+        instance.tax_rate = tax_rate
         instance.tax_amount = tax_amount
         instance.total_amount = total_amount
         instance.save()

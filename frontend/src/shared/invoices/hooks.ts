@@ -18,6 +18,7 @@ export type Invoice = {
   due_date: string;
   status: "draft" | "issued" | "partially_paid" | "paid" | "void";
   subtotal: string;
+  tax_rate: string | null;
   tax_amount: string | null;
   total_amount: string;
   total_paid: string;
@@ -38,6 +39,7 @@ export type InvoicePayload = {
   invoice_number: string;
   customer: number;
   issue_date: string;
+  tax_rate?: string | null;
   tax_amount?: string | null;
   notes?: string;
   lines: InvoiceLinePayload[];

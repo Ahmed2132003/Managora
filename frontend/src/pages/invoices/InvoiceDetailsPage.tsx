@@ -15,7 +15,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { isForbiddenError } from "../../shared/api/errors";
 import { useMe } from "../../shared/auth/useMe";
 import { useCustomers } from "../../shared/customers/hooks";
-import { useInvoice, useIssueInvoice } from "../../shared/invoices/hooks";
+import { useDeleteInvoice, useInvoice, useIssueInvoice } from "../../shared/invoices/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 
 const statusColors: Record<string, string> = {
@@ -43,6 +43,7 @@ export function InvoiceDetailsPage() {
   const customersQuery = useCustomers({});
   const meQuery = useMe();
   const issueInvoice = useIssueInvoice();
+  const deleteInvoice = useDeleteInvoice();
 
   const customerName = useMemo(() => {
     const customerId = invoiceQuery.data?.customer;
@@ -80,6 +81,21 @@ export function InvoiceDetailsPage() {
   const isAccountant = userRoles.some((role) => role.name.toLowerCase() === "accountant");
   const companyName = meQuery.data?.company.name ?? "-";
 
+  const canEditDelete = isManager || isAccountant;
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!invoiceQuery.data) {
+        throw new Error("Invoice not loaded.");
+      }
+      return deleteInvoice.mutateAsync(invoiceQuery.data.id);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      navigate("/invoices");
+    },
+  });
+
   return (
     <Stack gap="lg">      
       <Group justify="space-between">
@@ -102,6 +118,26 @@ export function InvoiceDetailsPage() {
           <Button component={Link} to="/invoices" variant="default">
             Back to Invoices
           </Button>
+          {canEditDelete && (
+            <>
+              <Button variant="default" onClick={() => navigate(`/invoices/${invoice.id}/edit`)}>
+                Edit
+              </Button>
+              <Button
+                color="red"
+                variant="light"
+                loading={deleteMutation.isPending}
+                onClick={() => {
+                  if (!window.confirm("Delete this invoice?")) {
+                    return;
+                  }
+                  deleteMutation.mutate();
+                }}
+              >
+                Delete
+              </Button>
+            </>
+          )}
           {invoice.status === "draft" && (
             <Button
               onClick={() => {
@@ -175,6 +211,7 @@ export function InvoiceDetailsPage() {
         <Group justify="flex-end">
           <Stack gap={4}>
             <Text>Subtotal: {invoice.subtotal}</Text>
+            <Text>Tax Rate: {invoice.tax_rate ?? "0.00"}%</Text>
             <Text>Tax: {invoice.tax_amount ?? "0.00"}</Text>
             <Text fw={600}>Total: {invoice.total_amount}</Text>
           </Stack>
@@ -189,6 +226,10 @@ export function InvoiceDetailsPage() {
 
       {issueMutation.error && (
         <Text c="red">{(issueMutation.error as Error).message}</Text>
+      )}
+
+      {deleteMutation.error && (
+        <Text c="red">{(deleteMutation.error as Error).message}</Text>
       )}
 
       <Button variant="subtle" onClick={() => navigate(-1)}>

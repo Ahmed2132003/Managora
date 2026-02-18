@@ -6,7 +6,7 @@ import { useCustomers } from "../../shared/customers/hooks";
 import { endpoints } from "../../shared/api/endpoints";
 import { http } from "../../shared/api/http";
 import { useMe } from "../../shared/auth/useMe";
-import { type Invoice, useInvoices } from "../../shared/invoices/hooks";
+import { type Invoice, useDeleteInvoice, useInvoices } from "../../shared/invoices/hooks";
 import { AccessDenied } from "../../shared/ui/AccessDenied";
 import { DashboardShell } from "../DashboardShell";
 import "./InvoicesPage.css";
@@ -136,6 +136,7 @@ export function InvoicesPage() {
   const customersQuery = useCustomers({});
   const meQuery = useMe();
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<number | null>(null);
+  const deleteInvoice = useDeleteInvoice();
 
   const customerMap = useMemo(() => {
     return new Map((customersQuery.data ?? []).map((customer) => [customer.id, customer]));
@@ -177,6 +178,8 @@ export function InvoicesPage() {
         total: "Total",
         actions: "Actions",
         view: "View",
+        edit: "Edit",
+        delete: "Delete",
         downloadPng: "Save PNG",
         downloadingPng: "Saving...",
         overdueLabel: "Overdue",
@@ -202,12 +205,38 @@ export function InvoicesPage() {
         total: "الإجمالي",
         actions: "الإجراءات",
         view: "عرض",
+        edit: "تعديل",
+        delete: "حذف",
         downloadPng: "حفظ PNG",
         downloadingPng: "جاري الحفظ...",
         overdueLabel: "متأخرة",
       },
     },
   } as const;
+
+
+  const canEditDeleteInvoices = useMemo(() => {
+    const roles = meQuery.data?.roles ?? [];
+    return roles.some((role) => {
+      const roleName = role.name.toLowerCase();
+      return roleName === "manager" || roleName === "accountant";
+    });
+  }, [meQuery.data?.roles]);
+
+  const handleDeleteInvoice = async (invoiceId: number, language: "ar" | "en") => {
+    const confirmed = window.confirm(
+      language === "ar"
+        ? "هل أنت متأكد من حذف هذه الفاتورة؟"
+        : "Are you sure you want to delete this invoice?"
+    );
+    if (!confirmed) return;
+    try {
+      await deleteInvoice.mutateAsync(invoiceId);
+      await invoicesQuery.refetch();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Failed to delete invoice.");
+    }
+  };
 
   const summary = useMemo(() => {
     const invoices = invoicesQuery.data ?? [];
@@ -365,6 +394,25 @@ export function InvoicesPage() {
                               >
                                 {labels.table.view}
                               </button>
+                              {canEditDeleteInvoices && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="table-action"
+                                    onClick={() => navigate(`/invoices/${invoice.id}/edit`)}
+                                  >
+                                    {labels.table.edit}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="table-action table-action--danger"
+                                    onClick={() => handleDeleteInvoice(invoice.id, language)}
+                                    disabled={deleteInvoice.isPending}
+                                  >
+                                    {labels.table.delete}
+                                  </button>
+                                </>
+                              )}
                               <button
                                 type="button"
                                 className="table-action"

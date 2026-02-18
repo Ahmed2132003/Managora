@@ -224,6 +224,13 @@ class Invoice(models.Model):
         default=Status.DRAFT,
     )
     subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    tax_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Tax percentage applied to subtotal.",
+    )
     tax_amount = models.DecimalField(
         max_digits=14,
         decimal_places=2,

@@ -336,6 +336,7 @@ class InvoiceViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         "create": "invoices.*",
         "partial_update": "invoices.*",
         "update": "invoices.*",
+        "destroy": "invoices.*",
         "issue": "invoices.*",
         "record_sale": "invoices.*",
     }

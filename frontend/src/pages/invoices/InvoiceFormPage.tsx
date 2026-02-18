@@ -31,7 +31,7 @@ type InvoiceFormValues = {
   invoiceNumber: string;
   customerId: string | null;
   issueDate: string;
-  taxAmount: number | string;
+  taxRate: number | string;
   notes: string;
   lines: InvoiceLineItem[];
 };
@@ -64,7 +64,7 @@ function InvoiceFormContent({
     initialFormValues.customerId
   );
   const [issueDate, setIssueDate] = useState(initialFormValues.issueDate);
-  const [taxAmount, setTaxAmount] = useState<number | string>(initialFormValues.taxAmount);
+  const [taxRate, setTaxRate] = useState<number | string>(initialFormValues.taxRate);
   const [notes, setNotes] = useState(initialFormValues.notes);
   const [lines, setLines] = useState(initialFormValues.lines);
 
@@ -91,7 +91,8 @@ function InvoiceFormContent({
     [lineTotals]
   );
 
-  const taxValue = taxAmount === "" ? 0 : Number(taxAmount);
+  const taxRateValue = taxRate === "" ? 0 : Number(taxRate);
+  const taxValue = subtotal * (taxRateValue / 100);
   const totalAmount = subtotal + taxValue;
   const hasLines = lines.length > 0;
   const canIssue = Boolean(
@@ -140,7 +141,7 @@ function InvoiceFormContent({
         invoice_number: invoiceNumber,
         customer: Number(customerId),
         issue_date: issueDate,
-        tax_amount: taxAmount === "" ? undefined : String(taxAmount),
+        tax_rate: taxRate === "" ? undefined : String(taxRate),
         notes,
         lines: lines.map((line) => ({
           description: line.description,
@@ -371,19 +372,23 @@ function InvoiceFormContent({
             </div>
             <div className="filters-grid invoice-form-grid">
               <label className="field">
-                <span>{language === "ar" ? "الضريبة" : "Tax"}</span>
+                <span>{language === "ar" ? "نسبة الضريبة (%)" : "Tax Rate (%)"}</span>
                 <input
                   type="number"
                   min={0}
-                  value={taxAmount}
+                  value={taxRate}
                   onChange={(event) =>
-                    setTaxAmount(
+                    setTaxRate(
                       event.currentTarget.value === ""
                         ? ""
                         : Number(event.currentTarget.value)
                     )
                   }
                 />
+              </label>
+              <label className="field">
+                <span>{language === "ar" ? "قيمة الضريبة" : "Tax Amount"}</span>
+                <input type="text" value={taxValue.toFixed(2)} readOnly />
               </label>
               <label className="field">
                 <span>{language === "ar" ? "الإجمالي الفرعي" : "Subtotal"}</span>
@@ -469,7 +474,7 @@ export function InvoiceFormPage() {
         invoiceNumber: "",
         customerId: null as string | null,
         issueDate: "",
-        taxAmount: "" as number | string,
+        taxRate: "" as number | string,
         notes: "",
         lines: [createEmptyLine()],
       };
@@ -480,7 +485,7 @@ export function InvoiceFormPage() {
       invoiceNumber: invoice.invoice_number,
       customerId: String(invoice.customer),
       issueDate: invoice.issue_date,
-      taxAmount: invoice.tax_amount ?? "",
+      taxRate: invoice.tax_rate ?? "",
       notes: invoice.notes ?? "",
       lines: invoice.lines.length
         ? invoice.lines.map((line) => ({
