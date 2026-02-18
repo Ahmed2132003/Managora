@@ -499,7 +499,8 @@
   .mobile-sidebar-toggle {
     position: fixed;
     top: 18px;
-    inset-inline-start: 16px;
+    inset-inline-start: auto;
+    inset-inline-end: 16px;    
     z-index: 1300;
     width: 46px;
     height: 46px;
@@ -545,22 +546,18 @@
     position: fixed;
     top: 0;
     bottom: 0;
-    inset-inline-start: 0;
+    inset-inline-start: auto;
+    inset-inline-end: 0;    
     width: min(82vw, 320px);
     background: var(--bg, #f4f6ff);
     padding: 78px 14px 16px;
     overflow-y: auto;
-    transform: translateX(-105%) !important;    
+    transform: translateX(105%) !important;        
     transition: transform 0.24s ease;
     z-index: 1200;
     box-shadow: 0 24px 55px rgba(8, 13, 31, 0.36);
   }
 
-  [dir="rtl"] .dashboard-shell .dashboard-sidebar {
-    inset-inline-start: auto;
-    inset-inline-end: 0;
-    transform: translateX(105%) !important;    
-  }
 
   body.mobile-sidebar-open .dashboard-shell .dashboard-sidebar {
     transform: translateX(0) !important;    

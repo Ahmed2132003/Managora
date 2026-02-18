@@ -9,7 +9,8 @@ body {
   .mobile-sidebar-toggle {
     position: fixed;
     top: 18px;
-    inset-inline-start: 16px;
+    inset-inline-start: auto;
+    inset-inline-end: 16px;    
     z-index: 1300;
     width: 46px;
     height: 46px;
@@ -59,22 +60,17 @@ body {
     position: fixed !important;
     top: 0 !important;
     bottom: 0 !important;
-    inset-inline-start: 0 !important;
+    inset-inline-start: auto;
+    inset-inline-end: 16px;    
     width: min(82vw, 320px) !important;
     background: var(--bg, #f4f6ff) !important;
     padding: 78px 14px 16px !important;
     overflow-y: auto !important;
-    transform: translateX(-105%) !important;
+    transform: translateX(105%) !important;    
     transition: transform 0.24s ease !important;
     z-index: 1200 !important;
     box-shadow: 0 24px 55px rgba(8, 13, 31, 0.36) !important;
     order: initial !important;
-  }
-
-  [dir="rtl"] .dashboard-shell .dashboard-sidebar {
-    inset-inline-start: auto !important;
-    inset-inline-end: 0 !important;
-    transform: translateX(105%) !important;
   }
 
   body.mobile-sidebar-open .dashboard-shell .dashboard-sidebar {
