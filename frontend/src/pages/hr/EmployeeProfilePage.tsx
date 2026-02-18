@@ -445,7 +445,7 @@ const employeeDefaults: EmployeeFormValues = {
 };
 
 const documentSchema = z.object({
-  doc_type: z.string().min(1, "نوع المستند مطلوب"),
+  doc_type: z.enum(["contract", "id", "other"]),  
   category: z.enum(["employee_file", "contract", "invoice", "other"]),
   linked_entity_type: z.enum(["employee", "invoice", "contract", ""]).optional(),
   linked_entity_id: z.string().optional(),
@@ -458,7 +458,7 @@ const documentSchema = z.object({
 type DocumentFormValues = z.input<typeof documentSchema>;
 
 const documentDefaults: DocumentFormValues = {
-  doc_type: "",
+  doc_type: "other",  
   category: "employee_file",
   linked_entity_type: "",
   linked_entity_id: "",
@@ -510,6 +510,22 @@ const documentCategoryOptionsByLanguage: Record<Language, { value: DocumentCateg
     { value: "employee_file", label: "ملف موظف" },
     { value: "contract", label: "عقد" },
     { value: "invoice", label: "فاتورة" },
+    { value: "other", label: "أخرى" },
+  ],
+};
+
+const documentTypeOptionsByLanguage: Record<
+  Language,
+  { value: "contract" | "id" | "other"; label: string }[]
+> = {
+  en: [
+    { value: "contract", label: "Contract" },
+    { value: "id", label: "ID" },
+    { value: "other", label: "Other" },
+  ],
+  ar: [
+    { value: "contract", label: "عقد" },
+    { value: "id", label: "هوية" },
     { value: "other", label: "أخرى" },
   ],
 };
@@ -1522,16 +1538,21 @@ export function EmployeeProfilePage() {
                             name="doc_type"
                             control={documentForm.control}
                             render={({ field }) => (
-                              <TextInput
+                              <select
                                 value={field.value}
-                                onChange={field.onChange}
-                                error={documentForm.formState.errors.doc_type?.message}
+                                onChange={(event) => field.onChange(event.target.value)}
                                 disabled={!employeeId}
-                              />
+                              >
+                                {documentTypeOptionsByLanguage[language].map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
                             )}
                           />
                         </label>
-
+                        
                         <label className="form-field">
                           <span>{content.documents.category}</span>
                           <Controller
