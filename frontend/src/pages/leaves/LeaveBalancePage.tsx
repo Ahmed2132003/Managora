@@ -291,6 +291,37 @@ function formatDays(value: string | number) {
   return num.toFixed(2);
 }
 
+function resolveLeaveTypeName(
+  balance: {
+    leave_type?: { id?: number; name?: string } | number | null;
+    leave_type_id?: number;
+    leave_type_name?: string;
+  },
+  availableLeaveTypes: Array<{ id: number; name: string }>
+) {
+  if (typeof balance.leave_type === "object" && balance.leave_type?.name) {
+    return balance.leave_type.name;
+  }
+
+  if (typeof balance.leave_type_name === "string" && balance.leave_type_name.trim()) {
+    return balance.leave_type_name;
+  }
+
+  const leaveTypeId =
+    typeof balance.leave_type === "number"
+      ? balance.leave_type
+      : balance.leave_type?.id ?? balance.leave_type_id;
+
+  if (typeof leaveTypeId === "number") {
+    const matchedType = availableLeaveTypes.find((type) => type.id === leaveTypeId);
+    if (matchedType?.name) {
+      return matchedType.name;
+    }
+  }
+
+  return "-";
+}
+
 export function LeaveBalancePage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -593,6 +624,15 @@ export function LeaveBalancePage() {
   const leaveTypesQuery = useLeaveTypesQuery();
   const createLeaveBalanceMutation = useCreateLeaveBalanceMutation();
 
+  const availableLeaveTypes = useMemo(
+    () =>
+      (leaveTypesQuery.data ?? []).map((leaveType) => ({
+        id: leaveType.id,
+        name: leaveType.name,
+      })),
+    [leaveTypesQuery.data]
+  );
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -843,7 +883,7 @@ export function LeaveBalancePage() {
                   <tbody>
                     {(balancesQuery.data ?? []).map((balance) => (
                       <tr key={balance.id}>
-                        <td>{balance.leave_type.name}</td>
+                        <td>{resolveLeaveTypeName(balance, availableLeaveTypes)}</td>                        
                         <td>{balance.year}</td>
                         <td>{formatDays(balance.allocated_days)}</td>
                         <td>{formatDays(balance.used_days)}</td>
