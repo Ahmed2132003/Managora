@@ -66,14 +66,18 @@ body {
     background: var(--bg, #f4f6ff) !important;
     padding: 78px 14px 16px !important;
     overflow-y: auto !important;
-    transform: translateX(105%) !important;    
-    transition: transform 0.24s ease !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    transition: opacity 0.2s ease !important;    
     z-index: 1200 !important;
     box-shadow: 0 24px 55px rgba(8, 13, 31, 0.36) !important;
     order: initial !important;
   }
 
   body.mobile-sidebar-open .dashboard-shell .dashboard-sidebar {
-    transform: translateX(0) !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;    
   }
 }
