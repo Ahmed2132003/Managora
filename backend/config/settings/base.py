@@ -21,6 +21,7 @@ ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.
 APP_VERSION = os.getenv("APP_VERSION", "0.1.0")
 BUILD_SHA = os.getenv("BUILD_SHA", os.getenv("COMMIT_SHA", ""))
 APP_ENVIRONMENT = os.getenv("APP_ENVIRONMENT", "dev" if DEBUG else "prod")
+ADMIN_URL_PATH = os.getenv("ADMIN_URL_PATH", "managora_super/")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
