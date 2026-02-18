@@ -27,8 +27,20 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      // Let Django admin open from the frontend origin (http://localhost:5174/managora_super/)
+      "/managora_super": {
+        target: BACKEND_URL,
+        changeOrigin: true,
+        secure: false,
+      },
       // If you serve media files locally
       "/media": {
+        target: BACKEND_URL,
+        changeOrigin: true,
+        secure: false,
+      },
+      // Django admin assets (CSS/JS/images)
+      "/static/admin": {
         target: BACKEND_URL,
         changeOrigin: true,
         secure: false,
