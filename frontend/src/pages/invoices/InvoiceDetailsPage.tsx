@@ -63,6 +63,19 @@ export function InvoiceDetailsPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!invoiceQuery.data) {
+        throw new Error("Invoice not loaded.");
+      }
+      return deleteInvoice.mutateAsync(invoiceQuery.data.id);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      navigate("/invoices");
+    },
+  });
+
   if (isForbiddenError(invoiceQuery.error) || isForbiddenError(customersQuery.error)) {
     return <AccessDenied />;
   }
@@ -83,18 +96,6 @@ export function InvoiceDetailsPage() {
 
   const canEditDelete = isManager || isAccountant;
 
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      if (!invoiceQuery.data) {
-        throw new Error("Invoice not loaded.");
-      }
-      return deleteInvoice.mutateAsync(invoiceQuery.data.id);
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      navigate("/invoices");
-    },
-  });
 
   return (
     <Stack gap="lg">      
