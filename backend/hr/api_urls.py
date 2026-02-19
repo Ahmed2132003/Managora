@@ -51,6 +51,7 @@ from hr.views import (
     SalaryComponentViewSet,
     SalaryStructureViewSet,
     ShiftViewSet,
+    WorkSiteViewSet,
     LoanAdvanceViewSet,
 )
 
@@ -62,6 +63,7 @@ router.register("salary-structures", SalaryStructureViewSet, basename="salary-st
 router.register("salary-components", SalaryComponentViewSet, basename="salary-component")
 router.register("loan-advances", LoanAdvanceViewSet, basename="loan-advance")
 router.register("shifts", ShiftViewSet, basename="shift")
+router.register("worksites", WorkSiteViewSet, basename="worksite")
 router.register("leaves/types", LeaveTypeViewSet, basename="leave-type")
 router.register("leaves/balances", LeaveBalanceViewSet, basename="leave-balance")
 router.register("attendance/records", AttendanceRecordViewSet, basename="attendance-record")

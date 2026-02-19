@@ -52,6 +52,9 @@ export const endpoints = {
     shifts: api("/shifts/"),
     shift: (id: number) => api(`/shifts/${id}/`),
 
+    worksites: api("/worksites/"),
+    worksite: (id: number) => api(`/worksites/${id}/`),
+
     employees: api("/employees/"),
     employee: (id: number) => api(`/employees/${id}/`),
     employeeDefaults: api("/employees/defaults/"),

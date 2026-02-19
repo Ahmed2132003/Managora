@@ -46,6 +46,7 @@ from hr.models import (
     PolicyRule,
     SalaryStructure,
     Shift,
+    WorkSite,
 )
 from hr.services.attendance import (
     check_in,
@@ -91,6 +92,7 @@ from hr.serializers import (
     SalaryComponentSerializer,
     SalaryStructureSerializer,
     ShiftSerializer,
+    WorkSiteSerializer,
     UserMiniSerializer,
     LoanAdvanceSerializer,
 )
@@ -152,6 +154,18 @@ class JobTitleViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
 
 
 
+
+
+def _is_manager_or_hr(user):
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    roles_qs = user.roles.all()
+    return roles_qs.filter(name__iexact="manager").exists() or roles_qs.filter(name__iexact="hr").exists()
+
+
 @extend_schema_view(
     list=extend_schema(tags=["Shifts"], summary="List shifts"),
     retrieve=extend_schema(tags=["Shifts"], summary="Retrieve shift"),
@@ -174,7 +188,56 @@ class ShiftViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
         return Shift.objects.filter(company=self.request.user.company)
 
     def perform_create(self, serializer):
+        if not _is_manager_or_hr(self.request.user):
+            raise PermissionDenied("Only manager or HR can manage shifts.")
         serializer.save(company=self.request.user.company)
+
+    def perform_update(self, serializer):
+        if not _is_manager_or_hr(self.request.user):
+            raise PermissionDenied("Only manager or HR can manage shifts.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if not _is_manager_or_hr(self.request.user):
+            raise PermissionDenied("Only manager or HR can manage shifts.")
+        instance.delete()
+
+
+@extend_schema_view(
+    list=extend_schema(tags=["Worksites"], summary="List worksites"),
+    retrieve=extend_schema(tags=["Worksites"], summary="Retrieve worksite"),
+    create=extend_schema(tags=["Worksites"], summary="Create worksite"),
+    partial_update=extend_schema(tags=["Worksites"], summary="Update worksite"),
+    destroy=extend_schema(tags=["Worksites"], summary="Delete worksite"),
+)
+class WorkSiteViewSet(PermissionByActionMixin, viewsets.ModelViewSet):
+    serializer_class = WorkSiteSerializer
+    permission_classes = [IsAuthenticated]
+    permission_map = {
+        "list": "hr.worksites.view",
+        "retrieve": "hr.worksites.view",
+        "create": "hr.worksites.create",
+        "partial_update": "hr.worksites.edit",
+        "destroy": "hr.worksites.delete",
+    }
+
+    def get_queryset(self):
+        return WorkSite.objects.filter(company=self.request.user.company)
+
+    def perform_create(self, serializer):
+        if not _is_manager_or_hr(self.request.user):
+            raise PermissionDenied("Only manager or HR can manage worksites.")
+        serializer.save(company=self.request.user.company)
+
+    def perform_update(self, serializer):
+        if not _is_manager_or_hr(self.request.user):
+            raise PermissionDenied("Only manager or HR can manage worksites.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if not _is_manager_or_hr(self.request.user):
+            raise PermissionDenied("Only manager or HR can manage worksites.")
+        instance.delete()
 
 
 @extend_schema_view(

@@ -12,6 +12,14 @@ import {
   useAttendanceApproveRejectMutation,
   type AttendancePendingItem,
   useCreateLeaveTypeMutation,
+  useShifts,
+  useCreateShift,
+  useUpdateShift,
+  useDeleteShift,
+  useWorksites,
+  useCreateWorksite,
+  useUpdateWorksite,
+  useDeleteWorksite,
 } from "../../shared/hr/hooks";
 import { useMe } from "../../shared/auth/useMe";
 import { clearTokens } from "../../shared/auth/tokens";
@@ -146,6 +154,32 @@ type Content = {
     validUntil: string;
     worksite: string;
     linkLabel: string;
+  };
+
+  scheduleSetup: {
+    title: string;
+    subtitle: string;
+    shiftsTitle: string;
+    worksitesTitle: string;
+    nameLabel: string;
+    startTimeLabel: string;
+    endTimeLabel: string;
+    graceLabel: string;
+    radiusLabel: string;
+    latLabel: string;
+    lngLabel: string;
+    activeLabel: string;
+    addShift: string;
+    addWorksite: string;
+    update: string;
+    delete: string;
+    clearEdit: string;
+    managerOnly: string;
+    successTitle: string;
+    failedTitle: string;
+    shiftSaved: string;
+    worksiteSaved: string;
+    itemDeleted: string;
   };
 
   leaveTypes: {
@@ -320,6 +354,32 @@ const contentMap: Record<Language, Content> = {
       validUntil: "Valid until",
       worksite: "Worksite",
       linkLabel: "Link",
+    },
+
+    scheduleSetup: {
+      title: "Shift & Worksite setup",
+      subtitle: "Manage attendance shifts and company worksites.",
+      shiftsTitle: "Shifts",
+      worksitesTitle: "Worksites",
+      nameLabel: "Name",
+      startTimeLabel: "Start time",
+      endTimeLabel: "End time",
+      graceLabel: "Grace minutes",
+      radiusLabel: "Radius (meters)",
+      latLabel: "Latitude",
+      lngLabel: "Longitude",
+      activeLabel: "Active",
+      addShift: "Add shift",
+      addWorksite: "Add worksite",
+      update: "Update",
+      delete: "Delete",
+      clearEdit: "Cancel edit",
+      managerOnly: "Only Manager and HR can add, edit, or delete shifts/worksites.",
+      successTitle: "Saved",
+      failedTitle: "Operation failed",
+      shiftSaved: "Shift saved successfully.",
+      worksiteSaved: "Worksite saved successfully.",
+      itemDeleted: "Item deleted successfully.",
     },
     leaveTypes: {
       title: "Add leave type",
@@ -502,6 +562,32 @@ const contentMap: Record<Language, Content> = {
       validUntil: "نهاية الصلاحية",
       worksite: "الموقع",
       linkLabel: "الرابط",
+    },
+
+    scheduleSetup: {
+      title: "إعداد الشيفت ومواقع العمل",
+      subtitle: "إدارة شيفتات الحضور ومواقع العمل الخاصة بالشركة.",
+      shiftsTitle: "الشيفتات",
+      worksitesTitle: "مواقع العمل",
+      nameLabel: "الاسم",
+      startTimeLabel: "وقت البداية",
+      endTimeLabel: "وقت النهاية",
+      graceLabel: "دقائق السماح",
+      radiusLabel: "نطاق الموقع (بالمتر)",
+      latLabel: "خط العرض",
+      lngLabel: "خط الطول",
+      activeLabel: "نشط",
+      addShift: "إضافة شيفت",
+      addWorksite: "إضافة موقع عمل",
+      update: "تعديل",
+      delete: "حذف",
+      clearEdit: "إلغاء التعديل",
+      managerOnly: "فقط المدير ومدير الموارد البشرية يمكنهم الإضافة والتعديل والحذف للشيفتات ومواقع العمل.",
+      successTitle: "تم الحفظ",
+      failedTitle: "فشل التنفيذ",
+      shiftSaved: "تم حفظ الشيفت بنجاح.",
+      worksiteSaved: "تم حفظ موقع العمل بنجاح.",
+      itemDeleted: "تم الحذف بنجاح.",
     },
     leaveTypes: {
       title: "إنشاء نوع إجازة",
@@ -747,6 +833,29 @@ export function HRAttendancePage() {
   // QR generate (local hook so this page doesn't depend on a missing export)
   const qrGenerateMutation = useAttendanceQrGenerateMutationLocal();
   const createLeaveTypeMutation = useCreateLeaveTypeMutation();
+  const shiftsQuery = useShifts();
+  const createShiftMutation = useCreateShift();
+  const updateShiftMutation = useUpdateShift();
+  const deleteShiftMutation = useDeleteShift();
+  const worksitesQuery = useWorksites();
+  const createWorksiteMutation = useCreateWorksite();
+  const updateWorksiteMutation = useUpdateWorksite();
+  const deleteWorksiteMutation = useDeleteWorksite();
+
+  const [shiftName, setShiftName] = useState("");
+  const [shiftStartTime, setShiftStartTime] = useState("09:00");
+  const [shiftEndTime, setShiftEndTime] = useState("17:00");
+  const [shiftGraceMinutes, setShiftGraceMinutes] = useState("15");
+  const [shiftIsActive, setShiftIsActive] = useState(true);
+  const [editingShiftId, setEditingShiftId] = useState<number | null>(null);
+
+  const [worksiteName, setWorksiteName] = useState("");
+  const [worksiteLat, setWorksiteLat] = useState("");
+  const [worksiteLng, setWorksiteLng] = useState("");
+  const [worksiteRadius, setWorksiteRadius] = useState("100");
+  const [worksiteIsActive, setWorksiteIsActive] = useState(true);
+  const [editingWorksiteId, setEditingWorksiteId] = useState<number | null>(null);
+
   const [leaveTypeName, setLeaveTypeName] = useState("");
   const [leaveTypeCode, setLeaveTypeCode] = useState("");
   const [maxPerRequestDays, setMaxPerRequestDays] = useState("");
@@ -758,6 +867,13 @@ export function HRAttendancePage() {
     () => hasPermission(userPermissions, "leaves.*"),
     [userPermissions]
   );
+  const canManageSchedule = useMemo(() => {
+    if (meData?.user?.is_superuser) return true;
+    const roleNames = (meData?.roles ?? []).map((role) =>
+      (role.slug || role.name || "").trim().toLowerCase()
+    );
+    return roleNames.includes("manager") || roleNames.includes("hr");
+  }, [meData]);
 
   // Approvals  
   const pendingApprovals = useAttendancePendingApprovalsQuery();
@@ -908,6 +1024,96 @@ export function HRAttendancePage() {
         message: getErrorDetail(error, content.notifications.qrFailedMessage),
         color: "red",
       });
+    }
+  }
+
+
+
+  function resetShiftForm() {
+    setEditingShiftId(null);
+    setShiftName("");
+    setShiftStartTime("09:00");
+    setShiftEndTime("17:00");
+    setShiftGraceMinutes("15");
+    setShiftIsActive(true);
+  }
+
+  function resetWorksiteForm() {
+    setEditingWorksiteId(null);
+    setWorksiteName("");
+    setWorksiteLat("");
+    setWorksiteLng("");
+    setWorksiteRadius("100");
+    setWorksiteIsActive(true);
+  }
+
+  async function handleSaveShift() {
+    if (!canManageSchedule) return;
+    try {
+      const payload = {
+        name: shiftName.trim(),
+        start_time: shiftStartTime,
+        end_time: shiftEndTime,
+        grace_minutes: Number(shiftGraceMinutes || 0),
+        is_active: shiftIsActive,
+      };
+      if (editingShiftId) {
+        await updateShiftMutation.mutateAsync({ id: editingShiftId, payload });
+      } else {
+        await createShiftMutation.mutateAsync(payload);
+      }
+      notifications.show({ title: content.scheduleSetup.successTitle, message: content.scheduleSetup.shiftSaved });
+      resetShiftForm();
+      await shiftsQuery.refetch();
+    } catch (error: unknown) {
+      notifications.show({ title: content.scheduleSetup.failedTitle, message: getErrorDetail(error, content.scheduleSetup.failedTitle), color: "red" });
+    }
+  }
+
+  async function handleDeleteShift(id: number) {
+    if (!canManageSchedule) return;
+    try {
+      await deleteShiftMutation.mutateAsync(id);
+      notifications.show({ title: content.scheduleSetup.successTitle, message: content.scheduleSetup.itemDeleted });
+      if (editingShiftId === id) resetShiftForm();
+      await shiftsQuery.refetch();
+    } catch (error: unknown) {
+      notifications.show({ title: content.scheduleSetup.failedTitle, message: getErrorDetail(error, content.scheduleSetup.failedTitle), color: "red" });
+    }
+  }
+
+  async function handleSaveWorksite() {
+    if (!canManageSchedule) return;
+    try {
+      const payload = {
+        name: worksiteName.trim(),
+        lat: Number(worksiteLat),
+        lng: Number(worksiteLng),
+        radius_meters: Number(worksiteRadius || 0),
+        is_active: worksiteIsActive,
+      };
+      if (editingWorksiteId) {
+        await updateWorksiteMutation.mutateAsync({ id: editingWorksiteId, payload });
+      } else {
+        await createWorksiteMutation.mutateAsync(payload);
+      }
+      notifications.show({ title: content.scheduleSetup.successTitle, message: content.scheduleSetup.worksiteSaved });
+      resetWorksiteForm();
+      await worksitesQuery.refetch();
+    } catch (error: unknown) {
+      notifications.show({ title: content.scheduleSetup.failedTitle, message: getErrorDetail(error, content.scheduleSetup.failedTitle), color: "red" });
+    }
+  }
+
+  async function handleDeleteWorksite(id: number) {
+    if (!canManageSchedule) return;
+    try {
+      await deleteWorksiteMutation.mutateAsync(id);
+      notifications.show({ title: content.scheduleSetup.successTitle, message: content.scheduleSetup.itemDeleted });
+      if (editingWorksiteId === id) resetWorksiteForm();
+      await worksitesQuery.refetch();
+    } catch (error: unknown) {
+      notifications.show({ title: content.scheduleSetup.failedTitle, message: getErrorDetail(error, content.scheduleSetup.failedTitle), color: "red" });
     }
   }
 
@@ -1184,6 +1390,76 @@ export function HRAttendancePage() {
                 </table>
               </div>
             )}
+          </section>
+
+          <section className="panel hr-attendance-panel">
+            <div className="panel__header">
+              <div>
+                <h2>{content.scheduleSetup.title}</h2>
+                <p>{content.scheduleSetup.subtitle}</p>
+              </div>
+            </div>
+            <p className="leave-type-form__note">{content.scheduleSetup.managerOnly}</p>
+
+            <div className="schedule-grid">
+              <div className="schedule-card">
+                <h3>{content.scheduleSetup.shiftsTitle}</h3>
+                <div className="form-grid">
+                  <label className="form-field"><span>{content.scheduleSetup.nameLabel}</span><input type="text" value={shiftName} onChange={(e) => setShiftName(e.target.value)} /></label>
+                  <label className="form-field"><span>{content.scheduleSetup.startTimeLabel}</span><input type="time" value={shiftStartTime} onChange={(e) => setShiftStartTime(e.target.value)} /></label>
+                  <label className="form-field"><span>{content.scheduleSetup.endTimeLabel}</span><input type="time" value={shiftEndTime} onChange={(e) => setShiftEndTime(e.target.value)} /></label>
+                  <label className="form-field"><span>{content.scheduleSetup.graceLabel}</span><input type="number" min={0} value={shiftGraceMinutes} onChange={(e) => setShiftGraceMinutes(e.target.value)} /></label>
+                </div>
+                <label className="form-toggle">
+                  <input type="checkbox" checked={shiftIsActive} onChange={(e) => setShiftIsActive(e.target.checked)} />
+                  <span>{content.scheduleSetup.activeLabel}</span>
+                </label>
+                <div className="schedule-actions">
+                  <button type="button" className="primary-button" onClick={handleSaveShift} disabled={!canManageSchedule || !shiftName.trim()}>{editingShiftId ? content.scheduleSetup.update : content.scheduleSetup.addShift}</button>
+                  {editingShiftId && <button type="button" className="ghost-button" onClick={resetShiftForm}>{content.scheduleSetup.clearEdit}</button>}
+                </div>
+                <div className="schedule-list">
+                  {(shiftsQuery.data ?? []).map((shift) => (
+                    <div key={shift.id} className="schedule-list__item">
+                      <span>{shift.name} ({shift.start_time} - {shift.end_time})</span>
+                      <div>
+                        <button type="button" className="ghost-button" onClick={() => { setEditingShiftId(shift.id); setShiftName(shift.name); setShiftStartTime(shift.start_time); setShiftEndTime(shift.end_time); setShiftGraceMinutes(String(shift.grace_minutes)); setShiftIsActive(Boolean(shift.is_active)); }}>{content.scheduleSetup.update}</button>
+                        <button type="button" className="ghost-button" onClick={() => handleDeleteShift(shift.id)} disabled={!canManageSchedule}>{content.scheduleSetup.delete}</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="schedule-card">
+                <h3>{content.scheduleSetup.worksitesTitle}</h3>
+                <div className="form-grid">
+                  <label className="form-field"><span>{content.scheduleSetup.nameLabel}</span><input type="text" value={worksiteName} onChange={(e) => setWorksiteName(e.target.value)} /></label>
+                  <label className="form-field"><span>{content.scheduleSetup.latLabel}</span><input type="number" step="0.000001" value={worksiteLat} onChange={(e) => setWorksiteLat(e.target.value)} /></label>
+                  <label className="form-field"><span>{content.scheduleSetup.lngLabel}</span><input type="number" step="0.000001" value={worksiteLng} onChange={(e) => setWorksiteLng(e.target.value)} /></label>
+                  <label className="form-field"><span>{content.scheduleSetup.radiusLabel}</span><input type="number" min={1} value={worksiteRadius} onChange={(e) => setWorksiteRadius(e.target.value)} /></label>
+                </div>
+                <label className="form-toggle">
+                  <input type="checkbox" checked={worksiteIsActive} onChange={(e) => setWorksiteIsActive(e.target.checked)} />
+                  <span>{content.scheduleSetup.activeLabel}</span>
+                </label>
+                <div className="schedule-actions">
+                  <button type="button" className="primary-button" onClick={handleSaveWorksite} disabled={!canManageSchedule || !worksiteName.trim()}>{editingWorksiteId ? content.scheduleSetup.update : content.scheduleSetup.addWorksite}</button>
+                  {editingWorksiteId && <button type="button" className="ghost-button" onClick={resetWorksiteForm}>{content.scheduleSetup.clearEdit}</button>}
+                </div>
+                <div className="schedule-list">
+                  {(worksitesQuery.data ?? []).map((worksite) => (
+                    <div key={worksite.id} className="schedule-list__item">
+                      <span>{worksite.name} ({worksite.radius_meters}m)</span>
+                      <div>
+                        <button type="button" className="ghost-button" onClick={() => { setEditingWorksiteId(worksite.id); setWorksiteName(worksite.name); setWorksiteLat(worksite.lat); setWorksiteLng(worksite.lng); setWorksiteRadius(String(worksite.radius_meters)); setWorksiteIsActive(Boolean(worksite.is_active)); }}>{content.scheduleSetup.update}</button>
+                        <button type="button" className="ghost-button" onClick={() => handleDeleteWorksite(worksite.id)} disabled={!canManageSchedule}>{content.scheduleSetup.delete}</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </section>
 
           {canManageLeaveTypes && (

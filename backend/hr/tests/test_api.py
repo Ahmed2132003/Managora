@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core.models import Company, Permission, Role, RolePermission, UserRole
-from hr.models import Department, Employee, JobTitle
+from hr.models import Department, Employee, JobTitle, Shift, WorkSite
 
 User = get_user_model()
 
@@ -24,11 +24,18 @@ class HrApiTests(APITestCase):
             password="pass12345",
             company=self.c1,
         )
+        self.accountant = User.objects.create_user(
+            username="accountant",
+            password="pass12345",
+            company=self.c1,
+        )
 
         self.hr_role = Role.objects.create(company=self.c1, name="HR")
         self.manager_role = Role.objects.create(company=self.c1, name="Manager")
+        self.accountant_role = Role.objects.create(company=self.c1, name="Accountant")
         UserRole.objects.create(user=self.hr, role=self.hr_role)
         UserRole.objects.create(user=self.manager, role=self.manager_role)
+        UserRole.objects.create(user=self.accountant, role=self.accountant_role)
 
         self.permissions = {
             code: Permission.objects.create(code=code, name=code)
@@ -45,11 +52,31 @@ class HrApiTests(APITestCase):
                 "hr.employees.create",
                 "hr.employees.edit",
                 "hr.employees.delete",
+                "hr.shifts.view",
+                "hr.shifts.create",
+                "hr.shifts.edit",
+                "hr.shifts.delete",
+                "hr.worksites.view",
+                "hr.worksites.create",
+                "hr.worksites.edit",
+                "hr.worksites.delete",
             ]
         }
         for permission in self.permissions.values():
             RolePermission.objects.create(role=self.manager_role, permission=permission)
             RolePermission.objects.create(role=self.hr_role, permission=permission)
+
+        for code in [
+            "hr.shifts.view",
+            "hr.shifts.create",
+            "hr.shifts.edit",
+            "hr.shifts.delete",
+            "hr.worksites.view",
+            "hr.worksites.create",
+            "hr.worksites.edit",
+            "hr.worksites.delete",
+        ]:
+            RolePermission.objects.create(role=self.accountant_role, permission=self.permissions[code])
 
         RolePermission.objects.create(
             role=self.manager_role,
@@ -245,3 +272,142 @@ class HrApiTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         ids = [emp["id"] for emp in res.data]
         self.assertNotIn(self.employee.id, ids)
+
+
+    def test_manager_and_hr_can_manage_shifts(self):
+        self.auth("manager")
+        url = reverse("shift-list")
+        res = self.client.post(
+            url,
+            {
+                "name": "Morning",
+                "start_time": "09:00:00",
+                "end_time": "17:00:00",
+                "grace_minutes": 15,
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        shift_id = res.data["id"]
+
+        patch_url = reverse("shift-detail", kwargs={"pk": shift_id})
+        res = self.client.patch(patch_url, {"name": "Morning Updated"}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        res = self.client.delete(patch_url)
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+
+        self.auth("hr")
+        res = self.client.post(
+            url,
+            {
+                "name": "Evening",
+                "start_time": "13:00:00",
+                "end_time": "21:00:00",
+                "grace_minutes": 10,
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    def test_accountant_cannot_manage_shifts_even_with_permissions(self):
+        shift = Shift.objects.create(
+            company=self.c1,
+            name="Locked",
+            start_time="09:00:00",
+            end_time="17:00:00",
+            grace_minutes=10,
+            is_active=True,
+        )
+        self.auth("accountant")
+        url = reverse("shift-list")
+        res = self.client.post(
+            url,
+            {
+                "name": "Nope",
+                "start_time": "10:00:00",
+                "end_time": "18:00:00",
+                "grace_minutes": 10,
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+        detail_url = reverse("shift-detail", kwargs={"pk": shift.id})
+        res = self.client.patch(detail_url, {"name": "Nope"}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+        res = self.client.delete(detail_url)
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_manager_and_hr_can_manage_worksites(self):
+        self.auth("manager")
+        url = reverse("worksite-list")
+        res = self.client.post(
+            url,
+            {
+                "name": "HQ",
+                "lat": "30.044420",
+                "lng": "31.235712",
+                "radius_meters": 100,
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        worksite_id = res.data["id"]
+
+        detail_url = reverse("worksite-detail", kwargs={"pk": worksite_id})
+        res = self.client.patch(detail_url, {"radius_meters": 120}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+        res = self.client.delete(detail_url)
+        self.assertEqual(res.status_code, status.HTTP_204_NO_CONTENT)
+
+        self.auth("hr")
+        res = self.client.post(
+            url,
+            {
+                "name": "Branch",
+                "lat": "29.999000",
+                "lng": "31.100000",
+                "radius_meters": 80,
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    def test_accountant_cannot_manage_worksites_even_with_permissions(self):
+        worksite = WorkSite.objects.create(
+            company=self.c1,
+            name="Old HQ",
+            lat="30.044420",
+            lng="31.235712",
+            radius_meters=100,
+            is_active=True,
+        )
+        self.auth("accountant")
+        url = reverse("worksite-list")
+        res = self.client.post(
+            url,
+            {
+                "name": "Nope",
+                "lat": "30.000000",
+                "lng": "31.000000",
+                "radius_meters": 50,
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+        detail_url = reverse("worksite-detail", kwargs={"pk": worksite.id})
+        res = self.client.patch(detail_url, {"name": "Nope"}, format="json")
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+        res = self.client.delete(detail_url)
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)

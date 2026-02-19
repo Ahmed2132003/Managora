@@ -110,6 +110,13 @@ class ShiftSerializer(serializers.ModelSerializer):
         read_only_fields = ("id",)
 
 
+class WorkSiteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkSite
+        fields = ("id", "name", "lat", "lng", "radius_meters", "is_active")
+        read_only_fields = ("id",)
+
+
 class UserMiniSerializer(serializers.ModelSerializer):
     roles = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
 

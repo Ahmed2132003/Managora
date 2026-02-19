@@ -365,6 +365,23 @@ export type ShiftPayload = {
   is_active?: boolean;
 };
 
+export type WorkSite = {
+  id: number;
+  name: string;
+  lat: string;
+  lng: string;
+  radius_meters: number;
+  is_active: boolean;
+};
+
+export type WorkSitePayload = {
+  name: string;
+  lat: number;
+  lng: number;
+  radius_meters: number;
+  is_active: boolean;
+};
+
 export type SelectableUser = {
   id: number;
   username: string;
@@ -513,6 +530,63 @@ export function useCreateShift() {
     mutationFn: async (payload: ShiftPayload) => {
       const response = await http.post<Shift>(endpoints.hr.shifts, payload);
       return response.data;
+    },
+  });
+}
+
+
+
+export function useWorksites() {
+  return useQuery({
+    queryKey: ["hr", "worksites"],
+    queryFn: async () => {
+      const response = await http.get<WorkSite[]>(endpoints.hr.worksites);
+      return response.data;
+    },
+  });
+}
+
+export function useCreateWorksite() {
+  return useMutation({
+    mutationFn: async (payload: WorkSitePayload) => {
+      const response = await http.post<WorkSite>(endpoints.hr.worksites, payload);
+      return response.data;
+    },
+  });
+}
+
+export function useUpdateWorksite() {
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: WorkSitePayload }) => {
+      const response = await http.patch<WorkSite>(endpoints.hr.worksite(id), payload);
+      return response.data;
+    },
+  });
+}
+
+export function useDeleteWorksite() {
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await http.delete(endpoints.hr.worksite(id));
+    },
+  });
+}
+
+
+
+export function useUpdateShift() {
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: ShiftPayload }) => {
+      const response = await http.patch<Shift>(endpoints.hr.shift(id), payload);
+      return response.data;
+    },
+  });
+}
+
+export function useDeleteShift() {
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await http.delete(endpoints.hr.shift(id));
     },
   });
 }
