@@ -239,8 +239,10 @@ class ReportsApiTests(APITestCase):
         res = self.client.get(url, {"as_of": "2024-01-31"})
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         totals = res.data["totals"]
-        self.assertEqual(totals["assets_total"], "2500.00")
-        self.assertEqual(totals["liabilities_equity_total"], "2500.00")
+        self.assertEqual(totals["assets_total"], "1500.00")
+        self.assertEqual(totals["liabilities_total"], "1000.00")
+        self.assertEqual(totals["equity_total"], "500.00")
+        self.assertEqual(totals["liabilities_equity_total"], "1500.00")
 
     def test_user_without_permission_cannot_view_reports(self):
         self.auth("hr")

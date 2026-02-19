@@ -1241,12 +1241,7 @@ class BalanceSheetView(APIView):
                 company=request.user.company,
                 entry__status=JournalEntry.Status.POSTED,
                 entry__date__lte=as_of,
-                account__type__in=[
-                    Account.Type.ASSET,
-                    Account.Type.LIABILITY,
-                    Account.Type.EQUITY,
-                    Account.Type.INCOME,
-                ],
+                account__type__in=[Account.Type.EXPENSE, Account.Type.INCOME],                
             )
             .values("account_id", "account__code", "account__name", "account__type")
             .annotate(
@@ -1260,75 +1255,46 @@ class BalanceSheetView(APIView):
             .order_by("account__code")
         )
 
-        assets = []
-        liabilities = []
-        equity = []
-        assets_total = Decimal("0")
-        liabilities_total = Decimal("0")
-        equity_total = Decimal("0")
-
+        income_accounts = []
+        expense_accounts = []
+        income_total = Decimal("0")
+        expense_total = Decimal("0")
+        
         for row in rows:
             debit = Decimal(row["debit"])
             credit = Decimal(row["credit"])
             account_type = row["account__type"]
-            if account_type == Account.Type.ASSET:
-                balance = debit - credit
-                assets_total += balance
-            elif account_type == Account.Type.INCOME:
+            if account_type == Account.Type.INCOME:                
                 balance = credit - debit
-                assets_total += balance
-            elif account_type == Account.Type.LIABILITY:
-                balance = credit - debit
-                liabilities_total += balance
+                income_total += balance                
             else:
-                balance = credit - debit
-                equity_total += balance
-
+                balance = debit - credit
+                expense_total += balance
+                
             item = {
                 "account_id": row["account_id"],
                 "code": row["account__code"],
                 "name": row["account__name"],
                 "balance": _format_amount(balance),
             }
-            if account_type == Account.Type.ASSET:
-                assets.append(item)
-            elif account_type == Account.Type.INCOME:
-                assets.append(
-                    {
-                        **item,
-                        "name": f"{item['name']} (Income)",
-                    }
-                )
-            elif account_type == Account.Type.LIABILITY:
-                liabilities.append(item)
+            if account_type == Account.Type.INCOME:
+                income_accounts.append(item)                
             else:
-                equity.append(item)
-
-        auto_equity = assets_total - liabilities_total - equity_total
-        if auto_equity.copy_abs() > Decimal("0.01"):
-            equity.append(
-                {
-                    "account_id": None,
-                    "code": "AUTO",
-                    "name": "Retained Earnings (Auto)",
-                    "balance": _format_amount(auto_equity),
-                }
-            )
-            equity_total += auto_equity
-
-        liabilities_equity_total = liabilities_total + equity_total
-
+                expense_accounts.append(item)
+                
+        net_result = income_total - expense_total
+        
         return Response(
             {
                 "as_of": as_of.isoformat(),
-                "assets": assets,
-                "liabilities": liabilities,
-                "equity": equity,
+                "assets": income_accounts,
+                "liabilities": expense_accounts,
+                "equity": [],                
                 "totals": {
-                    "assets_total": _format_amount(assets_total),
-                    "liabilities_total": _format_amount(liabilities_total),
-                    "equity_total": _format_amount(equity_total),
-                    "liabilities_equity_total": _format_amount(liabilities_equity_total),
+                    "assets_total": _format_amount(income_total),
+                    "liabilities_total": _format_amount(expense_total),
+                    "equity_total": _format_amount(net_result),
+                    "liabilities_equity_total": _format_amount(income_total),                    
                 },
             },
             status=status.HTTP_200_OK,

@@ -25,6 +25,8 @@ from accounting.models import (
 from accounting.services.journal import post_journal_entry
 from accounting.services.payments import record_payment
 from accounting.services.seed import TEMPLATES
+from accounting.services.mappings import ensure_mapping_account
+from accounting.services.primary_accounts import get_or_create_primary_account
 
 class AccountSerializer(serializers.ModelSerializer):
     class Meta:
@@ -384,18 +386,25 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "attachments",
         ]
         read_only_fields = ["created_by", "created_at", "updated_at", "attachments"]
+        extra_kwargs = {
+            "expense_account": {"required": False},
+            "paid_from_account": {"required": False},
+        }
 
     def validate(self, attrs):
         request = self.context["request"]
         company = request.user.company
-        paid_from_account = attrs.get("paid_from_account")
-        expense_account = attrs.get("expense_account")
         cost_center = attrs.get("cost_center")
 
-        if paid_from_account and paid_from_account.company_id != company.id:
-            raise serializers.ValidationError("Paid-from account must belong to the same company.")
-        if expense_account and expense_account.company_id != company.id:
-            raise serializers.ValidationError("Expense account must belong to the same company.")
+        attrs["expense_account"] = get_or_create_primary_account(
+            company,
+            Account.Type.EXPENSE,
+        )
+        attrs["paid_from_account"] = ensure_mapping_account(
+            company,
+            AccountMapping.Key.EXPENSE_DEFAULT_CASH,
+        )
+
         if cost_center and cost_center.company_id != company.id:
             raise serializers.ValidationError("Cost center must belong to the same company.")
         return attrs

@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isForbiddenError } from "../../shared/api/errors";
 import {
-  useAccounts,
   useApproveExpense,
   useCostCenters,
   useCreateExpense,
@@ -512,8 +511,6 @@ export function ExpensesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [formDate, setFormDate] = useState("");
   const [formAmount, setFormAmount] = useState<number | string>("");
-  const [expenseAccount, setExpenseAccount] = useState<string | null>(null);
-  const [paidFromAccount, setPaidFromAccount] = useState<string | null>(null);
   const [costCenter, setCostCenter] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [formVendor, setFormVendor] = useState("");
@@ -569,7 +566,6 @@ export function ExpensesPage() {
   );
 
   const expensesQuery = useExpenses(filters);
-  const accountsQuery = useAccounts();
   const costCentersQuery = useCostCenters();
   const payrollPeriodsQuery = usePayrollPeriods();
   const payrollRunsQuery = usePeriodRuns(
@@ -584,8 +580,6 @@ export function ExpensesPage() {
   const resetForm = () => {
     setFormDate("");
     setFormAmount("");
-    setExpenseAccount(null);
-    setPaidFromAccount(null);
     setCostCenter(null);
     setNotes("");
     setFormVendor("");
@@ -767,7 +761,7 @@ export function ExpensesPage() {
       const effectiveAmount =
         expenseType === "salary" ? salaryAmount : String(formAmount);
 
-      if (!formDate || !effectiveAmount || !expenseAccount || !paidFromAccount) {
+      if (!formDate || !effectiveAmount) {
         throw new Error("Please fill required fields.");
       }      
       if (!expenseType) {
@@ -793,9 +787,7 @@ export function ExpensesPage() {
 
       const expense = await createExpense.mutateAsync({
         date: formDate,
-        amount: effectiveAmount,        
-        expense_account: Number(expenseAccount),
-        paid_from_account: Number(paidFromAccount),
+        amount: effectiveAmount,
         cost_center: costCenter ? Number(costCenter) : null,
         notes: expenseDetails,
         vendor_name: resolvedVendorName,
@@ -817,11 +809,6 @@ export function ExpensesPage() {
       setCreateOpen(false);
     },
   });
-
-  const accountOptions = (accountsQuery.data ?? []).map((account) => ({
-    value: String(account.id),
-    label: `${account.code} - ${account.name}`,
-  }));
 
   const costCenterOptions = (costCentersQuery.data ?? []).map((center) => ({
     value: String(center.id),
@@ -1058,7 +1045,6 @@ export function ExpensesPage() {
 
   if (
     isForbiddenError(expensesQuery.error) ||
-    isForbiddenError(accountsQuery.error) ||
     isForbiddenError(costCentersQuery.error)
   ) {
     return <AccessDenied />;
@@ -1458,44 +1444,6 @@ export function ExpensesPage() {
                     </label>
                   </>
                 )}
-                <label className="field">
-                  <span>{content.form.expenseAccount}</span>
-                  <select                  
-                    value={expenseAccount ?? ""}
-                    onChange={(event) =>
-                      setExpenseAccount(event.target.value || null)
-                    }
-                    required
-                  >
-                    <option value="">
-                      {isArabic ? "اختر الحساب" : "Select account"}
-                    </option>
-                    {accountOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>{content.form.paidFromAccount}</span>
-                  <select
-                    value={paidFromAccount ?? ""}
-                    onChange={(event) =>
-                      setPaidFromAccount(event.target.value || null)
-                    }
-                    required
-                  >
-                    <option value="">
-                      {isArabic ? "اختر الحساب" : "Select account"}
-                    </option>
-                    {accountOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
                 <label className="field">
                   <span>{content.form.costCenter}</span>
                   <select

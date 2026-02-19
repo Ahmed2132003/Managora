@@ -102,11 +102,11 @@ export function BalanceSheetPage() {
     const assets = Math.abs(parseAmount(totals.assets_total));
     const liabilities = Math.abs(parseAmount(totals.liabilities_total));
 
-    const netAssets = assets - liabilities; // ✅ 10,000 - 903.47 = 9,096.53
-    const equity = netAssets;              // ✅ equity shown in totals matches net assets (your requirement)
-    const liabilitiesEquity = liabilities + equity; // ✅ should equal assets
+    const netResult = assets - liabilities;
+    const equity = netResult;
+    const liabilitiesEquity = liabilities + equity;
 
-    return { assets, liabilities, equity, liabilitiesEquity, netAssets };
+    return { assets, liabilities, equity, liabilitiesEquity, netAssets: netResult };    
   };
 
   const handleExportCsv = () => {
@@ -116,19 +116,19 @@ export function BalanceSheetPage() {
 
     const rows = [
       ...balanceSheetQuery.data.assets.map((item) => [
-        "Assets",
+        "Revenue",        
         item.code,
         item.name,
         item.balance,
       ]),
       ...balanceSheetQuery.data.liabilities.map((item) => [
-        "Liabilities",
+        "Expenses",        
         item.code,
         item.name,
         item.balance,
       ]),
       ...balanceSheetQuery.data.equity.map((item) => [
-        "Equity",
+        "Net Result",        
         item.code,
         item.name,
         item.balance,
@@ -140,15 +140,15 @@ export function BalanceSheetPage() {
 
   const headerCopy = {
     en: {
-      title: "Balance sheet",
+      title: "Income & expense summary",      
       subtitle:
-        "A snapshot of the company’s financial position as of the selected date.",
-      helper: "Review assets, liabilities, and equity at a glance.",
+        "A summary of all incoming revenues and outgoing expenses as of the selected date.",
+      helper: "Review revenue, expenses, and net result at a glance.",      
       tags: ["Accounting", "Reporting"],
     },
     ar: {
-      title: "الميزانية العمومية",
-      subtitle: "لقطة لحظية للوضع المالي حتى التاريخ المحدد.",
+      title: "ملخص الإيرادات والمصروفات",
+      subtitle: "ملخص لكل الأموال الداخلة كإيرادات والخارجة كمصروفات حتى التاريخ المحدد.",      
       helper: "راجع الأصول والالتزامات وحقوق الملكية بسرعة.",
       tags: ["المحاسبة", "التقارير"],
     },
@@ -160,15 +160,15 @@ export function BalanceSheetPage() {
         exportLabel: "Export CSV",
         filtersTitle: "Report filters",
         asOfLabel: "As of",
-        empty: "Select a date to view the balance sheet.",
-        loading: "Loading balance sheet…",
-        title: "Balance sheet",
+        empty: "Select a date to view revenue and expense summary.",
+        loading: "Loading revenue and expense summary…",
+        title: "Income & expense summary",
         subtitle:
-          "A snapshot of the company’s financial position as of the selected date.",
-        assets: "Assets",
-        liabilities: "Liabilities",
-        equity: "Equity",
-        netAssets: "Net assets",
+          "A summary of all incoming revenues and outgoing expenses as of the selected date.",
+        assets: "Revenue",
+        liabilities: "Expenses",
+        equity: "Net result",
+        netAssets: "Net result",        
         totalsTitle: "Totals",
         table: {
           account: "Account",
@@ -176,41 +176,41 @@ export function BalanceSheetPage() {
           balance: "Balance",
         },
         assetsHelper:
-          "Assets are what the company owns (cash, receivables, equipment, etc.).",
+          "Revenue includes all incoming money from invoices, services, and product sales.",          
         liabilitiesHelper:
-          "Liabilities are what the company owes (payables, loans, accrued expenses, etc.).",
+          "Expenses include all outgoing money such as operating and payroll costs.",          
         equityHelper:
-          "Equity represents ownership interest (capital + retained earnings).",
+          "Net result equals revenue minus expenses for the selected period up to the date.",          
         noData: "No data.",
         totalsHelper:
-          "Assets = Liabilities + Equity (display values). Net assets = Assets − Liabilities.",
+          "Revenue = Expenses + Net result.",          
       },
       ar: {
         exportLabel: "تصدير CSV",
         filtersTitle: "فلاتر التقرير",
         asOfLabel: "حتى تاريخ",
-        empty: "اختر تاريخًا لعرض الميزانية العمومية.",
-        loading: "جاري تحميل الميزانية العمومية…",
-        title: "الميزانية العمومية",
-        subtitle: "لقطة لحظية للوضع المالي حتى التاريخ المحدد.",
-        assets: "الأصول",
-        liabilities: "الالتزامات",
-        equity: "حقوق الملكية",
-        netAssets: "صافي الأصول",
+        empty: "اختر تاريخًا لعرض ملخص الإيرادات والمصروفات.",
+        loading: "جاري تحميل ملخص الإيرادات والمصروفات…",
+        title: "ملخص الإيرادات والمصروفات",
+        subtitle: "ملخص لكل الأموال الداخلة كإيرادات والخارجة كمصروفات حتى التاريخ المحدد.",
+        assets: "الإيرادات",
+        liabilities: "المصروفات",
+        equity: "صافي النتيجة",
+        netAssets: "صافي النتيجة",        
         totalsTitle: "الإجمالي",
         table: {
           account: "الحساب",
           name: "الاسم",
           balance: "الرصيد",
         },
-        assetsHelper: "الأصول هي ما تمتلكه الشركة (نقد، ذمم مدينة، معدات، إلخ).",
+        assetsHelper: "الإيرادات تشمل كل الأموال الداخلة من الفواتير والخدمات والمبيعات.",
         liabilitiesHelper:
-          "الالتزامات هي ما تدين به الشركة (ذمم دائنة، قروض، مصروفات مستحقة، إلخ).",
+          "المصروفات تشمل كل الأموال الخارجة مثل التشغيل والرواتب.",
         equityHelper:
-          "حقوق الملكية تمثل حقوق الملاك (رأس المال + الأرباح المحتجزة).",
+          "صافي النتيجة = الإيرادات − المصروفات حتى التاريخ المحدد.",
         noData: "لا توجد بيانات.",
         totalsHelper:
-          "الأصول = الالتزامات + حقوق الملكية (بقِيَم العرض). صافي الأصول = الأصول − الالتزامات.",
+          "الإيرادات = المصروفات + صافي النتيجة.",          
       },
     }),
     []

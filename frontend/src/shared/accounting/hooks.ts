@@ -241,8 +241,8 @@ export function useExpenses(filters: ExpenseFilters) {
 export type ExpensePayload = {
   date: string;
   amount: string;
-  expense_account: number;
-  paid_from_account: number;
+  expense_account?: number;
+  paid_from_account?: number;  
   cost_center?: number | null;
   vendor_name?: string;
   category?: string;

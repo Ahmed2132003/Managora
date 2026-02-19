@@ -12,7 +12,7 @@ FALLBACK_MAPPING_METADATA = {
     },
     AccountMapping.Key.SALES_REVENUE: {
         "codes": ["4000"],
-        "names": ["Sales Revenue", "Revenue"],
+        "names": ["Primary Revenue", "Sales Revenue", "Revenue"],        
         "type": Account.Type.INCOME,
         "default_code": "REV",
     },
@@ -24,13 +24,13 @@ FALLBACK_MAPPING_METADATA = {
     },
     AccountMapping.Key.SALES_COGS_EXPENSE: {
         "codes": ["5100"],
-        "names": ["Cost of Goods Sold", "COGS"],
+        "names": ["Primary Expense", "Cost of Goods Sold", "COGS"],        
         "type": Account.Type.EXPENSE,
         "default_code": "COGS",
     },
     AccountMapping.Key.PAYROLL_SALARIES_EXPENSE: {
         "codes": ["5000", "5200"],
-        "names": ["Salaries Expense", "Payroll Salaries Expense"],
+        "names": ["Primary Expense", "Salaries Expense", "Payroll Salaries Expense"],        
         "type": Account.Type.EXPENSE,
         "default_code": "PAYEXP",
     },

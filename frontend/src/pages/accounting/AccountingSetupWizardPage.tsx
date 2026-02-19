@@ -81,9 +81,6 @@ type Content = {
     successMessage: string;
     errorTitle: string;
     typeOptions: {
-      asset: string;
-      liability: string;
-      equity: string;
       income: string;
       expense: string;
     };
@@ -265,9 +262,6 @@ const contentMap: Record<Language, Content> = {
       successMessage: "The account is ready to use in mappings.",
       errorTitle: "Account creation failed",
       typeOptions: {
-        asset: "Asset",
-        liability: "Liability",
-        equity: "Equity",
         income: "Income",
         expense: "Expense",
       },
@@ -298,7 +292,7 @@ const contentMap: Record<Language, Content> = {
       trialBalance: "Trial Balance",
       generalLedger: "General Ledger",
       profitLoss: "Profit & Loss",
-      balanceSheet: "Balance Sheet",
+      balanceSheet: "Income & Expense Summary",
       agingReport: "AR Aging",
       customers: "Customers",
       newCustomer: "New Customer",
@@ -356,7 +350,7 @@ const contentMap: Record<Language, Content> = {
     },
     manualSetup: {
       title: "إعداد الحسابات اليدوي",
-      subtitle: "أنشئ الحسابات يدويًا للتحكم في مصادر دفع الرواتب والمصروفات.",
+      subtitle: "أنشئ حسابات الإيرادات والمصروفات فقط. أي فلوس داخلة = إيرادات، وأي فلوس خارجة = مصروفات.",
       rolesLabel: "الأدوار المسؤولة",
       roles: {
         manager: "المدير",
@@ -383,9 +377,6 @@ const contentMap: Record<Language, Content> = {
       successMessage: "الحساب جاهز للاستخدام في الربط.",
       errorTitle: "تعذر إنشاء الحساب",
       typeOptions: {
-        asset: "أصل",
-        liability: "التزام",
-        equity: "حقوق الملكية",
         income: "إيراد",
         expense: "مصروف",
       },
@@ -416,7 +407,7 @@ const contentMap: Record<Language, Content> = {
       trialBalance: "ميزان المراجعة",
       generalLedger: "دفتر الأستاذ",
       profitLoss: "الأرباح والخسائر",
-      balanceSheet: "الميزانية العمومية",
+      balanceSheet: "ملخص الإيرادات والمصروفات",
       agingReport: "أعمار الديون",
       customers: "العملاء",
       newCustomer: "عميل جديد",
@@ -451,7 +442,7 @@ export function AccountingSetupWizardPage() {
   const [manualAccount, setManualAccount] = useState({
     code: "",
     name: "",
-    type: "ASSET",
+    type: "INCOME",
   });
   const [creatingAccount, setCreatingAccount] = useState(false);  
   const [language, setLanguage] = useState<Language>(() => {
@@ -496,9 +487,6 @@ export function AccountingSetupWizardPage() {
 
   const accountTypeOptions = useMemo(
     () => [
-      { value: "ASSET", label: content.manualSetup.typeOptions.asset },
-      { value: "LIABILITY", label: content.manualSetup.typeOptions.liability },
-      { value: "EQUITY", label: content.manualSetup.typeOptions.equity },
       { value: "INCOME", label: content.manualSetup.typeOptions.income },
       { value: "EXPENSE", label: content.manualSetup.typeOptions.expense },
     ],
@@ -636,7 +624,7 @@ export function AccountingSetupWizardPage() {
       setManualAccount({
         code: "",
         name: "",
-        type: "ASSET",
+        type: "INCOME",
       });
       await loadMappings();
     } catch (err) {

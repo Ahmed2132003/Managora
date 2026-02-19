@@ -1,8 +1,9 @@
 from django.db import transaction
 
-from accounting.models import AccountMapping, Invoice, JournalEntry, JournalLine
+from accounting.models import Account, AccountMapping, Invoice, JournalEntry, JournalLine
 from accounting.services.mappings import ensure_mapping_account
 from accounting.services.journal import post_journal_entry
+from accounting.services.primary_accounts import get_or_create_primary_account
 
 
 def _invoice_journal_payload(invoice: Invoice, receivable_account_id: int, revenue_account_id: int) -> dict:
@@ -51,8 +52,9 @@ def ensure_invoice_journal_entry(invoice: Invoice):
     receivable_account = ensure_mapping_account(
         invoice.company, AccountMapping.Key.ACCOUNTS_RECEIVABLE
     )
-    revenue_account = ensure_mapping_account(
-        invoice.company, AccountMapping.Key.SALES_REVENUE
+    revenue_account = get_or_create_primary_account(
+        invoice.company,
+        Account.Type.INCOME,
     )
     payload = _invoice_journal_payload(
         invoice,
